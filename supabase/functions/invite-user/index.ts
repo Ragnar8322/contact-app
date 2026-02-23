@@ -60,6 +60,29 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Check if user already exists and handle accordingly
+    const { data: existingUsers } = await adminClient.auth.admin.listUsers();
+    const existingUser = existingUsers?.users?.find((u: any) => u.email === email);
+    
+    if (existingUser) {
+      // Check if they have a profile
+      const { data: existingProfile } = await adminClient
+        .from("profiles")
+        .select("user_id")
+        .eq("user_id", existingUser.id)
+        .maybeSingle();
+      
+      if (existingProfile) {
+        return new Response(JSON.stringify({ error: "Este usuario ya existe y tiene un perfil asignado." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      // User exists in Auth but has no profile - delete and recreate
+      await adminClient.auth.admin.deleteUser(existingUser.id);
+    }
+
     // Create auth user with a temporary password
     const tempPassword = crypto.randomUUID().slice(0, 12) + "Aa1!";
     const { data: newUser, error: authError } = await adminClient.auth.admin.createUser({
