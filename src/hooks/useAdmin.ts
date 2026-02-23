@@ -30,7 +30,7 @@ export function useUpdateProfile() {
 export function useInviteUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (values: { email: string; nombre: string; role_id: number }) => {
+    mutationFn: async (values: { email: string; nombre: string; telefono?: string; role_id: number }) => {
       const { data, error } = await supabase.functions.invoke("invite-user", { body: values });
       if (error) throw error;
       return data;

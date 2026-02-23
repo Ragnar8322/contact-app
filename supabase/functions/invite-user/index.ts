@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { email, nombre, role_id } = await req.json();
+    const { email, nombre, telefono, role_id } = await req.json();
     if (!email || !role_id) {
       return new Response(JSON.stringify({ error: "email and role_id required" }), {
         status: 400,
@@ -76,12 +76,25 @@ Deno.serve(async (req) => {
       });
     }
 
-    // The trigger handle_new_user should create the profile, but let's update role_id
+    // Upsert profile to handle race condition with trigger
     if (newUser?.user) {
-      await adminClient
+      const { error: profileError } = await adminClient
         .from("profiles")
-        .update({ role_id, nombre: nombre || email })
-        .eq("user_id", newUser.user.id);
+        .upsert({
+          user_id: newUser.user.id,
+          nombre: nombre || email,
+          telefono: telefono || null,
+          role_id,
+        }, { onConflict: "user_id" });
+
+      if (profileError) {
+        // Cleanup: delete the auth user if profile creation fails
+        await adminClient.auth.admin.deleteUser(newUser.user.id);
+        return new Response(JSON.stringify({ error: "Error creando perfil: " + profileError.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       // Also create cat_agentes entry
       await adminClient

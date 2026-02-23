@@ -19,7 +19,7 @@ export default function AdminProfiles() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editData, setEditData] = useState({ nombre: "", telefono: "", role_id: 0 });
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ email: "", nombre: "", role_id: 2 });
+  const [inviteForm, setInviteForm] = useState({ email: "", nombre: "", telefono: "", role_id: 2 });
   const [inviteResult, setInviteResult] = useState<{ temp_password: string } | null>(null);
 
   const startEdit = (p: any) => {
@@ -54,7 +54,7 @@ export default function AdminProfiles() {
       <CardContent className="p-0">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="font-semibold">Perfiles de Usuario</h3>
-          <Dialog open={inviteOpen} onOpenChange={(o) => { setInviteOpen(o); if (!o) { setInviteResult(null); setInviteForm({ email: "", nombre: "", role_id: 2 }); } }}>
+          <Dialog open={inviteOpen} onOpenChange={(o) => { setInviteOpen(o); if (!o) { setInviteResult(null); setInviteForm({ email: "", nombre: "", telefono: "", role_id: 2 }); } }}>
             <DialogTrigger asChild>
               <Button size="sm"><Plus className="mr-2 h-4 w-4" />Crear Usuario</Button>
             </DialogTrigger>
@@ -67,7 +67,7 @@ export default function AdminProfiles() {
                     <p>Email: {inviteForm.email}</p>
                     <p>Contraseña: {inviteResult.temp_password}</p>
                   </div>
-                  <Button className="w-full" onClick={() => { setInviteOpen(false); setInviteResult(null); setInviteForm({ email: "", nombre: "", role_id: 2 }); }}>Cerrar</Button>
+                  <Button className="w-full" onClick={() => { setInviteOpen(false); setInviteResult(null); setInviteForm({ email: "", nombre: "", telefono: "", role_id: 2 }); }}>Cerrar</Button>
                 </div>
               ) : (
                 <form onSubmit={handleInvite} className="space-y-4">
@@ -78,6 +78,10 @@ export default function AdminProfiles() {
                   <div className="space-y-2">
                     <Label>Nombre</Label>
                     <Input value={inviteForm.nombre} onChange={e => setInviteForm(f => ({ ...f, nombre: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Teléfono</Label>
+                    <Input value={inviteForm.telefono} onChange={e => setInviteForm(f => ({ ...f, telefono: e.target.value }))} />
                   </div>
                   <div className="space-y-2">
                     <Label>Rol *</Label>
