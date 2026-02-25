@@ -71,6 +71,7 @@ export type Database = {
           tipo_servicio_id: number
           updated_at: string | null
           updated_by: string | null
+          valor_pagar: number | null
         }
         Insert: {
           agente_id: string
@@ -86,6 +87,7 @@ export type Database = {
           tipo_servicio_id: number
           updated_at?: string | null
           updated_by?: string | null
+          valor_pagar?: number | null
         }
         Update: {
           agente_id?: string
@@ -101,6 +103,7 @@ export type Database = {
           tipo_servicio_id?: number
           updated_at?: string | null
           updated_by?: string | null
+          valor_pagar?: number | null
         }
         Relationships: [
           {

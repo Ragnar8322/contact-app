@@ -41,6 +41,7 @@ export function useCreateCase() {
       agente_id: string;
       created_by: string;
       estado_id: number;
+      valor_pagar?: number | null;
     }) => {
       const { data, error } = await supabase.from("casos").insert(values).select().single();
       if (error) throw error;
@@ -53,7 +54,7 @@ export function useCreateCase() {
 export function useUpdateCase() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...values }: { id: number; estado_id?: number; observacion_cierre?: string; updated_by: string; fecha_cierre?: string }) => {
+    mutationFn: async ({ id, ...values }: { id: number; estado_id?: number; observacion_cierre?: string; updated_by: string; fecha_cierre?: string; valor_pagar?: number | null }) => {
       const { data, error } = await supabase.from("casos").update(values).eq("id", id).select().single();
       if (error) throw error;
       return data;
