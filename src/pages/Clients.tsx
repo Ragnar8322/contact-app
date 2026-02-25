@@ -72,11 +72,11 @@ export default function Clients() {
               </div>
               <div className="space-y-2">
                 <Label>Nombre del Contacto *</Label>
-                <Input value={form.nombre_contacto} onChange={e => setForm(f => ({ ...f, nombre_contacto: e.target.value }))} required />
+                <Input value={form.nombre_contacto} onChange={e => setForm(f => ({ ...f, nombre_contacto: e.target.value.toUpperCase() }))} className="uppercase" required />
               </div>
               <div className="space-y-2">
                 <Label>Razón Social</Label>
-                <Input value={form.razon_social} onChange={e => setForm(f => ({ ...f, razon_social: e.target.value }))} />
+                <Input value={form.razon_social} onChange={e => setForm(f => ({ ...f, razon_social: e.target.value.toUpperCase() }))} className="uppercase" />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
@@ -90,7 +90,7 @@ export default function Clients() {
               </div>
               <div className="space-y-2">
                 <Label>Correo electrónico</Label>
-                <Input type="email" value={form.correo} onChange={e => setForm(f => ({ ...f, correo: e.target.value }))} />
+                <Input type="email" value={form.correo} onChange={e => setForm(f => ({ ...f, correo: e.target.value.toLowerCase() }))} className="lowercase" />
               </div>
               <Button type="submit" className="w-full" disabled={createClient.isPending}>
                 {createClient.isPending ? "Creando..." : "Crear Cliente"}

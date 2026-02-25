@@ -36,6 +36,7 @@ export default function Cases() {
 
   // Create form
   const [clientSearch, setClientSearch] = useState("");
+  const [clientSelected, setClientSelected] = useState(false);
   const [form, setForm] = useState({ cliente_id: 0, tipo_servicio_id: 0, descripcion_inicial: "", valor_pagar_display: "" });
 
   const isRenovacionWeb = tipos?.find(t => t.id === form.tipo_servicio_id)?.nombre?.toLowerCase() === "renovación web";
@@ -71,6 +72,8 @@ export default function Cases() {
       toast.success("Caso creado exitosamente");
       setCreateOpen(false);
       setForm({ cliente_id: 0, tipo_servicio_id: 0, descripcion_inicial: "", valor_pagar_display: "" });
+      setClientSearch("");
+      setClientSelected(false);
     } catch (err: any) {
       toast.error("Error: " + err.message);
     }
@@ -152,15 +155,15 @@ export default function Cases() {
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-2">
                 <Label>Cliente *</Label>
-                <Input placeholder="Buscar cliente..." value={clientSearch} onChange={e => setClientSearch(e.target.value)} />
-                {clientSearch && filteredClients && filteredClients.length > 0 && (
+                <Input placeholder="Buscar cliente..." value={clientSearch} onChange={e => { setClientSearch(e.target.value); setClientSelected(false); setForm(f => ({ ...f, cliente_id: 0 })); }} />
+                {clientSearch && !clientSelected && filteredClients && filteredClients.length > 0 && (
                   <div className="max-h-40 overflow-auto rounded-md border bg-popover">
                     {filteredClients.map(c => (
                       <button
                         key={c.id}
                         type="button"
                         className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors"
-                        onClick={() => { setForm(f => ({ ...f, cliente_id: c.id })); setClientSearch(c.nombre_contacto); }}
+                        onClick={() => { setForm(f => ({ ...f, cliente_id: c.id })); setClientSearch(c.nombre_contacto); setClientSelected(true); }}
                       >
                         <span className="font-medium">{c.nombre_contacto}</span>
                         <span className="ml-2 text-muted-foreground">{c.identificacion}</span>
