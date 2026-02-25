@@ -38,7 +38,7 @@ export default function Cases() {
   const [clientSearch, setClientSearch] = useState("");
   const [form, setForm] = useState({ cliente_id: 0, tipo_servicio_id: 0, descripcion_inicial: "", valor_pagar_display: "" });
 
-  const isRenovacionWeb = tipos?.find(t => t.id === form.tipo_servicio_id)?.nombre === "Renovación web";
+  const isRenovacionWeb = tipos?.find(t => t.id === form.tipo_servicio_id)?.nombre?.toLowerCase() === "renovación web";
 
   const filteredClients = allClients?.filter(c =>
     c.nombre_contacto.toLowerCase().includes(clientSearch.toLowerCase()) ||

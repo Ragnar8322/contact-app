@@ -52,7 +52,7 @@ export default function AdminCases() {
   const [editComentario, setEditComentario] = useState("");
   const [editValorDisplay, setEditValorDisplay] = useState("");
 
-  const isEditRenovacion = tipos?.find(t => t.id === editTipo)?.nombre === "Renovación web";
+  const isEditRenovacion = tipos?.find(t => t.id === editTipo)?.nombre?.toLowerCase() === "renovación web";
 
   const openDetail = (caso: any) => {
     setSelectedId(caso.id);
