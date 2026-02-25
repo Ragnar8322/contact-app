@@ -46,45 +46,68 @@ export default function AdminCases() {
   const selectedCase = cases?.find((c: any) => c.id === selectedId);
 
   const [editEstado, setEditEstado] = useState(0);
+  const [originalEstado, setOriginalEstado] = useState(0);
   const [editAgente, setEditAgente] = useState("");
   const [editTipo, setEditTipo] = useState(0);
-  const [editObs, setEditObs] = useState("");
-  const [editComentario, setEditComentario] = useState("");
+  const [editObservaciones, setEditObservaciones] = useState("");
+  const [obsError, setObsError] = useState("");
   const [editValorDisplay, setEditValorDisplay] = useState("");
 
   const isEditRenovacion = tipos?.find(t => t.id === editTipo)?.nombre?.toLowerCase() === "renovación web";
+  const estadoChanged = editEstado !== originalEstado;
+  const selectedEstadoFinal = estados?.find(e => e.id === editEstado)?.es_final;
 
   const openDetail = (caso: any) => {
     setSelectedId(caso.id);
     setEditEstado(caso.estado_id);
+    setOriginalEstado(caso.estado_id);
     setEditAgente(caso.agente_id);
     setEditTipo(caso.tipo_servicio_id);
-    setEditObs(caso.observacion_cierre || "");
-    setEditComentario("");
+    setEditObservaciones("");
+    setObsError("");
     setEditValorDisplay(caso.valor_pagar ? formatCOP(caso.valor_pagar) : "");
+  };
+
+  const validateObservaciones = (): boolean => {
+    if (!estadoChanged) return true;
+    if (!editObservaciones.trim()) {
+      setObsError("Las observaciones de gestión son obligatorias para cambiar el estado.");
+      return false;
+    }
+    if (selectedEstadoFinal && editObservaciones.trim().length < 30) {
+      setObsError("Para estados de cierre, las observaciones deben tener al menos 30 caracteres.");
+      return false;
+    }
+    setObsError("");
+    return true;
   };
 
   const handleUpdate = async () => {
     if (!selectedId || !user) return;
+    if (!validateObservaciones()) return;
     try {
-      const estado = estados?.find(e => e.id === editEstado);
       const valorPagar = isEditRenovacion ? parseCOPInput(editValorDisplay) : null;
       if (isEditRenovacion && !valorPagar) {
         toast.error("El valor a pagar es obligatorio para Renovación web");
         return;
       }
       const updates: any = { id: selectedId, estado_id: editEstado, agente_id: editAgente, tipo_servicio_id: editTipo, updated_by: user.id, valor_pagar: valorPagar };
-      if (estado?.es_final) {
+      if (selectedEstadoFinal) {
         updates.fecha_cierre = new Date().toISOString();
-        updates.observacion_cierre = editObs;
+        updates.observacion_cierre = editObservaciones.trim();
       }
       await updateCase.mutateAsync(updates);
-      await insertHistorial.mutateAsync({
-        caso_id: selectedId,
-        estado_id: editEstado,
-        cambiado_por: user.id,
-        comentario: editComentario || undefined,
-      });
+      if (estadoChanged) {
+        await insertHistorial.mutateAsync({
+          caso_id: selectedId,
+          estado_id: editEstado,
+          cambiado_por: user.id,
+          comentario: editObservaciones.trim(),
+        });
+      }
+      setOriginalEstado(editEstado);
+      setEditObservaciones("");
+      setObsError("");
       toast.success("Caso actualizado");
     } catch (err: any) {
       toast.error(err.message);
@@ -185,7 +208,7 @@ export default function AdminCases() {
               <div className="space-y-3">
                 <div>
                   <Label>Estado</Label>
-                  <Select value={String(editEstado)} onValueChange={v => setEditEstado(Number(v))}>
+                  <Select value={String(editEstado)} onValueChange={v => { setEditEstado(Number(v)); setObsError(""); }}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{estados?.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
                   </Select>
@@ -204,12 +227,6 @@ export default function AdminCases() {
                     <SelectContent>{tipos?.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.nombre}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                {estados?.find(e => e.id === editEstado)?.es_final && (
-                  <div>
-                    <Label>Observación de Cierre</Label>
-                    <Textarea value={editObs} onChange={e => setEditObs(e.target.value)} rows={2} />
-                  </div>
-                )}
                 {isEditRenovacion && (
                   <div>
                     <Label>Valor a Pagar *</Label>
@@ -220,10 +237,26 @@ export default function AdminCases() {
                     />
                   </div>
                 )}
-                <div>
-                  <Label>Comentario</Label>
-                  <Textarea value={editComentario} onChange={e => setEditComentario(e.target.value)} rows={2} placeholder="Agregar comentario al historial..." />
-                </div>
+
+                {estadoChanged && (
+                  <div className="space-y-2">
+                    <Label>
+                      Observaciones de gestión *
+                      {selectedEstadoFinal && <span className="ml-1 text-xs text-muted-foreground">(mín. 30 caracteres)</span>}
+                    </Label>
+                    <Textarea
+                      value={editObservaciones}
+                      onChange={e => { setEditObservaciones(e.target.value); setObsError(""); }}
+                      rows={3}
+                      placeholder="Describe la gestión realizada, acuerdo con el cliente o motivo del cambio..."
+                    />
+                    {selectedEstadoFinal && (
+                      <p className="text-xs text-muted-foreground">{editObservaciones.trim().length}/30 caracteres</p>
+                    )}
+                    {obsError && <p className="text-sm text-destructive">{obsError}</p>}
+                  </div>
+                )}
+
                 <Button onClick={handleUpdate} disabled={updateCase.isPending} className="w-full">
                   {updateCase.isPending ? "Guardando..." : "Actualizar Caso"}
                 </Button>
@@ -232,7 +265,7 @@ export default function AdminCases() {
               <Separator />
 
               <div>
-                <h3 className="mb-3 text-sm font-semibold">Historial</h3>
+                <h3 className="mb-3 text-sm font-semibold">Historial de gestiones</h3>
                 <div className="space-y-2">
                   {history?.map((h: any) => (
                     <div key={h.id} className="rounded-lg bg-muted p-3 text-sm">
@@ -240,6 +273,9 @@ export default function AdminCases() {
                         <span className="font-medium">{h.cat_estados?.nombre}</span>
                         <span className="text-xs text-muted-foreground">{format(new Date(h.cambiado_en), "dd/MM/yyyy HH:mm", { locale: es })}</span>
                       </div>
+                      {h.profiles?.nombre && (
+                        <p className="text-xs text-muted-foreground mt-0.5">Por: {h.profiles.nombre}</p>
+                      )}
                       {h.comentario && <p className="mt-1 text-muted-foreground">{h.comentario}</p>}
                     </div>
                   ))}
