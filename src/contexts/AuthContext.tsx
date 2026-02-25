@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -8,6 +8,7 @@ interface Profile {
   role_id: number;
   telefono: string | null;
   role_name?: string;
+  must_change_password?: boolean;
 }
 
 interface AuthContextType {
@@ -15,8 +16,10 @@ interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   isAdmin: boolean;
+  mustChangePassword: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string) => {
     const { data } = await supabase
       .from("profiles")
       .select("*, user_roles(name)")
@@ -37,9 +40,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile({
         ...data,
         role_name: (data.user_roles as any)?.name || "agent",
+        must_change_password: (data as any).must_change_password ?? false,
       });
     }
-  };
+  }, []);
+
+  const refreshProfile = useCallback(async () => {
+    if (user) await fetchProfile(user.id);
+  }, [user, fetchProfile]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -65,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [fetchProfile]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -73,9 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const isAdmin = profile?.role_name === "admin";
+  const mustChangePassword = profile?.must_change_password === true;
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, isAdmin, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, profile, isAdmin, mustChangePassword, loading, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
