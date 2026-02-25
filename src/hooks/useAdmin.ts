@@ -74,7 +74,7 @@ export function useAllCases(filters?: { estado_id?: number; agente_id?: string; 
 export function useAdminUpdateCase() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...values }: { id: number; estado_id?: number; agente_id?: string; tipo_servicio_id?: number; observacion_cierre?: string; updated_by: string; fecha_cierre?: string }) => {
+    mutationFn: async ({ id, ...values }: { id: number; estado_id?: number; agente_id?: string; tipo_servicio_id?: number; observacion_cierre?: string; updated_by: string; fecha_cierre?: string; valor_pagar?: number | null }) => {
       const { error } = await supabase.from("casos").update(values).eq("id", id);
       if (error) throw error;
     },

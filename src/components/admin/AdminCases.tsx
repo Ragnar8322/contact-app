@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useCaseHistory } from "@/hooks/useCases";
+import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
 
 export default function AdminCases() {
   const { user } = useAuth();
@@ -49,6 +50,9 @@ export default function AdminCases() {
   const [editTipo, setEditTipo] = useState(0);
   const [editObs, setEditObs] = useState("");
   const [editComentario, setEditComentario] = useState("");
+  const [editValorDisplay, setEditValorDisplay] = useState("");
+
+  const isEditRenovacion = tipos?.find(t => t.id === editTipo)?.nombre === "Renovación web";
 
   const openDetail = (caso: any) => {
     setSelectedId(caso.id);
@@ -57,13 +61,19 @@ export default function AdminCases() {
     setEditTipo(caso.tipo_servicio_id);
     setEditObs(caso.observacion_cierre || "");
     setEditComentario("");
+    setEditValorDisplay(caso.valor_pagar ? formatCOP(caso.valor_pagar) : "");
   };
 
   const handleUpdate = async () => {
     if (!selectedId || !user) return;
     try {
       const estado = estados?.find(e => e.id === editEstado);
-      const updates: any = { id: selectedId, estado_id: editEstado, agente_id: editAgente, tipo_servicio_id: editTipo, updated_by: user.id };
+      const valorPagar = isEditRenovacion ? parseCOPInput(editValorDisplay) : null;
+      if (isEditRenovacion && !valorPagar) {
+        toast.error("El valor a pagar es obligatorio para Renovación web");
+        return;
+      }
+      const updates: any = { id: selectedId, estado_id: editEstado, agente_id: editAgente, tipo_servicio_id: editTipo, updated_by: user.id, valor_pagar: valorPagar };
       if (estado?.es_final) {
         updates.fecha_cierre = new Date().toISOString();
         updates.observacion_cierre = editObs;
@@ -129,15 +139,16 @@ export default function AdminCases() {
                 <TableHead>Tipo</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Agente</TableHead>
+                <TableHead>Valor a Pagar</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8">Cargando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8">Cargando...</TableCell></TableRow>
               ) : !cases?.length ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No hay casos</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No hay casos</TableCell></TableRow>
               ) : cases.map((caso: any) => (
                 <TableRow key={caso.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(caso)}>
                   <TableCell className="font-medium">#{caso.id}</TableCell>
@@ -149,6 +160,7 @@ export default function AdminCases() {
                     </span>
                   </TableCell>
                   <TableCell>{caso.cat_agentes?.nombre || "-"}</TableCell>
+                  <TableCell>{formatCOP(caso.valor_pagar)}</TableCell>
                   <TableCell>{format(new Date(caso.fecha_caso), "dd/MM/yyyy", { locale: es })}</TableCell>
                   <TableCell><Eye className="h-4 w-4 text-muted-foreground" /></TableCell>
                 </TableRow>
@@ -196,6 +208,16 @@ export default function AdminCases() {
                   <div>
                     <Label>Observación de Cierre</Label>
                     <Textarea value={editObs} onChange={e => setEditObs(e.target.value)} rows={2} />
+                  </div>
+                )}
+                {isEditRenovacion && (
+                  <div>
+                    <Label>Valor a Pagar *</Label>
+                    <Input
+                      placeholder="$ 0"
+                      value={editValorDisplay}
+                      onChange={e => setEditValorDisplay(formatCOPInput(e.target.value))}
+                    />
                   </div>
                 )}
                 <div>
