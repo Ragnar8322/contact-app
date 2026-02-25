@@ -82,8 +82,8 @@ export default function AdminClients() {
                 </div>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Nombre Contacto *</Label>
-                <Input required value={form.nombre_contacto} onChange={e => setForm(f => ({ ...f, nombre_contacto: e.target.value }))} />
+                  <Label className="text-xs">Nombre Contacto *</Label>
+                  <Input required value={form.nombre_contacto} onChange={e => setForm(f => ({ ...f, nombre_contacto: e.target.value.toUpperCase() }))} className="uppercase" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -96,8 +96,8 @@ export default function AdminClients() {
                 </div>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Correo</Label>
-                <Input type="email" value={form.correo} onChange={e => setForm(f => ({ ...f, correo: e.target.value }))} />
+                  <Label className="text-xs">Correo</Label>
+                  <Input type="email" value={form.correo} onChange={e => setForm(f => ({ ...f, correo: e.target.value.toLowerCase() }))} className="lowercase" />
               </div>
               <Button type="submit" className="w-full" disabled={createClient.isPending}>
                 {createClient.isPending ? "Creando..." : "Crear Cliente"}
