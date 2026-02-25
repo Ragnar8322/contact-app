@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
+import ChangePassword from "@/pages/ChangePassword";
 import Dashboard from "@/pages/Dashboard";
 import Clients from "@/pages/Clients";
 import Cases from "@/pages/Cases";
@@ -15,9 +16,10 @@ import NotFound from "@/pages/NotFound";
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+  const { session, loading, mustChangePassword } = useAuth();
   if (loading) return <div className="flex h-screen items-center justify-center text-muted-foreground">Cargando...</div>;
   if (!session) return <Navigate to="/login" replace />;
+  if (mustChangePassword) return <Navigate to="/cambiar-contrasena" replace />;
   return <AppLayout>{children}</AppLayout>;
 }
 
@@ -26,6 +28,14 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
   if (loading) return null;
   if (session) return <Navigate to="/" replace />;
   return <>{children}</>;
+}
+
+function ChangePasswordRoute() {
+  const { session, loading, mustChangePassword } = useAuth();
+  if (loading) return <div className="flex h-screen items-center justify-center text-muted-foreground">Cargando...</div>;
+  if (!session) return <Navigate to="/login" replace />;
+  if (!mustChangePassword) return <Navigate to="/" replace />;
+  return <ChangePassword />;
 }
 
 const App = () => (
@@ -37,6 +47,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
+            <Route path="/cambiar-contrasena" element={<ChangePasswordRoute />} />
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/clientes" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
             <Route path="/casos" element={<ProtectedRoute><Cases /></ProtectedRoute>} />

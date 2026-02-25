@@ -1,17 +1,29 @@
 import { useState } from "react";
 import { useAllProfiles, useUpdateProfile, useInviteUser, useRoles } from "@/hooks/useAdmin";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Pencil, Check, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Plus, Pencil, Check, X, KeyRound, Shield } from "lucide-react";
 import { toast } from "sonner";
+import { z } from "zod";
+
+const passwordSchema = z
+  .string()
+  .min(8, "Mínimo 8 caracteres")
+  .regex(/[A-Z]/, "Debe incluir al menos una mayúscula")
+  .regex(/[a-z]/, "Debe incluir al menos una minúscula")
+  .regex(/[0-9]/, "Debe incluir al menos un número")
+  .regex(/[!@#$%^&*(),.?":{}|<>]/, "Debe incluir al menos un carácter especial");
 
 export default function AdminProfiles() {
-  const { data: profiles, isLoading } = useAllProfiles();
+  const { data: profiles, isLoading, refetch } = useAllProfiles();
   const { data: roles } = useRoles();
   const updateProfile = useUpdateProfile();
   const inviteUser = useInviteUser();
@@ -21,6 +33,12 @@ export default function AdminProfiles() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: "", nombre: "", telefono: "", role_id: 2 });
   const [inviteResult, setInviteResult] = useState<{ temp_password: string } | null>(null);
+
+  // Temp password dialog
+  const [tempPwdUser, setTempPwdUser] = useState<{ user_id: string; nombre: string } | null>(null);
+  const [tempPwd, setTempPwd] = useState("");
+  const [tempPwdConfirm, setTempPwdConfirm] = useState("");
+  const [tempPwdLoading, setTempPwdLoading] = useState(false);
 
   const startEdit = (p: any) => {
     setEditId(p.user_id);
@@ -48,6 +66,52 @@ export default function AdminProfiles() {
       toast.error(err.message);
     }
   };
+
+  const handleForceChange = async (userId: string, nombre: string) => {
+    try {
+      const { error } = await supabase.functions.invoke("reset-password", {
+        body: { user_id: userId, action: "force_change" },
+      });
+      if (error) throw error;
+      toast.success(`${nombre} deberá cambiar su contraseña en el próximo inicio de sesión.`);
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleSetTempPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tempPwdUser) return;
+    const validation = passwordSchema.safeParse(tempPwd);
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
+      return;
+    }
+    if (tempPwd !== tempPwdConfirm) {
+      toast.error("Las contraseñas no coinciden");
+      return;
+    }
+    setTempPwdLoading(true);
+    try {
+      const { error } = await supabase.functions.invoke("reset-password", {
+        body: { user_id: tempPwdUser.user_id, action: "set_temp_password", temp_password: tempPwd },
+      });
+      if (error) throw error;
+      toast.success("Contraseña temporal establecida. El usuario deberá cambiarla al iniciar sesión.");
+      setTempPwdUser(null);
+      setTempPwd("");
+      setTempPwdConfirm("");
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setTempPwdLoading(false);
+    }
+  };
+
+  const tempPwdValid = passwordSchema.safeParse(tempPwd);
+  const tempPwdMismatch = tempPwdConfirm.length > 0 && tempPwd !== tempPwdConfirm;
 
   return (
     <Card className="border-0 shadow-sm">
@@ -107,7 +171,7 @@ export default function AdminProfiles() {
               <TableHead>Teléfono</TableHead>
               <TableHead>Rol</TableHead>
               <TableHead>User ID</TableHead>
-              <TableHead className="w-20"></TableHead>
+              <TableHead className="w-40"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -147,7 +211,36 @@ export default function AdminProfiles() {
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditId(null)}><X className="h-4 w-4" /></Button>
                     </div>
                   ) : (
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(p)}><Pencil className="h-4 w-4" /></Button>
+                    <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(p)} title="Editar">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" title="Restablecer contraseña">
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Restablecer contraseña</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              ¿Seguro que deseas restablecer la contraseña de <strong>{p.nombre}</strong>? Se le pedirá que la cambie en su próximo inicio de sesión.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleForceChange(p.user_id, p.nombre)}>
+                              Confirmar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" title="Establecer contraseña temporal"
+                        onClick={() => { setTempPwdUser({ user_id: p.user_id, nombre: p.nombre }); setTempPwd(""); setTempPwdConfirm(""); }}>
+                        <Shield className="h-4 w-4" />
+                      </Button>
+                    </div>
                   )}
                 </TableCell>
               </TableRow>
@@ -155,6 +248,40 @@ export default function AdminProfiles() {
           </TableBody>
         </Table>
       </CardContent>
+
+      {/* Temp password dialog */}
+      <Dialog open={!!tempPwdUser} onOpenChange={(o) => { if (!o) setTempPwdUser(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Establecer contraseña temporal</DialogTitle>
+            <DialogDescription>Para: {tempPwdUser?.nombre}</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSetTempPassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nueva contraseña temporal</Label>
+              <Input type="password" value={tempPwd} onChange={e => setTempPwd(e.target.value)} placeholder="••••••••" required />
+              {tempPwd && !tempPwdValid.success && (
+                <div className="space-y-1">
+                  {tempPwdValid.error.errors.map((err, i) => (
+                    <p key={i} className="text-xs text-destructive">{err.message}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Confirmar contraseña</Label>
+              <Input type="password" value={tempPwdConfirm} onChange={e => setTempPwdConfirm(e.target.value)} placeholder="••••••••" required />
+              {tempPwdMismatch && <p className="text-xs text-destructive">Las contraseñas no coinciden</p>}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setTempPwdUser(null)}>Cancelar</Button>
+              <Button type="submit" disabled={!tempPwdValid.success || tempPwd !== tempPwdConfirm || tempPwdLoading}>
+                {tempPwdLoading ? "Guardando..." : "Establecer contraseña"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
