@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCases, useEstados, useTiposServicio, useCreateCase, useUpdateCase, useInsertHistorial, useCaseHistory } from "@/hooks/useCases";
 import { useClients } from "@/hooks/useClients";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,32 +78,58 @@ export default function Cases() {
 
   // Edit form
   const [editEstado, setEditEstado] = useState(0);
-  const [editComentario, setEditComentario] = useState("");
-  const [editObservacion, setEditObservacion] = useState("");
+  const [originalEstado, setOriginalEstado] = useState(0);
+  const [editObservaciones, setEditObservaciones] = useState("");
+  const [obsError, setObsError] = useState("");
+
+  const estadoChanged = editEstado !== originalEstado;
+  const selectedEstadoFinal = estados?.find(e => e.id === editEstado)?.es_final;
 
   const openDetail = (caso: any) => {
     setSelectedCaseId(caso.id);
     setEditEstado(caso.estado_id);
-    setEditObservacion(caso.observacion_cierre || "");
-    setEditComentario("");
+    setOriginalEstado(caso.estado_id);
+    setEditObservaciones("");
+    setObsError("");
+  };
+
+  const validateObservaciones = (): boolean => {
+    if (!estadoChanged) return true;
+    if (!editObservaciones.trim()) {
+      setObsError("Las observaciones de gestión son obligatorias para cambiar el estado.");
+      return false;
+    }
+    if (selectedEstadoFinal && editObservaciones.trim().length < 30) {
+      setObsError("Para estados de cierre, las observaciones deben tener al menos 30 caracteres.");
+      return false;
+    }
+    setObsError("");
+    return true;
   };
 
   const handleUpdate = async () => {
     if (!selectedCaseId || !user) return;
+    if (!estadoChanged) {
+      toast.info("No has cambiado el estado del caso.");
+      return;
+    }
+    if (!validateObservaciones()) return;
     try {
-      const estado = estados?.find(e => e.id === editEstado);
       const updates: any = { id: selectedCaseId, estado_id: editEstado, updated_by: user.id };
-      if (estado?.es_final) {
+      if (selectedEstadoFinal) {
         updates.fecha_cierre = new Date().toISOString();
-        updates.observacion_cierre = editObservacion;
+        updates.observacion_cierre = editObservaciones.trim();
       }
       await updateCase.mutateAsync(updates);
       await insertHistorial.mutateAsync({
         caso_id: selectedCaseId,
         estado_id: editEstado,
         cambiado_por: user.id,
-        comentario: editComentario || undefined,
+        comentario: editObservaciones.trim(),
       });
+      setOriginalEstado(editEstado);
+      setEditObservaciones("");
+      setObsError("");
       toast.success("Caso actualizado");
     } catch (err: any) {
       toast.error("Error: " + err.message);
@@ -242,26 +268,33 @@ export default function Cases() {
 
               <div className="space-y-3">
                 <Label>Cambiar Estado</Label>
-                <Select value={String(editEstado)} onValueChange={v => setEditEstado(Number(v))}>
+                <Select value={String(editEstado)} onValueChange={v => { setEditEstado(Number(v)); setObsError(""); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {estados?.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}
                   </SelectContent>
                 </Select>
 
-                {estados?.find(e => e.id === editEstado)?.es_final && (
+                {estadoChanged && (
                   <div className="space-y-2">
-                    <Label>Observación de Cierre</Label>
-                    <Textarea value={editObservacion} onChange={e => setEditObservacion(e.target.value)} rows={2} />
+                    <Label>
+                      Observaciones de gestión *
+                      {selectedEstadoFinal && <span className="ml-1 text-xs text-muted-foreground">(mín. 30 caracteres)</span>}
+                    </Label>
+                    <Textarea
+                      value={editObservaciones}
+                      onChange={e => { setEditObservaciones(e.target.value); setObsError(""); }}
+                      rows={3}
+                      placeholder="Describe la gestión realizada, acuerdo con el cliente o motivo del cambio..."
+                    />
+                    {selectedEstadoFinal && (
+                      <p className="text-xs text-muted-foreground">{editObservaciones.trim().length}/30 caracteres</p>
+                    )}
+                    {obsError && <p className="text-sm text-destructive">{obsError}</p>}
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <Label>Comentario</Label>
-                  <Textarea value={editComentario} onChange={e => setEditComentario(e.target.value)} rows={2} placeholder="Agregar comentario al historial..." />
-                </div>
-
-                <Button onClick={handleUpdate} disabled={updateCase.isPending} className="w-full">
+                <Button onClick={handleUpdate} disabled={updateCase.isPending || !estadoChanged} className="w-full">
                   {updateCase.isPending ? "Guardando..." : "Actualizar Caso"}
                 </Button>
               </div>
@@ -270,7 +303,7 @@ export default function Cases() {
 
               {/* History */}
               <div>
-                <h3 className="mb-3 text-sm font-semibold">Historial</h3>
+                <h3 className="mb-3 text-sm font-semibold">Historial de gestiones</h3>
                 <div className="space-y-2">
                   {history?.map((h: any) => (
                     <div key={h.id} className="rounded-lg bg-muted p-3 text-sm">
@@ -278,6 +311,9 @@ export default function Cases() {
                         <span className="font-medium">{h.cat_estados?.nombre}</span>
                         <span className="text-xs text-muted-foreground">{format(new Date(h.cambiado_en), "dd/MM/yyyy HH:mm", { locale: es })}</span>
                       </div>
+                      {h.profiles?.nombre && (
+                        <p className="text-xs text-muted-foreground mt-0.5">Por: {h.profiles.nombre}</p>
+                      )}
                       {h.comentario && <p className="mt-1 text-muted-foreground">{h.comentario}</p>}
                     </div>
                   ))}
