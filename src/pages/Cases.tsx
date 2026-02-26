@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useCases, useEstados, useTiposServicio, useCreateCase, useUpdateCase, useInsertHistorial, useCaseHistory } from "@/hooks/useCases";
-import { useClients } from "@/hooks/useClients";
+import { useCases, useEstados, useUpdateCase, useInsertHistorial, useCaseHistory } from "@/hooks/useCases";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
@@ -16,15 +14,14 @@ import { Plus, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
+import { formatCOP } from "@/lib/currency";
+import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
 
 export default function Cases() {
   const { user } = useAuth();
   const { data: cases, isLoading } = useCases();
   const { data: estados } = useEstados();
-  const { data: tipos } = useTiposServicio();
-  const { data: allClients } = useClients();
-  const createCase = useCreateCase();
+  
   const updateCase = useUpdateCase();
   const insertHistorial = useInsertHistorial();
 
@@ -33,51 +30,6 @@ export default function Cases() {
   const { data: history } = useCaseHistory(selectedCaseId);
 
   const selectedCase = cases?.find((c: any) => c.id === selectedCaseId);
-
-  // Create form
-  const [clientSearch, setClientSearch] = useState("");
-  const [clientSelected, setClientSelected] = useState(false);
-  const [form, setForm] = useState({ cliente_id: 0, tipo_servicio_id: 0, descripcion_inicial: "", valor_pagar_display: "" });
-
-  const isRenovacionWeb = tipos?.find(t => t.id === form.tipo_servicio_id)?.nombre?.toLowerCase() === "renovación web";
-
-  const filteredClients = allClients?.filter(c =>
-    c.nombre_contacto.toLowerCase().includes(clientSearch.toLowerCase()) ||
-    c.identificacion.includes(clientSearch)
-  )?.slice(0, 20);
-
-  const registradoId = estados?.find(e => e.nombre === "Registrado")?.id || 1;
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.cliente_id || !form.tipo_servicio_id) {
-      toast.error("Selecciona cliente y tipo de servicio");
-      return;
-    }
-    const valorPagar = isRenovacionWeb ? parseCOPInput(form.valor_pagar_display) : null;
-    if (isRenovacionWeb && !valorPagar) {
-      toast.error("El valor a pagar es obligatorio para Renovación web");
-      return;
-    }
-    try {
-      await createCase.mutateAsync({
-        cliente_id: form.cliente_id,
-        tipo_servicio_id: form.tipo_servicio_id,
-        descripcion_inicial: form.descripcion_inicial,
-        valor_pagar: valorPagar,
-        estado_id: registradoId,
-        agente_id: user!.id,
-        created_by: user!.id,
-      });
-      toast.success("Caso creado exitosamente");
-      setCreateOpen(false);
-      setForm({ cliente_id: 0, tipo_servicio_id: 0, descripcion_inicial: "", valor_pagar_display: "" });
-      setClientSearch("");
-      setClientSelected(false);
-    } catch (err: any) {
-      toast.error("Error: " + err.message);
-    }
-  };
 
   // Edit form
   const [editEstado, setEditEstado] = useState(0);
@@ -150,57 +102,7 @@ export default function Cases() {
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" />Crear Caso</Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>Nuevo Caso</DialogTitle></DialogHeader>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Cliente *</Label>
-                <Input placeholder="Buscar cliente..." value={clientSearch} onChange={e => { setClientSearch(e.target.value); setClientSelected(false); setForm(f => ({ ...f, cliente_id: 0 })); }} />
-                {clientSearch && !clientSelected && filteredClients && filteredClients.length > 0 && (
-                  <div className="max-h-40 overflow-auto rounded-md border bg-popover">
-                    {filteredClients.map(c => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors"
-                        onClick={() => { setForm(f => ({ ...f, cliente_id: c.id })); setClientSearch(c.nombre_contacto); setClientSelected(true); }}
-                      >
-                        <span className="font-medium">{c.nombre_contacto}</span>
-                        <span className="ml-2 text-muted-foreground">{c.identificacion}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label>Tipo de Servicio *</Label>
-                <Select value={form.tipo_servicio_id ? String(form.tipo_servicio_id) : ""} onValueChange={v => setForm(f => ({ ...f, tipo_servicio_id: Number(v), valor_pagar_display: "" }))}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                  <SelectContent>
-                    {tipos?.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              {isRenovacionWeb && (
-                <div className="space-y-2">
-                  <Label>Valor a Pagar *</Label>
-                  <Input
-                    placeholder="$ 0"
-                    value={form.valor_pagar_display}
-                    onChange={e => setForm(f => ({ ...f, valor_pagar_display: formatCOPInput(e.target.value) }))}
-                    required
-                  />
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label>Descripción Inicial *</Label>
-                <Textarea value={form.descripcion_inicial} onChange={e => setForm(f => ({ ...f, descripcion_inicial: e.target.value }))} required rows={3} />
-              </div>
-              <Button type="submit" className="w-full" disabled={createCase.isPending}>
-                {createCase.isPending ? "Creando..." : "Crear Caso"}
-              </Button>
-            </form>
-          </DialogContent>
+          <UnifiedCaseForm onSuccess={() => setCreateOpen(false)} />
         </Dialog>
       </div>
 
