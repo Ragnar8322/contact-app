@@ -48,13 +48,15 @@ export default function Cases() {
     setObsError("");
   };
 
+  const isRenovacionWeb = selectedCase?.cat_tipo_servicio?.nombre?.toLowerCase() === "renovación web";
+
   const validateObservaciones = (): boolean => {
     if (!estadoChanged) return true;
     if (!editObservaciones.trim()) {
-      setObsError("Las observaciones de gestión son obligatorias para cambiar el estado.");
+      setObsError(isRenovacionWeb && selectedEstadoFinal ? "Las observaciones son obligatorias." : "Las observaciones de gestión son obligatorias para cambiar el estado.");
       return false;
     }
-    if (selectedEstadoFinal && editObservaciones.trim().length < 30) {
+    if (selectedEstadoFinal && !isRenovacionWeb && editObservaciones.trim().length < 30) {
       setObsError("Para estados de cierre, las observaciones deben tener al menos 30 caracteres.");
       return false;
     }
@@ -184,7 +186,7 @@ export default function Cases() {
                   <div className="space-y-2">
                     <Label>
                       Observaciones de gestión *
-                      {selectedEstadoFinal && <span className="ml-1 text-xs text-muted-foreground">(mín. 30 caracteres)</span>}
+                      {selectedEstadoFinal && !isRenovacionWeb && <span className="ml-1 text-xs text-muted-foreground">(mín. 30 caracteres)</span>}
                     </Label>
                     <Textarea
                       value={editObservaciones}
@@ -192,7 +194,7 @@ export default function Cases() {
                       rows={3}
                       placeholder="Describe la gestión realizada, acuerdo con el cliente o motivo del cambio..."
                     />
-                    {selectedEstadoFinal && (
+                    {selectedEstadoFinal && !isRenovacionWeb && (
                       <p className="text-xs text-muted-foreground">{editObservaciones.trim().length}/30 caracteres</p>
                     )}
                     {obsError && <p className="text-sm text-destructive">{obsError}</p>}
