@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useCaseHistory } from "@/hooks/useCases";
+import { Input as InputField } from "@/components/ui/input";
 import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
 
 export default function AdminCases() {
@@ -52,10 +53,13 @@ export default function AdminCases() {
   const [editObservaciones, setEditObservaciones] = useState("");
   const [obsError, setObsError] = useState("");
   const [editValorDisplay, setEditValorDisplay] = useState("");
+  const [valorError, setValorError] = useState("");
 
   const isEditRenovacion = tipos?.find(t => t.id === editTipo)?.nombre?.toLowerCase() === "renovación web";
   const estadoChanged = editEstado !== originalEstado;
   const selectedEstadoFinal = estados?.find(e => e.id === editEstado)?.es_final;
+  const selectedEstadoNombre = estados?.find(e => e.id === editEstado)?.nombre;
+  const showValorPagar = isEditRenovacion && (selectedEstadoNombre === "Renovado" || selectedEstadoNombre === "Pendiente de Pago");
 
   const openDetail = (caso: any) => {
     setSelectedId(caso.id);
@@ -66,6 +70,7 @@ export default function AdminCases() {
     setEditObservaciones("");
     setObsError("");
     setEditValorDisplay(caso.valor_pagar ? formatCOP(caso.valor_pagar) : "");
+    setValorError("");
   };
 
   const validateObservaciones = (): boolean => {
@@ -85,13 +90,19 @@ export default function AdminCases() {
   const handleUpdate = async () => {
     if (!selectedId || !user) return;
     if (!validateObservaciones()) return;
-    try {
-      const valorPagar = isEditRenovacion ? parseCOPInput(editValorDisplay) : null;
-      if (isEditRenovacion && !valorPagar) {
-        toast.error("El valor a pagar es obligatorio para Renovación web");
+    if (showValorPagar) {
+      const val = parseCOPInput(editValorDisplay);
+      if (!val) {
+        setValorError("El valor a pagar es obligatorio para este estado.");
         return;
       }
-      const updates: any = { id: selectedId, estado_id: editEstado, agente_id: editAgente, tipo_servicio_id: editTipo, updated_by: user.id, valor_pagar: valorPagar };
+      setValorError("");
+    }
+    try {
+      const updates: any = { id: selectedId, estado_id: editEstado, agente_id: editAgente, tipo_servicio_id: editTipo, updated_by: user.id };
+      if (showValorPagar) {
+        updates.valor_pagar = parseCOPInput(editValorDisplay);
+      }
       if (selectedEstadoFinal) {
         updates.fecha_cierre = new Date().toISOString();
         updates.observacion_cierre = editObservaciones.trim();
@@ -227,14 +238,15 @@ export default function AdminCases() {
                     <SelectContent>{tipos?.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.nombre}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                {isEditRenovacion && (
-                  <div>
+                {estadoChanged && showValorPagar && (
+                  <div className="space-y-2">
                     <Label>Valor a Pagar *</Label>
-                    <Input
+                    <InputField
                       placeholder="$ 0"
                       value={editValorDisplay}
-                      onChange={e => setEditValorDisplay(formatCOPInput(e.target.value))}
+                      onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }}
                     />
+                    {valorError && <p className="text-sm text-destructive">{valorError}</p>}
                   </div>
                 )}
 
