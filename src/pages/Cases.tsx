@@ -14,7 +14,8 @@ import { Plus, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { formatCOP } from "@/lib/currency";
+import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
+import { Input } from "@/components/ui/input";
 import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
 
 export default function Cases() {
@@ -36,6 +37,8 @@ export default function Cases() {
   const [originalEstado, setOriginalEstado] = useState(0);
   const [editObservaciones, setEditObservaciones] = useState("");
   const [obsError, setObsError] = useState("");
+  const [editValorDisplay, setEditValorDisplay] = useState("");
+  const [valorError, setValorError] = useState("");
 
   const estadoChanged = editEstado !== originalEstado;
   const selectedEstadoFinal = estados?.find(e => e.id === editEstado)?.es_final;
@@ -46,9 +49,13 @@ export default function Cases() {
     setOriginalEstado(caso.estado_id);
     setEditObservaciones("");
     setObsError("");
+    setEditValorDisplay(caso.valor_pagar ? formatCOP(caso.valor_pagar) : "");
+    setValorError("");
   };
 
   const isRenovacionWeb = selectedCase?.cat_tipo_servicio?.nombre?.toLowerCase() === "renovación web";
+  const selectedEstadoNombre = estados?.find(e => e.id === editEstado)?.nombre;
+  const showValorPagar = isRenovacionWeb && (selectedEstadoNombre === "Renovado" || selectedEstadoNombre === "Pendiente de Pago");
 
   const validateObservaciones = (): boolean => {
     if (!estadoChanged) return true;
@@ -71,8 +78,19 @@ export default function Cases() {
       return;
     }
     if (!validateObservaciones()) return;
+    if (showValorPagar) {
+      const val = parseCOPInput(editValorDisplay);
+      if (!val) {
+        setValorError("El valor a pagar es obligatorio para este estado.");
+        return;
+      }
+      setValorError("");
+    }
     try {
       const updates: any = { id: selectedCaseId, estado_id: editEstado, updated_by: user.id };
+      if (showValorPagar) {
+        updates.valor_pagar = parseCOPInput(editValorDisplay);
+      }
       if (selectedEstadoFinal) {
         updates.fecha_cierre = new Date().toISOString();
         updates.observacion_cierre = editObservaciones.trim();
@@ -175,12 +193,24 @@ export default function Cases() {
 
               <div className="space-y-3">
                 <Label>Cambiar Estado</Label>
-                <Select value={String(editEstado)} onValueChange={v => { setEditEstado(Number(v)); setObsError(""); }}>
+                <Select value={String(editEstado)} onValueChange={v => { setEditEstado(Number(v)); setObsError(""); setValorError(""); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {estados?.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}
                   </SelectContent>
                 </Select>
+
+                {estadoChanged && showValorPagar && (
+                  <div className="space-y-2">
+                    <Label>Valor a Pagar *</Label>
+                    <Input
+                      placeholder="$ 0"
+                      value={editValorDisplay}
+                      onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }}
+                    />
+                    {valorError && <p className="text-sm text-destructive">{valorError}</p>}
+                  </div>
+                )}
 
                 {estadoChanged && (
                   <div className="space-y-2">

@@ -16,7 +16,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CheckCircle2, Info, Loader2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
-import { formatCOPInput, parseCOPInput } from "@/lib/currency";
 
 const clienteSchema = z.object({
   identificacion: z.string().min(1, "La identificación es obligatoria"),
@@ -31,7 +30,6 @@ const clienteSchema = z.object({
 const casoSchema = z.object({
   tipo_servicio_id: z.number().min(1, "Selecciona un tipo de servicio"),
   descripcion_inicial: z.string().min(1, "La descripción es obligatoria"),
-  valor_pagar_display: z.string().optional(),
 });
 
 type ClienteForm = z.infer<typeof clienteSchema>;
@@ -77,12 +75,9 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
     defaultValues: {
       tipo_servicio_id: 0,
       descripcion_inicial: "",
-      valor_pagar_display: "",
     },
   });
 
-  const tipoServicioId = casoForm.watch("tipo_servicio_id");
-  const isRenovacionWeb = tipos?.find(t => t.id === tipoServicioId)?.nombre?.toLowerCase() === "renovación web";
   const registradoId = estados?.find(e => e.nombre === "Registrado")?.id || 1;
 
   // Section 2 enabled when client is resolved
@@ -164,16 +159,6 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
 
       // Create case
       const casoData = casoForm.getValues();
-      const valorPagar = isRenovacionWeb ? parseCOPInput(casoData.valor_pagar_display || "") : null;
-
-      if (isRenovacionWeb && !valorPagar) {
-        casoForm.setError("valor_pagar_display", { message: "El valor a pagar es obligatorio" });
-        if (!clientExists) {
-          toast.warning("El cliente fue registrado. Corrige el valor a pagar para crear el caso.");
-        }
-        setSaving(false);
-        return;
-      }
 
       const { error: casoError } = await supabase
         .from("casos")
@@ -181,7 +166,7 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
           cliente_id: clienteId,
           tipo_servicio_id: casoData.tipo_servicio_id,
           descripcion_inicial: casoData.descripcion_inicial,
-          valor_pagar: valorPagar,
+          valor_pagar: null,
           estado_id: registradoId,
           agente_id: user.id,
           created_by: user.id,
@@ -403,7 +388,6 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
                       value={field.value ? String(field.value) : ""}
                       onValueChange={v => {
                         field.onChange(Number(v));
-                        casoForm.setValue("valor_pagar_display", "");
                       }}
                       disabled={!section2Enabled}
                     >
@@ -417,26 +401,6 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
                 )}
               />
             </div>
-
-            {isRenovacionWeb && (
-              <div className="space-y-2">
-                <Label>Valor a Pagar *</Label>
-                <Controller
-                  control={casoForm.control}
-                  name="valor_pagar_display"
-                  render={({ field, fieldState }) => (
-                    <>
-                      <Input
-                        placeholder="$ 0"
-                        value={field.value}
-                        onChange={e => field.onChange(formatCOPInput(e.target.value))}
-                      />
-                      {fieldState.error && <p className="text-xs text-destructive">{fieldState.error.message}</p>}
-                    </>
-                  )}
-                />
-              </div>
-            )}
 
             <div className="space-y-2">
               <Label>Descripción Inicial *</Label>
