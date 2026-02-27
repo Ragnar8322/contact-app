@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { Eye } from "lucide-react";
+import { Eye, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -189,7 +189,8 @@ export default function AdminCases() {
                   <TableCell>{caso.clientes?.nombre_contacto || "-"}</TableCell>
                   <TableCell>{caso.cat_tipo_servicio?.nombre}</TableCell>
                   <TableCell>
-                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${caso.cat_estados?.es_final ? 'bg-accent text-accent-foreground' : 'bg-secondary text-secondary-foreground'}`}>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${caso.cat_estados?.es_final ? 'bg-accent text-accent-foreground' : 'bg-secondary text-secondary-foreground'}`}>
+                      {caso.cat_estados?.es_final && <Lock className="h-3 w-3" />}
                       {caso.cat_estados?.nombre}
                     </span>
                   </TableCell>

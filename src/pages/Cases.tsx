@@ -10,7 +10,8 @@ import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Eye } from "lucide-react";
+import { Plus, Eye, Lock } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -19,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
 
 export default function Cases() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { data: cases, isLoading } = useCases();
   const { data: estados } = useEstados();
   
@@ -56,6 +57,10 @@ export default function Cases() {
   const isRenovacionWeb = selectedCase?.cat_tipo_servicio?.nombre?.toLowerCase() === "renovación web";
   const selectedEstadoNombre = estados?.find(e => e.id === editEstado)?.nombre;
   const showValorPagar = isRenovacionWeb && (selectedEstadoNombre === "Renovado" || selectedEstadoNombre === "Pendiente de Pago");
+
+  // Closed case restriction for agents
+  const isCaseClosed = selectedCase?.cat_estados?.es_final === true;
+  const isReadOnly = isCaseClosed && !isAdmin;
 
   const validateObservaciones = (): boolean => {
     if (!estadoChanged) return true;
@@ -159,7 +164,13 @@ export default function Cases() {
                   <TableCell>{caso.cat_agentes?.nombre || "-"}</TableCell>
                   <TableCell>{formatCOP(caso.valor_pagar)}</TableCell>
                   <TableCell>{format(new Date(caso.fecha_caso), "dd/MM/yyyy", { locale: es })}</TableCell>
-                  <TableCell><Eye className="h-4 w-4 text-muted-foreground" /></TableCell>
+              <TableCell>
+                    {caso.cat_estados?.es_final ? (
+                      <Lock className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -175,6 +186,13 @@ export default function Cases() {
           </SheetHeader>
           {selectedCase && (
             <div className="mt-4 space-y-5">
+              {isReadOnly && (
+                <Alert className="border-amber-500/50 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  <AlertDescription>
+                    ⚠️ Este caso está cerrado y no puede ser modificado. Si necesitas reabrirlo, contacta a un administrador.
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><span className="text-muted-foreground">Cliente:</span><p className="font-medium">{selectedCase.clientes?.nombre_contacto}</p></div>
                 <div><span className="text-muted-foreground">Tipo:</span><p className="font-medium">{selectedCase.cat_tipo_servicio?.nombre}</p></div>
@@ -191,50 +209,52 @@ export default function Cases() {
 
               <Separator />
 
-              <div className="space-y-3">
-                <Label>Cambiar Estado</Label>
-                <Select value={String(editEstado)} onValueChange={v => { setEditEstado(Number(v)); setObsError(""); setValorError(""); }}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {estados?.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              {!isReadOnly && (
+                <div className="space-y-3">
+                  <Label>Cambiar Estado</Label>
+                  <Select value={String(editEstado)} onValueChange={v => { setEditEstado(Number(v)); setObsError(""); setValorError(""); }}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {estados?.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
 
-                {estadoChanged && showValorPagar && (
-                  <div className="space-y-2">
-                    <Label>Valor a Pagar *</Label>
-                    <Input
-                      placeholder="$ 0"
-                      value={editValorDisplay}
-                      onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }}
-                    />
-                    {valorError && <p className="text-sm text-destructive">{valorError}</p>}
-                  </div>
-                )}
+                  {estadoChanged && showValorPagar && (
+                    <div className="space-y-2">
+                      <Label>Valor a Pagar *</Label>
+                      <Input
+                        placeholder="$ 0"
+                        value={editValorDisplay}
+                        onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }}
+                      />
+                      {valorError && <p className="text-sm text-destructive">{valorError}</p>}
+                    </div>
+                  )}
 
-                {estadoChanged && (
-                  <div className="space-y-2">
-                    <Label>
-                      Observaciones de gestión *
-                      {selectedEstadoFinal && !isRenovacionWeb && <span className="ml-1 text-xs text-muted-foreground">(mín. 30 caracteres)</span>}
-                    </Label>
-                    <Textarea
-                      value={editObservaciones}
-                      onChange={e => { setEditObservaciones(e.target.value); setObsError(""); }}
-                      rows={3}
-                      placeholder="Describe la gestión realizada, acuerdo con el cliente o motivo del cambio..."
-                    />
-                    {selectedEstadoFinal && !isRenovacionWeb && (
-                      <p className="text-xs text-muted-foreground">{editObservaciones.trim().length}/30 caracteres</p>
-                    )}
-                    {obsError && <p className="text-sm text-destructive">{obsError}</p>}
-                  </div>
-                )}
+                  {estadoChanged && (
+                    <div className="space-y-2">
+                      <Label>
+                        Observaciones de gestión *
+                        {selectedEstadoFinal && !isRenovacionWeb && <span className="ml-1 text-xs text-muted-foreground">(mín. 30 caracteres)</span>}
+                      </Label>
+                      <Textarea
+                        value={editObservaciones}
+                        onChange={e => { setEditObservaciones(e.target.value); setObsError(""); }}
+                        rows={3}
+                        placeholder="Describe la gestión realizada, acuerdo con el cliente o motivo del cambio..."
+                      />
+                      {selectedEstadoFinal && !isRenovacionWeb && (
+                        <p className="text-xs text-muted-foreground">{editObservaciones.trim().length}/30 caracteres</p>
+                      )}
+                      {obsError && <p className="text-sm text-destructive">{obsError}</p>}
+                    </div>
+                  )}
 
-                <Button onClick={handleUpdate} disabled={updateCase.isPending || !estadoChanged} className="w-full">
-                  {updateCase.isPending ? "Guardando..." : "Actualizar Caso"}
-                </Button>
-              </div>
+                  <Button onClick={handleUpdate} disabled={updateCase.isPending || !estadoChanged} className="w-full">
+                    {updateCase.isPending ? "Guardando..." : "Actualizar Caso"}
+                  </Button>
+                </div>
+              )}
 
               <Separator />
 
