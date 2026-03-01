@@ -35,3 +35,24 @@ export function useCreateClient() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["clientes"] }),
   });
 }
+
+export function useUpdateClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...values }: {
+      id: number;
+      identificacion: string;
+      nombre_contacto: string;
+      tipo_cliente: string;
+      razon_social?: string | null;
+      telefono?: string | null;
+      celular?: string | null;
+      correo?: string | null;
+    }) => {
+      const { data, error } = await supabase.from("clientes").update(values).eq("id", id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["clientes"] }),
+  });
+}

@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CheckCircle2, Info, Loader2, ExternalLink } from "lucide-react";
+import { CheckCircle2, Info, Loader2, ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 const clienteSchema = z.object({
@@ -48,7 +48,7 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
 
   // Client search
   const [identificacion, setIdentificacion] = useState("");
-  const { data: foundClient, isLoading: searching, searched } = useClientByIdentificacion(identificacion);
+  const { data: foundClient, isLoading: searching, searched, refetch: refetchClient } = useClientByIdentificacion(identificacion);
 
   const clientExists = !!foundClient;
   const clientNotFound = searched && !foundClient && identificacion.length >= 3;
@@ -237,14 +237,23 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
                 <ReadOnlyField label="Correo" value={foundClient!.correo || "-"} />
               </div>
 
-              <a
-                href={`/clientes?buscar=${encodeURIComponent(foundClient!.identificacion)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                ¿Datos incorrectos? Editar cliente <ExternalLink className="h-3 w-3" />
-              </a>
+              <div className="flex items-center gap-3 mt-2">
+                <a
+                  href={`/clientes?buscar=${encodeURIComponent(foundClient!.identificacion)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  ¿Datos incorrectos? Editar cliente <ExternalLink className="h-3 w-3" />
+                </a>
+                <button
+                  type="button"
+                  onClick={refetchClient}
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <RefreshCw className="h-3 w-3" /> Recargar datos del cliente
+                </button>
+              </div>
             </>
           )}
 
