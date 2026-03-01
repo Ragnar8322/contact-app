@@ -265,6 +265,36 @@ export type Database = {
           },
         ]
       }
+      staging_casos: {
+        Row: {
+          agente_nombre: string | null
+          cliente_identificacion: string | null
+          descripcion_inicial: string | null
+          estado: string | null
+          fecha_caso: string | null
+          tipo_servicio: string | null
+          valor_pagar: string | null
+        }
+        Insert: {
+          agente_nombre?: string | null
+          cliente_identificacion?: string | null
+          descripcion_inicial?: string | null
+          estado?: string | null
+          fecha_caso?: string | null
+          tipo_servicio?: string | null
+          valor_pagar?: string | null
+        }
+        Update: {
+          agente_nombre?: string | null
+          cliente_identificacion?: string | null
+          descripcion_inicial?: string | null
+          estado?: string | null
+          fecha_caso?: string | null
+          tipo_servicio?: string | null
+          valor_pagar?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: number

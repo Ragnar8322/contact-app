@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useClients, useCreateClient } from "@/hooks/useClients";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,8 @@ import { Search, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Clients() {
-  const [search, setSearch] = useState("");
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get("buscar") || "");
   const { data: clients, isLoading } = useClients(search);
   const createClient = useCreateClient();
   const [open, setOpen] = useState(false);
