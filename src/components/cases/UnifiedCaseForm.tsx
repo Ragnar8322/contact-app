@@ -238,7 +238,7 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
               </div>
 
               <a
-                href={`/clientes?edit=${foundClient!.id}`}
+                href={`/clientes?buscar=${encodeURIComponent(foundClient!.identificacion)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
