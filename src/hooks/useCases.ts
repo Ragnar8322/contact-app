@@ -1,14 +1,41 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-export function useCases() {
+export interface CasesFilters {
+  estadoIds?: number[];
+  tipoServicioId?: number | null;
+  agenteId?: string | null;
+  fechaDesde?: string | null;
+  fechaHasta?: string | null;
+}
+
+export function useCases(filters?: CasesFilters) {
   return useQuery({
-    queryKey: ["casos"],
+    queryKey: ["casos", filters],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("casos")
         .select("*, clientes(nombre_contacto, razon_social, identificacion), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)")
         .order("fecha_caso", { ascending: false });
+
+      if (filters?.estadoIds && filters.estadoIds.length > 0) {
+        query = query.in("estado_id", filters.estadoIds);
+      }
+      if (filters?.tipoServicioId) {
+        query = query.eq("tipo_servicio_id", filters.tipoServicioId);
+      }
+      if (filters?.agenteId) {
+        query = query.eq("agente_id", filters.agenteId);
+      }
+      if (filters?.fechaDesde) {
+        query = query.gte("fecha_caso", filters.fechaDesde);
+      }
+      if (filters?.fechaHasta) {
+        // Add end of day
+        query = query.lte("fecha_caso", filters.fechaHasta + "T23:59:59.999Z");
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
