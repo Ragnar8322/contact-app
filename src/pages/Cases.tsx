@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useCases, useEstados, useUpdateCase, useInsertHistorial, useCaseHistory } from "@/hooks/useCases";
+import { useCases, useEstados, useTiposServicio, useAgentes, useUpdateCase, useInsertHistorial, useCaseHistory, CasesFilters } from "@/hooks/useCases";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,7 @@ import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Eye, Lock } from "lucide-react";
+import { Plus, Eye, Lock, ArrowUpDown } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -18,12 +18,66 @@ import { es } from "date-fns/locale";
 import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
 import { Input } from "@/components/ui/input";
 import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
+import CasesFilterBar from "@/components/cases/CasesFilterBar";
+
+type SortField = "id" | "identificacion" | null;
+type SortDir = "asc" | "desc";
 
 export default function Cases() {
   const { user, isAdmin } = useAuth();
-  const { data: cases, isLoading } = useCases();
   const { data: estados } = useEstados();
-  
+  const { data: tiposServicio } = useTiposServicio();
+  const { data: agentesData } = useAgentes();
+
+  // Filters
+  const [searchText, setSearchText] = useState("");
+  const [filters, setFilters] = useState<CasesFilters>({});
+
+  const { data: cases, isLoading } = useCases(filters);
+
+  // Sorting
+  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
+
+  // Client-side text search + sorting
+  const filteredCases = useMemo(() => {
+    let result = cases || [];
+    const q = searchText.trim().toLowerCase();
+    if (q) {
+      result = result.filter((c: any) => {
+        const nombre = (c.clientes?.nombre_contacto || "").toLowerCase();
+        const ident = (c.clientes?.identificacion || "").toLowerCase();
+        const idStr = String(c.id);
+        return nombre.includes(q) || ident.includes(q) || idStr.includes(q);
+      });
+    }
+    if (sortField) {
+      result = [...result].sort((a: any, b: any) => {
+        let valA: any, valB: any;
+        if (sortField === "id") {
+          valA = a.id;
+          valB = b.id;
+        } else if (sortField === "identificacion") {
+          valA = a.clientes?.identificacion || "";
+          valB = b.clientes?.identificacion || "";
+        }
+        if (valA < valB) return sortDir === "asc" ? -1 : 1;
+        if (valA > valB) return sortDir === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+    return result;
+  }, [cases, searchText, sortField, sortDir]);
+
   const updateCase = useUpdateCase();
   const insertHistorial = useInsertHistorial();
 
@@ -31,7 +85,7 @@ export default function Cases() {
   const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null);
   const { data: history } = useCaseHistory(selectedCaseId);
 
-  const selectedCase = cases?.find((c: any) => c.id === selectedCaseId);
+  const selectedCase = filteredCases?.find((c: any) => c.id === selectedCaseId) || cases?.find((c: any) => c.id === selectedCaseId);
 
   // Edit form
   const [editEstado, setEditEstado] = useState(0);
@@ -58,7 +112,6 @@ export default function Cases() {
   const selectedEstadoNombre = estados?.find(e => e.id === editEstado)?.nombre;
   const showValorPagar = isRenovacionWeb && (selectedEstadoNombre === "Renovado" || selectedEstadoNombre === "Pendiente de Pago");
 
-  // Closed case restriction for agents
   const isCaseClosed = selectedCase?.cat_estados?.es_final === true;
   const isReadOnly = isCaseClosed && !isAdmin;
 
@@ -131,13 +184,30 @@ export default function Cases() {
         </Dialog>
       </div>
 
+      {/* Filter Bar */}
+      <CasesFilterBar
+        filters={filters}
+        searchText={searchText}
+        onSearchTextChange={setSearchText}
+        onFiltersChange={setFilters}
+        estados={estados || []}
+        tiposServicio={tiposServicio || []}
+        agentes={agentesData || []}
+        showAgenteFilter={isAdmin}
+      />
+
       <Card className="border-0 shadow-sm">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("id")}>
+                  <span className="inline-flex items-center gap-1">ID <ArrowUpDown className="h-3 w-3" /></span>
+                </TableHead>
                 <TableHead>Cliente</TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("identificacion")}>
+                  <span className="inline-flex items-center gap-1">NIT / Cédula <ArrowUpDown className="h-3 w-3" /></span>
+                </TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Agente</TableHead>
@@ -148,13 +218,14 @@ export default function Cases() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8">Cargando...</TableCell></TableRow>
-              ) : cases?.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No hay casos</TableCell></TableRow>
-              ) : cases?.map((caso: any) => (
+                <TableRow><TableCell colSpan={9} className="text-center py-8">Cargando...</TableCell></TableRow>
+              ) : filteredCases.length === 0 ? (
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No hay casos</TableCell></TableRow>
+              ) : filteredCases.map((caso: any) => (
                 <TableRow key={caso.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(caso)}>
                   <TableCell className="font-medium">#{caso.id}</TableCell>
                   <TableCell>{caso.clientes?.nombre_contacto || "-"}</TableCell>
+                  <TableCell className="font-mono text-sm">{caso.clientes?.identificacion || "-"}</TableCell>
                   <TableCell>{caso.cat_tipo_servicio?.nombre}</TableCell>
                   <TableCell>
                     <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${caso.cat_estados?.es_final ? 'bg-accent text-accent-foreground' : 'bg-secondary text-secondary-foreground'}`}>
@@ -164,7 +235,7 @@ export default function Cases() {
                   <TableCell>{caso.cat_agentes?.nombre || "-"}</TableCell>
                   <TableCell>{formatCOP(caso.valor_pagar)}</TableCell>
                   <TableCell>{format(new Date(caso.fecha_caso), "dd/MM/yyyy", { locale: es })}</TableCell>
-              <TableCell>
+                  <TableCell>
                     {caso.cat_estados?.es_final ? (
                       <Lock className="h-4 w-4 text-muted-foreground" />
                     ) : (
@@ -195,6 +266,7 @@ export default function Cases() {
               )}
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><span className="text-muted-foreground">Cliente:</span><p className="font-medium">{selectedCase.clientes?.nombre_contacto}</p></div>
+                <div><span className="text-muted-foreground">NIT / Cédula:</span><p className="font-medium font-mono">{selectedCase.clientes?.identificacion || "-"}</p></div>
                 <div><span className="text-muted-foreground">Tipo:</span><p className="font-medium">{selectedCase.cat_tipo_servicio?.nombre}</p></div>
                 <div><span className="text-muted-foreground">Agente:</span><p className="font-medium">{selectedCase.cat_agentes?.nombre}</p></div>
                 <div><span className="text-muted-foreground">Fecha:</span><p className="font-medium">{format(new Date(selectedCase.fecha_caso), "dd/MM/yyyy HH:mm", { locale: es })}</p></div>
