@@ -325,6 +325,41 @@ export type Database = {
           },
         ]
       }
+      sla_config: {
+        Row: {
+          activo: boolean | null
+          campana_id: string | null
+          created_at: string | null
+          horas_riesgo: number
+          horas_vencido: number
+          id: number
+        }
+        Insert: {
+          activo?: boolean | null
+          campana_id?: string | null
+          created_at?: string | null
+          horas_riesgo?: number
+          horas_vencido?: number
+          id?: number
+        }
+        Update: {
+          activo?: boolean | null
+          campana_id?: string | null
+          created_at?: string | null
+          horas_riesgo?: number
+          horas_vencido?: number
+          id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sla_config_campana_id_fkey"
+            columns: ["campana_id"]
+            isOneToOne: false
+            referencedRelation: "campanas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staging_casos: {
         Row: {
           agente_nombre: string | null
