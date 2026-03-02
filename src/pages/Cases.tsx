@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCampana } from "@/contexts/CampanaContext";
 import { useCases, useEstados, useTiposServicio, useAgentes, useUpdateCase, useInsertHistorial, useCaseHistory, CasesFilters } from "@/hooks/useCases";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ type SortDir = "asc" | "desc";
 
 export default function Cases() {
   const { user, isAdmin } = useAuth();
+  const { campanaActiva } = useCampana();
   const { data: estados } = useEstados();
   const { data: tiposServicio } = useTiposServicio();
   const { data: agentesData } = useAgentes();
@@ -33,7 +35,13 @@ export default function Cases() {
   const [searchText, setSearchText] = useState("");
   const [filters, setFilters] = useState<CasesFilters>({});
 
-  const { data: cases, isLoading } = useCases(filters);
+  // Always include campanaId in the query
+  const filtersWithCampana = useMemo(() => ({
+    ...filters,
+    campanaId: campanaActiva?.id,
+  }), [filters, campanaActiva]);
+
+  const { data: cases, isLoading } = useCases(filtersWithCampana);
 
   // Sorting
   const [sortField, setSortField] = useState<SortField>(null);

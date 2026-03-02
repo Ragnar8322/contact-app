@@ -1,8 +1,10 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { LayoutDashboard, Users, FolderOpen, LogOut, Menu, X, Settings } from "lucide-react";
+import { useCampana } from "@/contexts/CampanaContext";
+import { LayoutDashboard, Users, FolderOpen, LogOut, Menu, X, Settings, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -13,8 +15,11 @@ const navItems = [
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { profile, isAdmin, signOut } = useAuth();
+  const { campanaActiva, campanas, setCampanaActiva } = useCampana();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const canSwitch = campanas.length > 1 || isAdmin;
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -23,14 +28,49 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform duration-300 lg:relative lg:translate-x-0",
         mobileOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-sm">
-            CC
+        <div className="flex flex-col border-b border-sidebar-border px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-sm">
+              CC
+            </div>
+            <div>
+              <h1 className="text-sm font-semibold tracking-tight font-display">Contact Center</h1>
+              <p className="text-xs text-sidebar-foreground/60">Panel de gestión</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-sm font-semibold tracking-tight font-display">Contact Center</h1>
-            <p className="text-xs text-sidebar-foreground/60">Panel de gestión</p>
-          </div>
+
+          {/* Campaign badge */}
+          {campanaActiva && (
+            <div className="mt-3">
+              {canSwitch ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex w-full items-center gap-2 rounded-md bg-sidebar-accent px-3 py-1.5 text-xs font-medium text-sidebar-accent-foreground transition-colors hover:bg-sidebar-accent/80">
+                      <span>📁</span>
+                      <span className="truncate flex-1 text-left">{campanaActiva.nombre}</span>
+                      <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    {campanas.map(c => (
+                      <DropdownMenuItem
+                        key={c.id}
+                        onClick={() => setCampanaActiva(c)}
+                        className={cn(c.id === campanaActiva.id && "bg-accent")}
+                      >
+                        📁 {c.nombre}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <div className="flex items-center gap-2 rounded-md bg-sidebar-accent px-3 py-1.5 text-xs font-medium text-sidebar-accent-foreground">
+                  <span>📁</span>
+                  <span className="truncate">{campanaActiva.nombre}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <nav className="flex-1 space-y-1 p-3">
