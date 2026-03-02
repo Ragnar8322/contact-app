@@ -20,6 +20,7 @@ import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
 import { Input } from "@/components/ui/input";
 import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
 import CasesFilterBar from "@/components/cases/CasesFilterBar";
+import CaseTransfer from "@/components/cases/CaseTransfer";
 
 type SortField = "id" | "identificacion" | null;
 type SortDir = "asc" | "desc";
@@ -357,8 +358,11 @@ export default function Cases() {
                   {(!history || history.length === 0) && (
                     <p className="text-sm text-muted-foreground">Sin historial</p>
                   )}
-                </div>
               </div>
+
+              {/* Transfer */}
+              <CaseTransfer caso={selectedCase} onTransferred={() => setSelectedCaseId(null)} />
+            </div>
             </div>
           )}
         </SheetContent>
