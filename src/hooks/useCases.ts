@@ -7,6 +7,7 @@ export interface CasesFilters {
   agenteId?: string | null;
   fechaDesde?: string | null;
   fechaHasta?: string | null;
+  campanaId?: string | null;
 }
 
 export function useCases(filters?: CasesFilters) {
@@ -31,8 +32,10 @@ export function useCases(filters?: CasesFilters) {
         query = query.gte("fecha_caso", filters.fechaDesde);
       }
       if (filters?.fechaHasta) {
-        // Add end of day
         query = query.lte("fecha_caso", filters.fechaHasta + "T23:59:59.999Z");
+      }
+      if (filters?.campanaId) {
+        query = query.eq("campana_id", filters.campanaId);
       }
 
       const { data, error } = await query;
@@ -69,6 +72,7 @@ export function useCreateCase() {
       created_by: string;
       estado_id: number;
       valor_pagar?: number | null;
+      campana_id?: string | null;
     }) => {
       const { data, error } = await supabase.from("casos").insert(values).select().single();
       if (error) throw error;

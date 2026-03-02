@@ -3,6 +3,7 @@ import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCampana } from "@/contexts/CampanaContext";
 import { useEstados, useTiposServicio } from "@/hooks/useCases";
 import { useClientByIdentificacion } from "@/hooks/useClientByIdentificacion";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,6 +42,7 @@ interface Props {
 
 export default function UnifiedCaseForm({ onSuccess }: Props) {
   const { user } = useAuth();
+  const { campanaActiva } = useCampana();
   const { data: estados } = useEstados();
   const { data: tipos } = useTiposServicio();
   const queryClient = useQueryClient();
@@ -170,6 +172,7 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
           estado_id: registradoId,
           agente_id: user.id,
           created_by: user.id,
+          campana_id: campanaActiva?.id || null,
         });
 
       if (casoError) {

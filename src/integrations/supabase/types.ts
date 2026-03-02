@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      campanas: {
+        Row: {
+          activa: boolean | null
+          created_at: string | null
+          descripcion: string | null
+          id: string
+          nombre: string
+        }
+        Insert: {
+          activa?: boolean | null
+          created_at?: string | null
+          descripcion?: string | null
+          id?: string
+          nombre: string
+        }
+        Update: {
+          activa?: boolean | null
+          created_at?: string | null
+          descripcion?: string | null
+          id?: string
+          nombre?: string
+        }
+        Relationships: []
+      }
       caso_historial: {
         Row: {
           cambiado_en: string
@@ -66,6 +90,7 @@ export type Database = {
       casos: {
         Row: {
           agente_id: string
+          campana_id: string | null
           cliente_id: number
           created_at: string | null
           created_by: string
@@ -82,6 +107,7 @@ export type Database = {
         }
         Insert: {
           agente_id: string
+          campana_id?: string | null
           cliente_id: number
           created_at?: string | null
           created_by: string
@@ -98,6 +124,7 @@ export type Database = {
         }
         Update: {
           agente_id?: string
+          campana_id?: string | null
           cliente_id?: number
           created_at?: string | null
           created_by?: string
@@ -119,6 +146,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "cat_agentes"
             referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "casos_campana_id_fkey"
+            columns: ["campana_id"]
+            isOneToOne: false
+            referencedRelation: "campanas"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "casos_cliente_id_fkey"
@@ -229,6 +263,32 @@ export type Database = {
           tipo_cliente?: string
         }
         Relationships: []
+      }
+      perfil_campanas: {
+        Row: {
+          campana_id: string | null
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          campana_id?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          campana_id?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "perfil_campanas_campana_id_fkey"
+            columns: ["campana_id"]
+            isOneToOne: false
+            referencedRelation: "campanas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {

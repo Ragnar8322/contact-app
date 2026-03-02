@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { useCampana } from "@/contexts/CampanaContext";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { useCases } from "@/hooks/useCases";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,8 +20,9 @@ const CHART_COLORS = [
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { data: stats, isLoading: statsLoading } = useDashboardStats(user?.id);
-  const { data: cases } = useCases();
+  const { campanaActiva } = useCampana();
+  const { data: stats, isLoading: statsLoading } = useDashboardStats(user?.id, campanaActiva?.id);
+  const { data: cases } = useCases({ campanaId: campanaActiva?.id });
 
   const recentCases = cases?.slice(0, 8) || [];
 
