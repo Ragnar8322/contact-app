@@ -2,19 +2,20 @@ import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
-import { useSLAConfig } from "@/hooks/useSLA";
+import { useSLAConfigs } from "@/hooks/useSLA";
 import { useCampanasList } from "@/hooks/useCampanas";
 import { useEstados } from "@/hooks/useCases";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import {
-  AlertTriangle, Clock, FolderOpen, CheckCircle, UserX, ShieldAlert, TrendingUp,
+  AlertTriangle, Clock, FolderOpen, CheckCircle, UserX, ShieldAlert, TrendingUp, Loader2,
 } from "lucide-react";
 import { formatCOP } from "@/lib/currency";
 import { format, startOfDay, startOfWeek, startOfMonth, startOfYear, endOfDay, endOfWeek, endOfMonth, endOfYear, differenceInMinutes, differenceInHours, differenceInDays } from "date-fns";
@@ -45,12 +46,12 @@ function getPeriodRange(periodo: Periodo): { inicio: Date; fin: Date } {
 
 export default function Dashboard() {
   const { user, profile, isAdmin } = useAuth();
-  const { campanaActiva, campanas } = useCampana();
-  const { data: allCampanas } = useCampanasList();
+  const { campanaActiva } = useCampana();
+  const { data: allCampanas = [] } = useCampanasList();
 
   // Determine which campaigns to show KPIs for
   const visibleCampanas = useMemo(() => {
-    if (isAdmin) return allCampanas || [];
+    if (isAdmin) return allCampanas;
     return campanaActiva ? [campanaActiva] : [];
   }, [isAdmin, allCampanas, campanaActiva]);
 
@@ -61,17 +62,19 @@ export default function Dashboard() {
     return m;
   }, [visibleCampanas]);
 
-  // SLA configs per campaign
-  const slaQueries = campanaIds.map((id) => useSLAConfig(id));
-  const slaConfigs = useMemo(() => {
+  // Single bulk query for all SLA configs (no hooks-in-loop)
+  const { data: slaConfigs = {}, isLoading: slaLoading } = useSLAConfigs(campanaIds);
+
+  // Fill defaults for campaigns without config
+  const safeSlaConfigs = useMemo(() => {
     const m: Record<string, { horas_riesgo: number; horas_vencido: number }> = {};
-    campanaIds.forEach((id, i) => {
-      m[id] = slaQueries[i]?.data ?? { horas_riesgo: 2, horas_vencido: 6 };
+    campanaIds.forEach((id) => {
+      m[id] = slaConfigs[id] ?? { horas_riesgo: 2, horas_vencido: 6 };
     });
     return m;
-  }, [campanaIds, slaQueries]);
+  }, [campanaIds, slaConfigs]);
 
-  const { data: stats, isLoading } = useDashboardStats(campanaIds, campanaNombres, slaConfigs);
+  const { data: stats, isLoading: statsLoading } = useDashboardStats(campanaIds, campanaNombres, safeSlaConfigs);
 
   // ─── SECTION 1: Alert banner state ───
   const [alertFilter, setAlertFilter] = useState<"vencidos" | "sinAsignar" | null>(null);
@@ -82,12 +85,12 @@ export default function Dashboard() {
 
   // ─── SECTION 3: Financial module ───
   const renovacionCampana = useMemo(
-    () => (allCampanas || []).find((c) => c.nombre.toLowerCase().includes("renovaci")),
+    () => allCampanas.find((c) => c.nombre.toLowerCase().includes("renovaci")),
     [allCampanas]
   );
 
   // ─── SECTION 4: Agents ───
-  const { data: agents } = useQuery({
+  const { data: agents = [], isLoading: agentsLoading } = useQuery({
     queryKey: ["dashboard-agents"],
     refetchInterval: 60000,
     queryFn: async () => {
@@ -96,58 +99,59 @@ export default function Dashboard() {
         .select("user_id, nombre, role_id, user_roles(name)")
         .eq("role_id", 2);
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
   });
 
-  const { data: agentCampanas } = useQuery({
+  const { data: agentCampanas = [] } = useQuery({
     queryKey: ["dashboard-agent-campanas"],
     refetchInterval: 60000,
     queryFn: async () => {
       const { data, error } = await supabase.from("perfil_campanas").select("user_id, campana_id");
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
   });
 
   // Visible agents: admin sees all, agent sees only self
   const visibleAgents = useMemo(() => {
-    if (!agents) return [];
+    if (!agents || !Array.isArray(agents)) return [];
     if (isAdmin) return agents;
     return agents.filter((a) => a.user_id === user?.id);
   }, [agents, isAdmin, user]);
 
   // Compute agent stats from allCases
   const agentStats = useMemo(() => {
-    if (!stats?.allCases || !visibleAgents.length) return [];
+    const allCases = stats?.allCases;
+    if (!allCases || !Array.isArray(allCases) || !visibleAgents.length) return [];
     const now = Date.now();
     return visibleAgents.map((agent) => {
-      const myCases = stats.allCases.filter((c: any) => c.agente_id === agent.user_id && !c.cat_estados?.es_final);
+      const myCases = allCases.filter((c: any) => c.agente_id === agent.user_id && !c.cat_estados?.es_final);
       let vencidos = 0;
       myCases.forEach((c: any) => {
         const cid = c.campana_id;
-        const cfg = slaConfigs[cid] || { horas_riesgo: 2, horas_vencido: 6 };
+        const cfg = safeSlaConfigs[cid] || { horas_riesgo: 2, horas_vencido: 6 };
         const hrs = (now - new Date(c.fecha_caso).getTime()) / 3600000;
         if (hrs >= cfg.horas_vencido) vencidos++;
       });
-      // Find campaign names for this agent
-      const agentCampanaIds = (agentCampanas || []).filter((ac) => ac.user_id === agent.user_id).map((ac) => ac.campana_id);
+      const agentCampanaIds = (agentCampanas ?? []).filter((ac) => ac.user_id === agent.user_id).map((ac) => ac.campana_id);
       const campanaNames = agentCampanaIds.map((id) => campanaNombres[id!] || "").filter(Boolean).join(", ");
       return { ...agent, casosActivos: myCases.length, casosVencidos: vencidos, campanaNames };
     });
-  }, [stats?.allCases, visibleAgents, slaConfigs, agentCampanas, campanaNombres]);
+  }, [stats?.allCases, visibleAgents, safeSlaConfigs, agentCampanas, campanaNombres]);
 
   // ─── SECTION 4: Recent cases ───
   const recentCases = useMemo(() => {
-    if (!stats?.allCases) return [];
+    const allCases = stats?.allCases;
+    if (!allCases || !Array.isArray(allCases)) return [];
     const activeCampId = campanaActiva?.id;
-    let filtered = activeCampId ? stats.allCases.filter((c: any) => c.campana_id === activeCampId) : stats.allCases;
+    let filtered = activeCampId ? allCases.filter((c: any) => c.campana_id === activeCampId) : allCases;
 
     if (alertFilter === "vencidos") {
       const now = Date.now();
       filtered = filtered.filter((c: any) => {
         if (c.cat_estados?.es_final) return false;
-        const cfg = slaConfigs[c.campana_id] || { horas_riesgo: 2, horas_vencido: 6 };
+        const cfg = safeSlaConfigs[c.campana_id] || { horas_riesgo: 2, horas_vencido: 6 };
         return (now - new Date(c.fecha_caso).getTime()) / 3600000 >= cfg.horas_vencido;
       });
     } else if (alertFilter === "sinAsignar") {
@@ -155,16 +159,42 @@ export default function Dashboard() {
     }
 
     return [...filtered].sort((a: any, b: any) => new Date(b.fecha_caso).getTime() - new Date(a.fecha_caso).getTime()).slice(0, 10);
-  }, [stats?.allCases, campanaActiva?.id, alertFilter, slaConfigs]);
+  }, [stats?.allCases, campanaActiva?.id, alertFilter, safeSlaConfigs]);
 
   // Badge color for recent cases
   function caseBadgeClass(caso: any): string {
     if (caso.cat_estados?.es_final) return "bg-muted text-muted-foreground";
-    const cfg = slaConfigs[caso.campana_id] || { horas_riesgo: 2, horas_vencido: 6 };
+    const cfg = safeSlaConfigs[caso.campana_id] || { horas_riesgo: 2, horas_vencido: 6 };
     const hrs = (Date.now() - new Date(caso.fecha_caso).getTime()) / 3600000;
     if (hrs >= cfg.horas_vencido) return "bg-destructive text-destructive-foreground";
     if (hrs >= cfg.horas_riesgo) return "bg-warning text-warning-foreground";
     return "bg-primary/10 text-primary";
+  }
+
+  // ─── Global loading state ───
+  const isLoading = statsLoading || slaLoading;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">Resumen general del contact center</p>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          {[1, 2].map((i) => (
+            <Card key={i} className="border-0 shadow-sm">
+              <CardHeader className="pb-3"><Skeleton className="h-5 w-40" /></CardHeader>
+              <CardContent><div className="grid grid-cols-5 gap-3">{[1,2,3,4,5].map(j => <Skeleton key={j} className="h-20 rounded-lg" />)}</div></CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Skeleton className="h-64 rounded-lg" />
+          <Skeleton className="h-64 rounded-lg" />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -200,7 +230,7 @@ export default function Dashboard() {
 
       {/* ─── SECTION 2: KPIs by Campaign ─── */}
       <div className={`grid gap-6 ${visibleCampanas.length > 1 ? "lg:grid-cols-2" : "grid-cols-1"}`}>
-        {(stats?.byCampaign || []).map((cs) => (
+        {(stats?.byCampaign ?? []).map((cs) => (
           <Card key={cs.campanaId} className="border-0 shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -324,11 +354,10 @@ function KpiMini({ label, value, icon, badge }: { label: string; value: number; 
 function FinancialModule({ campana }: { campana: { id: string; nombre: string } }) {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [activeStates, setActiveStates] = useState<Set<string>>(new Set(["Renovado", "Pendiente de pago"]));
-  const { data: estados } = useEstados();
 
   const { inicio, fin } = useMemo(() => getPeriodRange(periodo), [periodo]);
 
-  const { data: financialCases } = useQuery({
+  const { data: financialCases = [] } = useQuery({
     queryKey: ["financial-cases", campana.id, inicio.toISOString(), fin.toISOString()],
     refetchInterval: 60000,
     queryFn: async () => {
@@ -339,12 +368,12 @@ function FinancialModule({ campana }: { campana: { id: string; nombre: string } 
         .gte("fecha_caso", inicio.toISOString())
         .lte("fecha_caso", fin.toISOString());
       if (error) throw error;
-      return data || [];
+      return data ?? [];
     },
   });
 
   const financialData = useMemo(() => {
-    if (!financialCases) return { renovado: 0, pendiente: 0, chartData: [] };
+    if (!financialCases || !Array.isArray(financialCases)) return { renovado: 0, pendiente: 0, chartData: [] };
 
     const renovadoCases = financialCases.filter((c: any) => c.cat_estados?.nombre === "Renovado");
     const pendienteCases = financialCases.filter((c: any) => c.cat_estados?.nombre === "Pendiente de pago");
@@ -352,8 +381,7 @@ function FinancialModule({ campana }: { campana: { id: string; nombre: string } 
     const renovado = renovadoCases.reduce((s: number, c: any) => s + (c.valor_pagar || 0), 0);
     const pendiente = pendienteCases.reduce((s: number, c: any) => s + (c.valor_pagar || 0), 0);
 
-    // Build chart data based on period
-    const buckets: Record<string, { renovado: number; pendiente: number; casosRenovado: number; casosPendiente: number }> = {};
+    const buckets: Record<string, { renovado: number; pendiente: number }> = {};
 
     function getBucketKey(dateStr: string): string {
       const d = new Date(dateStr);
@@ -365,16 +393,15 @@ function FinancialModule({ campana }: { campana: { id: string; nombre: string } 
       }
     }
 
-    // Initialize buckets
     if (periodo === "dia") {
-      for (let i = 0; i < 24; i++) buckets[`${i}h`] = { renovado: 0, pendiente: 0, casosRenovado: 0, casosPendiente: 0 };
+      for (let i = 0; i < 24; i++) buckets[`${i}h`] = { renovado: 0, pendiente: 0 };
     } else if (periodo === "semana") {
-      ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"].forEach((d) => (buckets[d] = { renovado: 0, pendiente: 0, casosRenovado: 0, casosPendiente: 0 }));
+      ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"].forEach((d) => (buckets[d] = { renovado: 0, pendiente: 0 }));
     } else if (periodo === "mes") {
       const daysInMonth = fin.getDate();
-      for (let i = 1; i <= daysInMonth; i++) buckets[String(i)] = { renovado: 0, pendiente: 0, casosRenovado: 0, casosPendiente: 0 };
+      for (let i = 1; i <= daysInMonth; i++) buckets[String(i)] = { renovado: 0, pendiente: 0 };
     } else {
-      ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"].forEach((m) => (buckets[m] = { renovado: 0, pendiente: 0, casosRenovado: 0, casosPendiente: 0 }));
+      ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"].forEach((m) => (buckets[m] = { renovado: 0, pendiente: 0 }));
     }
 
     financialCases.forEach((c: any) => {
@@ -383,10 +410,8 @@ function FinancialModule({ campana }: { campana: { id: string; nombre: string } 
       const val = c.valor_pagar || 0;
       if (c.cat_estados?.nombre === "Renovado") {
         buckets[key].renovado += val;
-        buckets[key].casosRenovado++;
       } else if (c.cat_estados?.nombre === "Pendiente de pago") {
         buckets[key].pendiente += val;
-        buckets[key].casosPendiente++;
       }
     });
 
@@ -423,7 +448,6 @@ function FinancialModule({ campana }: { campana: { id: string; nombre: string } 
             Módulo Financiero — {campana.nombre}
           </CardTitle>
           <div className="flex items-center gap-2">
-            {/* Period toggle */}
             <div className="flex rounded-lg border bg-muted/50 p-0.5">
               {periodos.map((p) => (
                 <button
@@ -435,7 +459,6 @@ function FinancialModule({ campana }: { campana: { id: string; nombre: string } 
                 </button>
               ))}
             </div>
-            {/* State pills */}
             <div className="flex gap-1">
               <button
                 onClick={() => toggleState("Renovado")}
@@ -455,7 +478,6 @@ function FinancialModule({ campana }: { campana: { id: string; nombre: string } 
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Financial KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="rounded-lg bg-accent/10 p-3 text-center">
             <p className="text-[11px] text-muted-foreground">💰 Valor Renovado</p>
@@ -475,7 +497,6 @@ function FinancialModule({ campana }: { campana: { id: string; nombre: string } 
           </div>
         </div>
 
-        {/* Chart */}
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={financialData.chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 15%, 90%)" />
