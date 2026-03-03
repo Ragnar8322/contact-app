@@ -1,21 +1,20 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
-import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { useDashboardStats, QUERY_RESILIENCE } from "@/hooks/useDashboardStats";
 import { useSLAConfigs } from "@/hooks/useSLA";
 import { useCampanasList } from "@/hooks/useCampanas";
-import { useEstados } from "@/hooks/useCases";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import {
-  AlertTriangle, Clock, FolderOpen, CheckCircle, UserX, ShieldAlert, TrendingUp, Loader2,
+  AlertTriangle, Clock, FolderOpen, CheckCircle, UserX, ShieldAlert, TrendingUp, RefreshCw,
 } from "lucide-react";
 import { formatCOP } from "@/lib/currency";
 import { format, startOfDay, startOfWeek, startOfMonth, startOfYear, endOfDay, endOfWeek, endOfMonth, endOfYear, differenceInMinutes, differenceInHours, differenceInDays } from "date-fns";
@@ -44,12 +43,28 @@ function getPeriodRange(periodo: Periodo): { inicio: Date; fin: Date } {
   }
 }
 
+/* ─── Last Updated Hook ─── */
+function useLastUpdated(dataUpdatedAt: number) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!dataUpdatedAt) return { text: "—", isFresh: false };
+  const mins = Math.floor((now - dataUpdatedAt) / 60_000);
+  const isFresh = mins < 2;
+  const text = mins < 1 ? "Ahora" : `Hace ${mins} min`;
+  return { text, isFresh };
+}
+
 export default function Dashboard() {
   const { user, profile, isAdmin } = useAuth();
   const { campanaActiva } = useCampana();
-  const { data: allCampanas = [] } = useCampanasList();
+  const queryClient = useQueryClient();
+  const { data: allCampanas = [], isError: campanasError } = useCampanasList();
 
-  // Determine which campaigns to show KPIs for
   const visibleCampanas = useMemo(() => {
     if (isAdmin) return allCampanas;
     return campanaActiva ? [campanaActiva] : [];
@@ -62,10 +77,8 @@ export default function Dashboard() {
     return m;
   }, [visibleCampanas]);
 
-  // Single bulk query for all SLA configs (no hooks-in-loop)
-  const { data: slaConfigs = {}, isLoading: slaLoading } = useSLAConfigs(campanaIds);
+  const { data: slaConfigs = {}, isLoading: slaLoading, isError: slaError } = useSLAConfigs(campanaIds);
 
-  // Fill defaults for campaigns without config
   const safeSlaConfigs = useMemo(() => {
     const m: Record<string, { horas_riesgo: number; horas_vencido: number }> = {};
     campanaIds.forEach((id) => {
@@ -74,25 +87,11 @@ export default function Dashboard() {
     return m;
   }, [campanaIds, slaConfigs]);
 
-  const { data: stats, isLoading: statsLoading } = useDashboardStats(campanaIds, campanaNombres, safeSlaConfigs);
+  const { data: stats, isLoading: statsLoading, isError: statsError, dataUpdatedAt: statsUpdatedAt } = useDashboardStats(campanaIds, campanaNombres, safeSlaConfigs);
 
-  // ─── SECTION 1: Alert banner state ───
-  const [alertFilter, setAlertFilter] = useState<"vencidos" | "sinAsignar" | null>(null);
-
-  const totalVencidos = stats?.totalVencidos ?? 0;
-  const totalSinAsignar = stats?.totalSinAsignar ?? 0;
-  const showAlerts = totalVencidos > 0 || totalSinAsignar > 0;
-
-  // ─── SECTION 3: Financial module ───
-  const renovacionCampana = useMemo(
-    () => allCampanas.find((c) => c.nombre.toLowerCase().includes("renovaci")),
-    [allCampanas]
-  );
-
-  // ─── SECTION 4: Agents ───
-  const { data: agents = [], isLoading: agentsLoading } = useQuery({
+  const { data: agents = [], isLoading: agentsLoading, isError: agentsError } = useQuery({
     queryKey: ["dashboard-agents"],
-    refetchInterval: 60000,
+    ...QUERY_RESILIENCE,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
@@ -105,7 +104,7 @@ export default function Dashboard() {
 
   const { data: agentCampanas = [] } = useQuery({
     queryKey: ["dashboard-agent-campanas"],
-    refetchInterval: 60000,
+    ...QUERY_RESILIENCE,
     queryFn: async () => {
       const { data, error } = await supabase.from("perfil_campanas").select("user_id, campana_id");
       if (error) throw error;
@@ -113,14 +112,37 @@ export default function Dashboard() {
     },
   });
 
-  // Visible agents: admin sees all, agent sees only self
+  // ─── Error & freshness state ───
+  const hasError = campanasError || slaError || statsError || agentsError;
+  const { text: lastUpdatedText, isFresh } = useLastUpdated(statsUpdatedAt);
+
+  const handleRetry = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["dashboard-stats-v2"] });
+    queryClient.invalidateQueries({ queryKey: ["sla-configs-bulk"] });
+    queryClient.invalidateQueries({ queryKey: ["campanas"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-agents"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-agent-campanas"] });
+  }, [queryClient]);
+
+  // ─── Alert banner state ───
+  const [alertFilter, setAlertFilter] = useState<"vencidos" | "sinAsignar" | null>(null);
+  const totalVencidos = stats?.totalVencidos ?? 0;
+  const totalSinAsignar = stats?.totalSinAsignar ?? 0;
+  const showAlerts = totalVencidos > 0 || totalSinAsignar > 0;
+
+  // ─── Financial module ───
+  const renovacionCampana = useMemo(
+    () => allCampanas.find((c) => c.nombre.toLowerCase().includes("renovaci")),
+    [allCampanas]
+  );
+
+  // ─── Agent stats ───
   const visibleAgents = useMemo(() => {
     if (!agents || !Array.isArray(agents)) return [];
     if (isAdmin) return agents;
     return agents.filter((a) => a.user_id === user?.id);
   }, [agents, isAdmin, user]);
 
-  // Compute agent stats from allCases
   const agentStats = useMemo(() => {
     const allCases = stats?.allCases;
     if (!allCases || !Array.isArray(allCases) || !visibleAgents.length) return [];
@@ -140,13 +162,12 @@ export default function Dashboard() {
     });
   }, [stats?.allCases, visibleAgents, safeSlaConfigs, agentCampanas, campanaNombres]);
 
-  // ─── SECTION 4: Recent cases ───
+  // ─── Recent cases ───
   const recentCases = useMemo(() => {
     const allCases = stats?.allCases;
     if (!allCases || !Array.isArray(allCases)) return [];
     const activeCampId = campanaActiva?.id;
     let filtered = activeCampId ? allCases.filter((c: any) => c.campana_id === activeCampId) : allCases;
-
     if (alertFilter === "vencidos") {
       const now = Date.now();
       filtered = filtered.filter((c: any) => {
@@ -157,11 +178,9 @@ export default function Dashboard() {
     } else if (alertFilter === "sinAsignar") {
       filtered = filtered.filter((c: any) => !c.agente_id && !c.cat_estados?.es_final);
     }
-
     return [...filtered].sort((a: any, b: any) => new Date(b.fecha_caso).getTime() - new Date(a.fecha_caso).getTime()).slice(0, 10);
   }, [stats?.allCases, campanaActiva?.id, alertFilter, safeSlaConfigs]);
 
-  // Badge color for recent cases
   function caseBadgeClass(caso: any): string {
     if (caso.cat_estados?.es_final) return "bg-muted text-muted-foreground";
     const cfg = safeSlaConfigs[caso.campana_id] || { horas_riesgo: 2, horas_vencido: 6 };
@@ -171,16 +190,20 @@ export default function Dashboard() {
     return "bg-primary/10 text-primary";
   }
 
-  // ─── Global loading state ───
-  const isLoading = statsLoading || slaLoading;
+  // ─── First load: show skeletons ───
+  const isFirstLoad = (statsLoading || slaLoading) && !stats;
 
-  if (isLoading) {
+  if (isFirstLoad) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">Resumen general del contact center</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+            <p className="text-muted-foreground">Resumen general del contact center</p>
+          </div>
+          <Skeleton className="h-5 w-32" />
         </div>
+        {/* KPI skeletons */}
         <div className="grid gap-6 lg:grid-cols-2">
           {[1, 2].map((i) => (
             <Card key={i} className="border-0 shadow-sm">
@@ -189,9 +212,25 @@ export default function Dashboard() {
             </Card>
           ))}
         </div>
+        {/* Chart skeleton */}
+        <Card className="border-0 shadow-sm">
+          <CardHeader><Skeleton className="h-5 w-60" /></CardHeader>
+          <CardContent><Skeleton className="h-72 w-full rounded-lg" /></CardContent>
+        </Card>
+        {/* Bottom section */}
         <div className="grid gap-6 lg:grid-cols-2">
-          <Skeleton className="h-64 rounded-lg" />
-          <Skeleton className="h-64 rounded-lg" />
+          <Card className="border-0 shadow-sm">
+            <CardHeader><Skeleton className="h-5 w-32" /></CardHeader>
+            <CardContent className="space-y-3">
+              {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-10 w-full rounded" />)}
+            </CardContent>
+          </Card>
+          <Card className="border-0 shadow-sm">
+            <CardHeader><Skeleton className="h-5 w-32" /></CardHeader>
+            <CardContent className="space-y-3">
+              {[1,2,3,4,5,6,7,8].map(i => <Skeleton key={i} className="h-10 w-full rounded" />)}
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -199,10 +238,33 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">Resumen general del contact center</p>
+      {/* ─── Header + Last Updated ─── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">Resumen general del contact center</p>
+        </div>
+        <div className={`flex items-center gap-1.5 text-xs ${isFresh ? "text-accent" : "text-muted-foreground"}`}>
+          <Clock className="h-3.5 w-3.5" />
+          <span>{lastUpdatedText}</span>
+        </div>
       </div>
+
+      {/* ─── Error Banner ─── */}
+      {hasError && (
+        <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-warning" />
+            <span className="text-sm font-medium" style={{ color: "hsl(var(--warning))" }}>
+              Sin conexión — Mostrando datos en caché. Última actualización: {lastUpdatedText.toLowerCase()}
+            </span>
+          </div>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={handleRetry}>
+            <RefreshCw className="h-3 w-3" />
+            Reintentar
+          </Button>
+        </div>
+      )}
 
       {/* ─── SECTION 1: Alert Banner ─── */}
       {showAlerts && (
@@ -262,37 +324,41 @@ export default function Dashboard() {
             <CardTitle className="text-base">Agentes Activos</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="px-4 py-2 text-left font-medium">Nombre</th>
-                    <th className="px-4 py-2 text-left font-medium">Campaña</th>
-                    <th className="px-4 py-2 text-center font-medium">Activos</th>
-                    <th className="px-4 py-2 text-center font-medium">Vencidos SLA</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {agentStats.map((a) => (
-                    <tr key={a.user_id} className="border-b last:border-0 hover:bg-muted/50">
-                      <td className="px-4 py-2.5 font-medium">{a.nombre}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground text-xs">{a.campanaNames || "—"}</td>
-                      <td className="px-4 py-2.5 text-center">{a.casosActivos}</td>
-                      <td className="px-4 py-2.5 text-center">
-                        {a.casosVencidos > 0 ? (
-                          <Badge variant="destructive" className="text-xs">{a.casosVencidos}</Badge>
-                        ) : (
-                          "0"
-                        )}
-                      </td>
+            {agentsLoading ? (
+              <div className="p-4 space-y-3">
+                {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-10 w-full rounded" />)}
+              </div>
+            ) : (
+              <div className="overflow-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="px-4 py-2 text-left font-medium">Nombre</th>
+                      <th className="px-4 py-2 text-left font-medium">Campaña</th>
+                      <th className="px-4 py-2 text-center font-medium">Activos</th>
+                      <th className="px-4 py-2 text-center font-medium">Vencidos SLA</th>
                     </tr>
-                  ))}
-                  {agentStats.length === 0 && (
-                    <tr><td colSpan={4} className="py-8 text-center text-muted-foreground text-sm">Sin agentes</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {agentStats.map((a) => (
+                      <tr key={a.user_id} className="border-b last:border-0 hover:bg-muted/50">
+                        <td className="px-4 py-2.5 font-medium">{a.nombre}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground text-xs">{a.campanaNames || "—"}</td>
+                        <td className="px-4 py-2.5 text-center">{a.casosActivos}</td>
+                        <td className="px-4 py-2.5 text-center">
+                          {a.casosVencidos > 0 ? (
+                            <Badge variant="destructive" className="text-xs">{a.casosVencidos}</Badge>
+                          ) : "0"}
+                        </td>
+                      </tr>
+                    ))}
+                    {agentStats.length === 0 && (
+                      <tr><td colSpan={4} className="py-8 text-center text-muted-foreground text-sm">Sin agentes</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -357,9 +423,9 @@ function FinancialModule({ campana }: { campana: { id: string; nombre: string } 
 
   const { inicio, fin } = useMemo(() => getPeriodRange(periodo), [periodo]);
 
-  const { data: financialCases = [] } = useQuery({
+  const { data: financialCases = [], isLoading: financialLoading } = useQuery({
     queryKey: ["financial-cases", campana.id, inicio.toISOString(), fin.toISOString()],
-    refetchInterval: 60000,
+    ...QUERY_RESILIENCE,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("casos")
@@ -416,7 +482,6 @@ function FinancialModule({ campana }: { campana: { id: string; nombre: string } 
     });
 
     const chartData = Object.entries(buckets).map(([name, v]) => ({ name, ...v }));
-
     return { renovado, pendiente, chartData };
   }, [financialCases, periodo, fin]);
 
@@ -478,43 +543,54 @@ function FinancialModule({ campana }: { campana: { id: string; nombre: string } 
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-lg bg-accent/10 p-3 text-center">
-            <p className="text-[11px] text-muted-foreground">💰 Valor Renovado</p>
-            <p className="text-lg font-bold text-accent">{financialData.renovado ? formatCOP(financialData.renovado) : "—"}</p>
-          </div>
-          <div className="rounded-lg bg-warning/10 p-3 text-center">
-            <p className="text-[11px] text-muted-foreground">⏳ Valor Pendiente</p>
-            <p className="text-lg font-bold" style={{ color: "hsl(var(--warning))" }}>{financialData.pendiente ? formatCOP(financialData.pendiente) : "—"}</p>
-          </div>
-          <div className="rounded-lg bg-muted/50 p-3 text-center">
-            <p className="text-[11px] text-muted-foreground">📊 Total en gestión</p>
-            <p className="text-lg font-bold">{total ? formatCOP(total) : "—"}</p>
-          </div>
-          <div className="rounded-lg bg-muted/50 p-3 text-center">
-            <p className="text-[11px] text-muted-foreground">📈 % Recuperado</p>
-            <p className="text-lg font-bold">{pctRecuperado}%</p>
-          </div>
-        </div>
+        {financialLoading ? (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[1,2,3,4].map(i => <Skeleton key={i} className="h-20 rounded-lg" />)}
+            </div>
+            <Skeleton className="h-72 w-full rounded-lg" />
+          </>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-lg bg-accent/10 p-3 text-center">
+                <p className="text-[11px] text-muted-foreground">💰 Valor Renovado</p>
+                <p className="text-lg font-bold text-accent">{financialData.renovado ? formatCOP(financialData.renovado) : "—"}</p>
+              </div>
+              <div className="rounded-lg bg-warning/10 p-3 text-center">
+                <p className="text-[11px] text-muted-foreground">⏳ Valor Pendiente</p>
+                <p className="text-lg font-bold" style={{ color: "hsl(var(--warning))" }}>{financialData.pendiente ? formatCOP(financialData.pendiente) : "—"}</p>
+              </div>
+              <div className="rounded-lg bg-muted/50 p-3 text-center">
+                <p className="text-[11px] text-muted-foreground">📊 Total en gestión</p>
+                <p className="text-lg font-bold">{total ? formatCOP(total) : "—"}</p>
+              </div>
+              <div className="rounded-lg bg-muted/50 p-3 text-center">
+                <p className="text-[11px] text-muted-foreground">📈 % Recuperado</p>
+                <p className="text-lg font-bold">{pctRecuperado}%</p>
+              </div>
+            </div>
 
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={financialData.chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 15%, 90%)" />
-            <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => formatCOP(v)} />
-            <Tooltip
-              formatter={(value: number, name: string) => [formatCOP(value), name]}
-              labelFormatter={(label) => `Período: ${label}`}
-            />
-            <Legend />
-            {activeStates.has("Renovado") && (
-              <Bar dataKey="renovado" name="Renovado" fill="hsl(130, 50%, 45%)" radius={[4, 4, 0, 0]} />
-            )}
-            {activeStates.has("Pendiente de pago") && (
-              <Bar dataKey="pendiente" name="Pendiente de pago" fill="hsl(38, 92%, 50%)" radius={[4, 4, 0, 0]} />
-            )}
-          </BarChart>
-        </ResponsiveContainer>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={financialData.chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 15%, 90%)" />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => formatCOP(v)} />
+                <Tooltip
+                  formatter={(value: number, name: string) => [formatCOP(value), name]}
+                  labelFormatter={(label) => `Período: ${label}`}
+                />
+                <Legend />
+                {activeStates.has("Renovado") && (
+                  <Bar dataKey="renovado" name="Renovado" fill="hsl(130, 50%, 45%)" radius={[4, 4, 0, 0]} />
+                )}
+                {activeStates.has("Pendiente de pago") && (
+                  <Bar dataKey="pendiente" name="Pendiente de pago" fill="hsl(38, 92%, 50%)" radius={[4, 4, 0, 0]} />
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          </>
+        )}
       </CardContent>
     </Card>
   );

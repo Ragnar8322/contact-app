@@ -11,10 +11,14 @@ export interface CampaignStats {
   vencidos: number;
 }
 
-/**
- * Fetches all cases for given campaign IDs and computes per-campaign KPIs.
- * slaConfigs is a map of campanaId → { horas_riesgo, horas_vencido }
- */
+const QUERY_RESILIENCE = {
+  staleTime: 5 * 60 * 1000,
+  gcTime: 10 * 60 * 1000,
+  retry: 2,
+  retryDelay: 3000,
+  refetchInterval: 60_000,
+};
+
 export function useDashboardStats(
   campanaIds: string[],
   campanaNombres: Record<string, string>,
@@ -23,9 +27,8 @@ export function useDashboardStats(
   return useQuery({
     queryKey: ["dashboard-stats-v2", campanaIds],
     enabled: campanaIds.length > 0,
-    refetchInterval: 60000,
+    ...QUERY_RESILIENCE,
     queryFn: async () => {
-      // Fetch all cases for the given campaigns
       const { data: allCases, error } = await supabase
         .from("casos")
         .select("id, estado_id, agente_id, fecha_caso, fecha_cierre, campana_id, valor_pagar, cat_estados(nombre, es_final)")
@@ -74,3 +77,5 @@ export function useDashboardStats(
     },
   });
 }
+
+export { QUERY_RESILIENCE };

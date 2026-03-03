@@ -15,11 +15,19 @@ export interface CasoConSLA {
   [key: string]: any;
 }
 
+const QUERY_RESILIENCE = {
+  staleTime: 5 * 60 * 1000,
+  gcTime: 10 * 60 * 1000,
+  retry: 2,
+  retryDelay: 3000,
+  refetchInterval: 60_000,
+};
+
 export function useSLAConfig(campanaId?: string | null) {
   return useQuery<SLAConfig>({
     queryKey: ["sla-config", campanaId],
     enabled: !!campanaId,
-    refetchInterval: 60000,
+    ...QUERY_RESILIENCE,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sla_config")
@@ -38,7 +46,7 @@ export function useSLAConfigs(campanaIds: string[]) {
   return useQuery<Record<string, SLAConfig>>({
     queryKey: ["sla-configs-bulk", campanaIds],
     enabled: campanaIds.length > 0,
-    refetchInterval: 60000,
+    ...QUERY_RESILIENCE,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sla_config")
