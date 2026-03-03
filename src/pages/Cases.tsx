@@ -11,7 +11,7 @@ import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Eye, Lock, ArrowUpDown } from "lucide-react";
+import { Plus, Eye, Lock, ArrowUpDown, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -25,6 +25,8 @@ import CaseTransfer from "@/components/cases/CaseTransfer";
 type SortField = "id" | "identificacion" | null;
 type SortDir = "asc" | "desc";
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+
 export default function Cases() {
   const { user, isAdmin } = useAuth();
   const { campanaActiva } = useCampana();
@@ -36,13 +38,31 @@ export default function Cases() {
   const [searchText, setSearchText] = useState("");
   const [filters, setFilters] = useState<CasesFilters>({});
 
-  // Always include campanaId in the query
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  // Reset page when filters change
   const filtersWithCampana = useMemo(() => ({
     ...filters,
     campanaId: campanaActiva?.id,
   }), [filters, campanaActiva]);
 
-  const { data: cases, isLoading } = useCases(filtersWithCampana);
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [filtersWithCampana]);
+
+  const { data: paginatedResult, isLoading, isFetching } = useCases(filtersWithCampana, { page, pageSize });
+
+  const cases = paginatedResult?.data ?? [];
+  const totalCount = paginatedResult?.totalCount ?? 0;
+  const totalPages = paginatedResult?.totalPages ?? 1;
+  const hasNextPage = paginatedResult?.hasNextPage ?? false;
+  const hasPrevPage = paginatedResult?.hasPrevPage ?? false;
+
+  // Show overlay when fetching a new page (not first load)
+  const showPageOverlay = isFetching && !isLoading;
 
   // Sorting
   const [sortField, setSortField] = useState<SortField>(null);
@@ -57,9 +77,9 @@ export default function Cases() {
     }
   };
 
-  // Client-side text search + sorting
+  // Client-side text search + sorting (on current page)
   const filteredCases = useMemo(() => {
-    let result = cases || [];
+    let result = cases;
     const q = searchText.trim().toLowerCase();
     if (q) {
       result = result.filter((c: any) => {
@@ -178,6 +198,10 @@ export default function Cases() {
     }
   };
 
+  // Pagination display
+  const fromRecord = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const toRecord = Math.min(page * pageSize, totalCount);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -206,7 +230,14 @@ export default function Cases() {
       />
 
       <Card className="border-0 shadow-sm">
-        <CardContent className="p-0">
+        <CardContent className="p-0 relative">
+          {/* Page loading overlay */}
+          {showPageOverlay && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-[1px] rounded-lg">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          )}
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -255,6 +286,59 @@ export default function Cases() {
               ))}
             </TableBody>
           </Table>
+
+          {/* Pagination Bar */}
+          {totalCount > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t px-4 py-3">
+              <p className="text-sm text-muted-foreground">
+                Mostrando {fromRecord}–{toRecord} de {totalCount} casos
+              </p>
+              <div className="flex items-center gap-3">
+                {/* Page size selector */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Por página:</span>
+                  <div className="flex rounded-md border bg-muted/50 p-0.5">
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <button
+                        key={size}
+                        onClick={() => { setPageSize(size); setPage(1); }}
+                        className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${pageSize === size ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Page navigation */}
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2"
+                    disabled={!hasPrevPage}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    <span className="hidden sm:inline ml-1">Anterior</span>
+                  </Button>
+                  <span className="text-sm px-2 text-muted-foreground whitespace-nowrap">
+                    Página {page} de {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2"
+                    disabled={!hasNextPage}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  >
+                    <span className="hidden sm:inline mr-1">Siguiente</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
