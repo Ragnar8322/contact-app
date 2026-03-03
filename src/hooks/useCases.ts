@@ -10,13 +10,29 @@ export interface CasesFilters {
   campanaId?: string | null;
 }
 
-export function useCases(filters?: CasesFilters) {
+export interface PaginationParams {
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedResult<T> {
+  data: T[];
+  totalCount: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
+export function useCases(filters?: CasesFilters, pagination?: PaginationParams) {
+  const page = pagination?.page ?? 1;
+  const pageSize = pagination?.pageSize ?? 25;
+
   return useQuery({
-    queryKey: ["casos", filters],
-    queryFn: async () => {
+    queryKey: ["casos", filters, page, pageSize],
+    queryFn: async (): Promise<PaginatedResult<any>> => {
       let query = supabase
         .from("casos")
-        .select("*, clientes(nombre_contacto, razon_social, identificacion), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)")
+        .select("*, clientes(nombre_contacto, razon_social, identificacion), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)", { count: "exact" })
         .order("fecha_caso", { ascending: false });
 
       if (filters?.estadoIds && filters.estadoIds.length > 0) {
@@ -38,9 +54,23 @@ export function useCases(filters?: CasesFilters) {
         query = query.eq("campana_id", filters.campanaId);
       }
 
-      const { data, error } = await query;
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
       if (error) throw error;
-      return data;
+
+      const totalCount = count ?? 0;
+      const totalPages = Math.ceil(totalCount / pageSize);
+
+      return {
+        data: data ?? [],
+        totalCount,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      };
     },
   });
 }
