@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
 import { useCases, useEstados, useTiposServicio, useAgentes, useUpdateCase, useInsertHistorial, useCaseHistory, CasesFilters } from "@/hooks/useCases";
+import { useCampanasList } from "@/hooks/useCampanas";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -11,8 +12,8 @@ import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Eye, Lock, ArrowUpDown, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Plus, Eye, Lock, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -24,6 +25,7 @@ import CaseTransfer from "@/components/cases/CaseTransfer";
 
 type SortField = "id" | "identificacion" | null;
 type SortDir = "asc" | "desc";
+type QuickFilter = "activos" | "cerrados" | "transferidos";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
@@ -33,6 +35,10 @@ export default function Cases() {
   const { data: estados } = useEstados();
   const { data: tiposServicio } = useTiposServicio();
   const { data: agentesData } = useAgentes();
+  const { data: allCampanas = [] } = useCampanasList();
+
+  // Quick filter tabs
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("activos");
 
   // Filters
   const [searchText, setSearchText] = useState("");
@@ -42,16 +48,42 @@ export default function Cases() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  // Reset page when filters change
-  const filtersWithCampana = useMemo(() => ({
-    ...filters,
-    campanaId: campanaActiva?.id,
-  }), [filters, campanaActiva]);
+  // Build estado filters based on quick filter
+  const filtersWithCampana = useMemo(() => {
+    const base: CasesFilters = {
+      ...filters,
+      campanaId: campanaActiva?.id,
+    };
 
-  // Reset to page 1 when filters change
+    if (!estados || estados.length === 0) return base;
+
+    const transferidoEstado = estados.find((e: any) => e.nombre === "Transferido");
+    const transferidoId = transferidoEstado?.id;
+
+    if (quickFilter === "transferidos") {
+      // Only show transferred
+      base.estadoIds = transferidoId ? [transferidoId] : [];
+    } else if (quickFilter === "cerrados") {
+      // Final states excluding Transferido
+      const closedIds = estados
+        .filter((e: any) => e.es_final && e.nombre !== "Transferido")
+        .map((e: any) => e.id);
+      base.estadoIds = closedIds.length > 0 ? closedIds : undefined;
+    } else {
+      // Activos: non-final, excluding Transferido
+      const activeIds = estados
+        .filter((e: any) => !e.es_final && e.nombre !== "Transferido")
+        .map((e: any) => e.id);
+      base.estadoIds = activeIds.length > 0 ? activeIds : undefined;
+    }
+
+    return base;
+  }, [filters, campanaActiva, estados, quickFilter]);
+
+  // Reset to page 1 when filters or quickFilter change
   useEffect(() => {
     setPage(1);
-  }, [filtersWithCampana]);
+  }, [filtersWithCampana, quickFilter]);
 
   const { data: paginatedResult, isLoading, isFetching } = useCases(filtersWithCampana, { page, pageSize });
 
@@ -61,7 +93,11 @@ export default function Cases() {
   const hasNextPage = paginatedResult?.hasNextPage ?? false;
   const hasPrevPage = paginatedResult?.hasPrevPage ?? false;
 
-  // Show overlay when fetching a new page (not first load)
+  // Counts for tabs — use separate lightweight queries
+  const activosCount = useCasesCount(campanaActiva?.id, estados, "activos");
+  const cerradosCount = useCasesCount(campanaActiva?.id, estados, "cerrados");
+  const transferidosCount = useCasesCount(campanaActiva?.id, estados, "transferidos");
+
   const showPageOverlay = isFetching && !isLoading;
 
   // Sorting
@@ -92,13 +128,8 @@ export default function Cases() {
     if (sortField) {
       result = [...result].sort((a: any, b: any) => {
         let valA: any, valB: any;
-        if (sortField === "id") {
-          valA = a.id;
-          valB = b.id;
-        } else if (sortField === "identificacion") {
-          valA = a.clientes?.identificacion || "";
-          valB = b.clientes?.identificacion || "";
-        }
+        if (sortField === "id") { valA = a.id; valB = b.id; }
+        else if (sortField === "identificacion") { valA = a.clientes?.identificacion || ""; valB = b.clientes?.identificacion || ""; }
         if (valA < valB) return sortDir === "asc" ? -1 : 1;
         if (valA > valB) return sortDir === "asc" ? 1 : -1;
         return 0;
@@ -115,6 +146,20 @@ export default function Cases() {
   const { data: history } = useCaseHistory(selectedCaseId);
 
   const selectedCase = filteredCases?.find((c: any) => c.id === selectedCaseId) || cases?.find((c: any) => c.id === selectedCaseId);
+
+  const isTransferredCase = selectedCase?.cat_estados?.nombre === "Transferido";
+
+  // Parse transfer info from observacion_cierre
+  const transferInfo = useMemo(() => {
+    if (!isTransferredCase || !selectedCase?.observacion_cierre) return null;
+    const obs = selectedCase.observacion_cierre as string;
+    const caseMatch = obs.match(/Nuevo caso #(\d+)/);
+    const campMatch = obs.match(/Transferido a campaña: ([^.]+)/);
+    return {
+      newCaseId: caseMatch ? caseMatch[1] : null,
+      targetCampana: campMatch ? campMatch[1] : null,
+    };
+  }, [isTransferredCase, selectedCase]);
 
   // Edit form
   const [editEstado, setEditEstado] = useState(0);
@@ -143,6 +188,7 @@ export default function Cases() {
 
   const isCaseClosed = selectedCase?.cat_estados?.es_final === true;
   const isReadOnly = isCaseClosed && !isAdmin;
+  const isFullyLocked = isTransferredCase; // Transferred = locked for everyone
 
   const validateObservaciones = (): boolean => {
     if (!estadoChanged) return true;
@@ -160,35 +206,22 @@ export default function Cases() {
 
   const handleUpdate = async () => {
     if (!selectedCaseId || !user) return;
-    if (!estadoChanged) {
-      toast.info("No has cambiado el estado del caso.");
-      return;
-    }
+    if (!estadoChanged) { toast.info("No has cambiado el estado del caso."); return; }
     if (!validateObservaciones()) return;
     if (showValorPagar) {
       const val = parseCOPInput(editValorDisplay);
-      if (!val) {
-        setValorError("El valor a pagar es obligatorio para este estado.");
-        return;
-      }
+      if (!val) { setValorError("El valor a pagar es obligatorio para este estado."); return; }
       setValorError("");
     }
     try {
       const updates: any = { id: selectedCaseId, estado_id: editEstado, updated_by: user.id };
-      if (showValorPagar) {
-        updates.valor_pagar = parseCOPInput(editValorDisplay);
-      }
+      if (showValorPagar) updates.valor_pagar = parseCOPInput(editValorDisplay);
       if (selectedEstadoFinal) {
         updates.fecha_cierre = new Date().toISOString();
         updates.observacion_cierre = editObservaciones.trim();
       }
       await updateCase.mutateAsync(updates);
-      await insertHistorial.mutateAsync({
-        caso_id: selectedCaseId,
-        estado_id: editEstado,
-        cambiado_por: user.id,
-        comentario: editObservaciones.trim(),
-      });
+      await insertHistorial.mutateAsync({ caso_id: selectedCaseId, estado_id: editEstado, cambiado_por: user.id, comentario: editObservaciones.trim() });
       setOriginalEstado(editEstado);
       setEditObservaciones("");
       setObsError("");
@@ -201,6 +234,23 @@ export default function Cases() {
   // Pagination display
   const fromRecord = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
   const toRecord = Math.min(page * pageSize, totalCount);
+
+  // Helper: campana name by id
+  const campanaName = (id: string | null) => {
+    if (!id) return "—";
+    return allCampanas.find((c: any) => c.id === id)?.nombre || "—";
+  };
+
+  // Badge class for estado
+  function estadoBadgeClass(caso: any): string {
+    if (caso.cat_estados?.nombre === "Transferido") {
+      return "text-white";
+    }
+    if (caso.cat_estados?.es_final) return "bg-muted text-muted-foreground";
+    return "bg-secondary text-secondary-foreground";
+  }
+
+  const isTransferView = quickFilter === "transferidos";
 
   return (
     <div className="space-y-6">
@@ -217,6 +267,27 @@ export default function Cases() {
         </Dialog>
       </div>
 
+      {/* Quick Filter Tabs */}
+      <div className="flex items-center gap-2">
+        {([
+          { key: "activos" as QuickFilter, label: "Activos", count: activosCount },
+          { key: "cerrados" as QuickFilter, label: "Cerrados", count: cerradosCount },
+          { key: "transferidos" as QuickFilter, label: "Transferidos", count: transferidosCount },
+        ]).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setQuickFilter(tab.key)}
+            className={`px-4 py-2 text-sm font-medium rounded-full border transition-colors ${
+              quickFilter === tab.key
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background text-muted-foreground border-border hover:text-foreground hover:border-foreground/30"
+            }`}
+          >
+            {tab.label} {tab.count !== null ? `(${tab.count})` : ""}
+          </button>
+        ))}
+      </div>
+
       {/* Filter Bar */}
       <CasesFilterBar
         filters={filters}
@@ -231,7 +302,6 @@ export default function Cases() {
 
       <Card className="border-0 shadow-sm">
         <CardContent className="p-0 relative">
-          {/* Page loading overlay */}
           {showPageOverlay && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-[1px] rounded-lg">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -245,43 +315,67 @@ export default function Cases() {
                   <span className="inline-flex items-center gap-1">ID <ArrowUpDown className="h-3 w-3" /></span>
                 </TableHead>
                 <TableHead>Cliente</TableHead>
-                <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("identificacion")}>
-                  <span className="inline-flex items-center gap-1">NIT / Cédula <ArrowUpDown className="h-3 w-3" /></span>
-                </TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Agente</TableHead>
-                <TableHead>Valor a Pagar</TableHead>
-                <TableHead>Fecha</TableHead>
-                <TableHead></TableHead>
+                {isTransferView ? (
+                  <>
+                    <TableHead>Campaña origen</TableHead>
+                    <TableHead>Campaña destino</TableHead>
+                    <TableHead>Fecha transferencia</TableHead>
+                    <TableHead>Nuevo caso #</TableHead>
+                    <TableHead>Transferido por</TableHead>
+                  </>
+                ) : (
+                  <>
+                    <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("identificacion")}>
+                      <span className="inline-flex items-center gap-1">NIT / Cédula <ArrowUpDown className="h-3 w-3" /></span>
+                    </TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Agente</TableHead>
+                    <TableHead>Valor a Pagar</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead></TableHead>
+                  </>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={9} className="text-center py-8">Cargando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={isTransferView ? 7 : 9} className="text-center py-8">Cargando...</TableCell></TableRow>
               ) : filteredCases.length === 0 ? (
-                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No hay casos</TableCell></TableRow>
+                <TableRow><TableCell colSpan={isTransferView ? 7 : 9} className="text-center py-8 text-muted-foreground">No hay casos</TableCell></TableRow>
               ) : filteredCases.map((caso: any) => (
                 <TableRow key={caso.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(caso)}>
                   <TableCell className="font-medium">#{caso.id}</TableCell>
                   <TableCell>{caso.clientes?.nombre_contacto || "-"}</TableCell>
-                  <TableCell className="font-mono text-sm">{caso.clientes?.identificacion || "-"}</TableCell>
-                  <TableCell>{caso.cat_tipo_servicio?.nombre}</TableCell>
-                  <TableCell>
-                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${caso.cat_estados?.es_final ? 'bg-accent text-accent-foreground' : 'bg-secondary text-secondary-foreground'}`}>
-                      {caso.cat_estados?.nombre}
-                    </span>
-                  </TableCell>
-                  <TableCell>{caso.cat_agentes?.nombre || "-"}</TableCell>
-                  <TableCell>{formatCOP(caso.valor_pagar)}</TableCell>
-                  <TableCell>{format(new Date(caso.fecha_caso), "dd/MM/yyyy", { locale: es })}</TableCell>
-                  <TableCell>
-                    {caso.cat_estados?.es_final ? (
-                      <Lock className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </TableCell>
+                  {isTransferView ? (
+                    <TransferColumns caso={caso} campanaName={campanaName} />
+                  ) : (
+                    <>
+                      <TableCell className="font-mono text-sm">{caso.clientes?.identificacion || "-"}</TableCell>
+                      <TableCell>{caso.cat_tipo_servicio?.nombre}</TableCell>
+                      <TableCell>
+                        {caso.cat_estados?.nombre === "Transferido" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: "hsl(280, 60%, 55%)" }}>
+                            🔄 Transferido
+                          </span>
+                        ) : (
+                          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${caso.cat_estados?.es_final ? 'bg-muted text-muted-foreground' : 'bg-secondary text-secondary-foreground'}`}>
+                            {caso.cat_estados?.nombre}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>{caso.cat_agentes?.nombre || "-"}</TableCell>
+                      <TableCell>{formatCOP(caso.valor_pagar)}</TableCell>
+                      <TableCell>{format(new Date(caso.fecha_caso), "dd/MM/yyyy", { locale: es })}</TableCell>
+                      <TableCell>
+                        {caso.cat_estados?.es_final ? (
+                          <Lock className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </TableCell>
+                    </>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -294,7 +388,6 @@ export default function Cases() {
                 Mostrando {fromRecord}–{toRecord} de {totalCount} casos
               </p>
               <div className="flex items-center gap-3">
-                {/* Page size selector */}
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Por página:</span>
                   <div className="flex rounded-md border bg-muted/50 p-0.5">
@@ -309,29 +402,15 @@ export default function Cases() {
                     ))}
                   </div>
                 </div>
-
-                {/* Page navigation */}
                 <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2"
-                    disabled={!hasPrevPage}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  >
+                  <Button variant="outline" size="sm" className="h-8 px-2" disabled={!hasPrevPage} onClick={() => setPage((p) => Math.max(1, p - 1))}>
                     <ChevronLeft className="h-4 w-4" />
                     <span className="hidden sm:inline ml-1">Anterior</span>
                   </Button>
                   <span className="text-sm px-2 text-muted-foreground whitespace-nowrap">
                     Página {page} de {totalPages}
                   </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2"
-                    disabled={!hasNextPage}
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  >
+                  <Button variant="outline" size="sm" className="h-8 px-2" disabled={!hasNextPage} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
                     <span className="hidden sm:inline mr-1">Siguiente</span>
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -350,13 +429,30 @@ export default function Cases() {
           </SheetHeader>
           {selectedCase && (
             <div className="mt-4 space-y-5">
-              {isReadOnly && (
+              {/* Transferred banner */}
+              {isTransferredCase && transferInfo && (
+                <Alert className="border-primary/50 bg-primary/5">
+                  <AlertDescription className="text-sm">
+                    <ArrowRightLeft className="inline h-4 w-4 mr-1" />
+                    Este caso fue transferido.
+                    {transferInfo.newCaseId && (
+                      <> Ver nuevo caso <strong>#{transferInfo.newCaseId}</strong></>
+                    )}
+                    {transferInfo.targetCampana && (
+                      <> en la campaña <strong>{transferInfo.targetCampana}</strong></>
+                    )}.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {(isReadOnly && !isTransferredCase) && (
                 <Alert className="border-amber-500/50 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                   <AlertDescription>
                     ⚠️ Este caso está cerrado y no puede ser modificado. Si necesitas reabrirlo, contacta a un administrador.
                   </AlertDescription>
                 </Alert>
               )}
+
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><span className="text-muted-foreground">Cliente:</span><p className="font-medium">{selectedCase.clientes?.nombre_contacto}</p></div>
                 <div><span className="text-muted-foreground">NIT / Cédula:</span><p className="font-medium font-mono">{selectedCase.clientes?.identificacion || "-"}</p></div>
@@ -374,24 +470,20 @@ export default function Cases() {
 
               <Separator />
 
-              {!isReadOnly && (
+              {!isReadOnly && !isFullyLocked && (
                 <div className="space-y-3">
                   <Label>Cambiar Estado</Label>
                   <Select value={String(editEstado)} onValueChange={v => { setEditEstado(Number(v)); setObsError(""); setValorError(""); }}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {estados?.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}
+                      {estados?.filter(e => e.nombre !== "Transferido").map(e => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}
                     </SelectContent>
                   </Select>
 
                   {estadoChanged && showValorPagar && (
                     <div className="space-y-2">
                       <Label>Valor a Pagar *</Label>
-                      <Input
-                        placeholder="$ 0"
-                        value={editValorDisplay}
-                        onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }}
-                      />
+                      <Input placeholder="$ 0" value={editValorDisplay} onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }} />
                       {valorError && <p className="text-sm text-destructive">{valorError}</p>}
                     </div>
                   )}
@@ -402,12 +494,7 @@ export default function Cases() {
                         Observaciones de gestión *
                         {selectedEstadoFinal && !isRenovacionWeb && <span className="ml-1 text-xs text-muted-foreground">(mín. 30 caracteres)</span>}
                       </Label>
-                      <Textarea
-                        value={editObservaciones}
-                        onChange={e => { setEditObservaciones(e.target.value); setObsError(""); }}
-                        rows={3}
-                        placeholder="Describe la gestión realizada, acuerdo con el cliente o motivo del cambio..."
-                      />
+                      <Textarea value={editObservaciones} onChange={e => { setEditObservaciones(e.target.value); setObsError(""); }} rows={3} placeholder="Describe la gestión realizada..." />
                       {selectedEstadoFinal && !isRenovacionWeb && (
                         <p className="text-xs text-muted-foreground">{editObservaciones.trim().length}/30 caracteres</p>
                       )}
@@ -442,15 +529,79 @@ export default function Cases() {
                   {(!history || history.length === 0) && (
                     <p className="text-sm text-muted-foreground">Sin historial</p>
                   )}
-              </div>
+                </div>
 
-              {/* Transfer */}
-              <CaseTransfer caso={selectedCase} onTransferred={() => setSelectedCaseId(null)} />
-            </div>
+                {/* Transfer - hidden for already transferred cases */}
+                {!isTransferredCase && (
+                  <CaseTransfer caso={selectedCase} onTransferred={() => setSelectedCaseId(null)} />
+                )}
+              </div>
             </div>
           )}
         </SheetContent>
       </Sheet>
     </div>
   );
+}
+
+/* ─── Transfer Columns Component ─── */
+function TransferColumns({ caso, campanaName }: { caso: any; campanaName: (id: string | null) => string }) {
+  const obs = (caso.observacion_cierre || "") as string;
+  const caseMatch = obs.match(/Nuevo caso #(\d+)/);
+  const campMatch = obs.match(/Transferido a campaña: ([^.]+)/);
+
+  // Get the last history entry for "who transferred"
+  // We show from observacion_cierre data
+  return (
+    <>
+      <TableCell className="text-sm">{campanaName(caso.campana_id)}</TableCell>
+      <TableCell className="text-sm">{campMatch ? campMatch[1] : "—"}</TableCell>
+      <TableCell className="text-sm">{caso.fecha_cierre ? format(new Date(caso.fecha_cierre), "dd/MM/yyyy HH:mm", { locale: es }) : "—"}</TableCell>
+      <TableCell className="text-sm font-medium">{caseMatch ? `#${caseMatch[1]}` : "—"}</TableCell>
+      <TableCell className="text-sm text-muted-foreground">
+        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: "hsl(280, 60%, 55%)" }}>
+          🔄 Transferido
+        </span>
+      </TableCell>
+    </>
+  );
+}
+
+/* ─── Hook for tab counts ─── */
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+
+function useCasesCount(campanaId: string | undefined, estados: any[] | undefined, type: QuickFilter): number | null {
+  const { data } = useQuery({
+    queryKey: ["casos-count", campanaId, type, estados?.map(e => e.id)],
+    enabled: !!campanaId && !!estados && estados.length > 0,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const transferidoEstado = estados!.find((e: any) => e.nombre === "Transferido");
+      const transferidoId = transferidoEstado?.id;
+
+      let ids: number[] = [];
+      if (type === "transferidos") {
+        ids = transferidoId ? [transferidoId] : [];
+      } else if (type === "cerrados") {
+        ids = estados!.filter((e: any) => e.es_final && e.nombre !== "Transferido").map((e: any) => e.id);
+      } else {
+        ids = estados!.filter((e: any) => !e.es_final && e.nombre !== "Transferido").map((e: any) => e.id);
+      }
+
+      if (ids.length === 0) return 0;
+
+      const { count, error } = await supabase
+        .from("casos")
+        .select("id", { count: "exact", head: true })
+        .eq("campana_id", campanaId!)
+        .in("estado_id", ids);
+
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
+  return data ?? null;
 }
