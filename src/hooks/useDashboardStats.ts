@@ -43,9 +43,9 @@ export function useDashboardStats(
         const cases = (allCases || []).filter((c: any) => c.campana_id === cid);
         const config = slaConfigs[cid] || { horas_riesgo: 2, horas_vencido: 6 };
 
-        const openCases = cases.filter((c: any) => !c.cat_estados?.es_final);
+        const openCases = cases.filter((c: any) => !c.cat_estados?.es_final && c.cat_estados?.nombre !== "Transferido");
         const closedToday = cases.filter(
-          (c: any) => c.cat_estados?.es_final && c.fecha_cierre?.slice(0, 10) === today
+          (c: any) => c.cat_estados?.es_final && c.cat_estados?.nombre !== "Transferido" && c.fecha_cierre?.slice(0, 10) === today
         );
         const sinAsignar = openCases.filter((c: any) => !c.agente_id);
 
