@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useCampana } from "@/contexts/CampanaContext";
 import { useCampanasList } from "@/hooks/useCampanas";
-import { useInsertHistorial } from "@/hooks/useCases";
+import { useInsertHistorial, useEstados } from "@/hooks/useCases";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -21,6 +20,7 @@ interface CaseTransferProps {
 export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps) {
   const { user, profile } = useAuth();
   const { data: campanas } = useCampanasList();
+  const { data: estados } = useEstados();
   const insertHistorial = useInsertHistorial();
   const qc = useQueryClient();
 
@@ -29,10 +29,16 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
   const [transferring, setTransferring] = useState(false);
 
   const isClosed = caso.cat_estados?.es_final === true;
+  const isTransferred = caso.cat_estados?.nombre === "Transferido";
+  const isDisabled = isClosed || isTransferred;
+
   const currentCampanaId = caso.campana_id;
   const currentCampana = campanas?.find((c: any) => c.id === currentCampanaId);
   const targetCampana = campanas?.find((c: any) => c.id === targetCampanaId);
   const otherCampanas = campanas?.filter((c: any) => c.id !== currentCampanaId) || [];
+
+  // Find the "Transferido" estado
+  const transferidoEstado = estados?.find((e: any) => e.nombre === "Transferido");
 
   const handleTransfer = async () => {
     if (!user || !targetCampanaId || !caso.id) return;
@@ -48,28 +54,58 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
 
       const newAgenteId = adminProfile?.user_id || user.id;
 
-      const { error: updateError } = await supabase
+      // Mark current case as "Transferido"
+      const transferidoId = transferidoEstado?.id;
+      if (transferidoId) {
+        await supabase
+          .from("casos")
+          .update({
+            estado_id: transferidoId,
+            fecha_cierre: new Date().toISOString(),
+            observacion_cierre: `Transferido a campaña: ${targetCampana?.nombre || targetCampanaId}`,
+            updated_by: user.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", caso.id);
+      }
+
+      // Create new case in target campaign
+      const { data: newCase, error: createError } = await supabase
         .from("casos")
-        .update({
-          campana_id: targetCampanaId,
+        .insert({
+          cliente_id: caso.cliente_id,
+          tipo_servicio_id: caso.tipo_servicio_id,
+          descripcion_inicial: caso.descripcion_inicial,
           agente_id: newAgenteId,
-          updated_by: user.id,
-          updated_at: new Date().toISOString(),
+          created_by: user.id,
+          estado_id: caso.estado_id === transferidoId ? 7 : caso.estado_id, // Registrado as default
+          campana_id: targetCampanaId,
         })
-        .eq("id", caso.id);
+        .select("id")
+        .single();
 
-      if (updateError) throw updateError;
+      if (createError) throw createError;
 
-      const comentario = `Caso transferido de ${currentCampana?.nombre || "campaña anterior"} a ${targetCampana?.nombre || "nueva campaña"} por ${profile?.nombre || "usuario"}`;
+      // Update observacion_cierre with new case reference
+      if (newCase) {
+        await supabase
+          .from("casos")
+          .update({
+            observacion_cierre: `Transferido a campaña: ${targetCampana?.nombre}. Nuevo caso #${newCase.id}`,
+          })
+          .eq("id", caso.id);
+      }
+
+      const comentario = `Caso transferido de ${currentCampana?.nombre || "campaña anterior"} a ${targetCampana?.nombre || "nueva campaña"} por ${profile?.nombre || "usuario"}. Nuevo caso #${newCase?.id || ""}`;
 
       await insertHistorial.mutateAsync({
         caso_id: caso.id,
-        estado_id: caso.estado_id,
+        estado_id: transferidoId || caso.estado_id,
         cambiado_por: user.id,
         comentario,
       });
 
-      toast.success(`Caso transferido correctamente a ${targetCampana?.nombre}`);
+      toast.success(`Caso transferido correctamente a ${targetCampana?.nombre}. Nuevo caso #${newCase?.id}`);
       qc.invalidateQueries({ queryKey: ["casos"] });
       qc.invalidateQueries({ queryKey: ["historial"] });
       setConfirmOpen(false);
@@ -80,6 +116,10 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
       setTransferring(false);
     }
   };
+
+  const disabledMessage = isTransferred
+    ? "Este caso ya fue transferido."
+    : "No se pueden transferir casos cerrados.";
 
   return (
     <>
@@ -96,7 +136,7 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
           <Select
             value={targetCampanaId}
             onValueChange={setTargetCampanaId}
-            disabled={isClosed}
+            disabled={isDisabled}
           >
             <SelectTrigger className="flex-1">
               <SelectValue placeholder="Seleccionar campaña destino" />
@@ -108,7 +148,7 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
             </SelectContent>
           </Select>
 
-          {isClosed ? (
+          {isDisabled ? (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -119,7 +159,7 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>
-                  No se pueden transferir casos cerrados.
+                  {disabledMessage}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
