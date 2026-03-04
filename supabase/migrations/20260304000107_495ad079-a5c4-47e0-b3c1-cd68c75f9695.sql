@@ -1,0 +1,1 @@
+INSERT INTO cat_estados (nombre, es_final) VALUES ('Transferido', true);
