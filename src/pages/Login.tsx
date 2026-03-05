@@ -25,8 +25,8 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md shadow-xl border-0 bg-card">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-xs">
-            C_APP
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-xs">C-APP
+
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">Contact APP</CardTitle>
           <CardDescription className="text-muted-foreground">Ingresa tus credenciales para acceder</CardDescription>
@@ -47,6 +47,6 @@ export default function Login() {
           </form>
         </CardContent>
       </Card>
-    </div>
-  );
+    </div>);
+
 }
