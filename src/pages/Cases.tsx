@@ -187,8 +187,8 @@ export default function Cases() {
   const showValorPagar = isRenovacionWeb && (selectedEstadoNombre === "Renovado" || selectedEstadoNombre === "Pendiente de Pago");
 
   const isCaseClosed = selectedCase?.cat_estados?.es_final === true;
-  const isReadOnly = isCaseClosed && !isAdmin;
-  const isFullyLocked = isTransferredCase; // Transferred = locked for everyone
+  const isReadOnly = isGerente || (isCaseClosed && !isAdmin);
+  const isFullyLocked = isTransferredCase || isGerente; // Transferred or gerente = locked
 
   const validateObservaciones = (): boolean => {
     if (!estadoChanged) return true;
