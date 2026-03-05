@@ -7,19 +7,27 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/clientes", icon: Users, label: "Clientes" },
-  { to: "/casos", icon: FolderOpen, label: "Casos" },
-];
-
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { profile, isAdmin, signOut } = useAuth();
+  const { profile, isAdmin, hasRole, signOut } = useAuth();
   const { campanaActiva, campanas, setCampanaActiva } = useCampana();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const canSwitch = campanas.length > 1 || isAdmin;
+
+  // Build nav items based on role
+  const navItems: { to: string; icon: any; label: string }[] = [];
+
+  // Dashboard: supervisor, admin, gerente see full; agent sees limited but still has access
+  navItems.push({ to: "/", icon: LayoutDashboard, label: "Dashboard" });
+
+  // Clientes: everyone
+  navItems.push({ to: "/clientes", icon: Users, label: "Clientes" });
+
+  // Casos: agent, supervisor, admin (not gerente — gerente is read-only via dashboard)
+  if (hasRole(["agent", "supervisor", "admin"])) {
+    navItems.push({ to: "/casos", icon: FolderOpen, label: "Casos" });
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">

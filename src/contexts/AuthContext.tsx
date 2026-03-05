@@ -11,11 +11,17 @@ interface Profile {
   must_change_password?: boolean;
 }
 
+type RoleName = "admin" | "agent" | "supervisor" | "gerente";
+
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
   isAdmin: boolean;
+  isAgente: boolean;
+  isSupervisor: boolean;
+  isGerente: boolean;
+  hasRole: (roles: RoleName[]) => boolean;
   mustChangePassword: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -80,11 +86,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   };
 
-  const isAdmin = profile?.role_name === "admin";
+  const roleName = (profile?.role_name || "agent") as RoleName;
+  const isAdmin = roleName === "admin";
+  const isAgente = roleName === "agent";
+  const isSupervisor = roleName === "supervisor";
+  const isGerente = roleName === "gerente";
+  const hasRole = (roles: RoleName[]) => roles.includes(roleName);
   const mustChangePassword = profile?.must_change_password === true;
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, isAdmin, mustChangePassword, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ session, user, profile, isAdmin, isAgente, isSupervisor, isGerente, hasRole, mustChangePassword, loading, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

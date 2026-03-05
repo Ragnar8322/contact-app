@@ -30,7 +30,7 @@ type QuickFilter = "activos" | "cerrados" | "transferidos";
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 export default function Cases() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isGerente, isSupervisor, hasRole } = useAuth();
   const { campanaActiva } = useCampana();
   const { data: estados } = useEstados();
   const { data: tiposServicio } = useTiposServicio();
@@ -187,8 +187,8 @@ export default function Cases() {
   const showValorPagar = isRenovacionWeb && (selectedEstadoNombre === "Renovado" || selectedEstadoNombre === "Pendiente de Pago");
 
   const isCaseClosed = selectedCase?.cat_estados?.es_final === true;
-  const isReadOnly = isCaseClosed && !isAdmin;
-  const isFullyLocked = isTransferredCase; // Transferred = locked for everyone
+  const isReadOnly = isGerente || (isCaseClosed && !isAdmin);
+  const isFullyLocked = isTransferredCase || isGerente; // Transferred or gerente = locked
 
   const validateObservaciones = (): boolean => {
     if (!estadoChanged) return true;
@@ -259,12 +259,15 @@ export default function Cases() {
           <h1 className="text-2xl font-bold tracking-tight">Casos</h1>
           <p className="text-muted-foreground">Gestión y seguimiento de casos</p>
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" />Crear Caso</Button>
-          </DialogTrigger>
-          <UnifiedCaseForm onSuccess={() => setCreateOpen(false)} />
-        </Dialog>
+        {/* Gerente cannot create cases */}
+        {!isGerente && (
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="mr-2 h-4 w-4" />Crear Caso</Button>
+            </DialogTrigger>
+            <UnifiedCaseForm onSuccess={() => setCreateOpen(false)} />
+          </Dialog>
+        )}
       </div>
 
       {/* Quick Filter Tabs */}
@@ -297,7 +300,7 @@ export default function Cases() {
         estados={estados || []}
         tiposServicio={tiposServicio || []}
         agentes={agentesData || []}
-        showAgenteFilter={isAdmin}
+        showAgenteFilter={hasRole(["admin", "supervisor", "gerente"])}
       />
 
       <Card className="border-0 shadow-sm">
@@ -531,8 +534,8 @@ export default function Cases() {
                   )}
                 </div>
 
-                {/* Transfer - hidden for already transferred cases */}
-                {!isTransferredCase && (
+                {/* Transfer - hidden for transferred cases and gerente */}
+                {!isTransferredCase && !isGerente && (
                   <CaseTransfer caso={selectedCase} onTransferred={() => setSelectedCaseId(null)} />
                 )}
               </div>

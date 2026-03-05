@@ -60,7 +60,7 @@ function useLastUpdated(dataUpdatedAt: number) {
 }
 
 export default function Dashboard() {
-  const { user, profile, isAdmin } = useAuth();
+  const { user, profile, isAdmin, isAgente, hasRole } = useAuth();
   const { campanaActiva } = useCampana();
   const queryClient = useQueryClient();
   const { data: allCampanas = [], isError: campanasError } = useCampanasList();
@@ -313,8 +313,8 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* ─── SECTION 3: Financial Module ─── */}
-      {renovacionCampana && <FinancialModule campana={renovacionCampana} />}
+      {/* ─── SECTION 3: Financial Module (hidden for agente) ─── */}
+      {renovacionCampana && !isAgente && <FinancialModule campana={renovacionCampana} showPctRecuperado={hasRole(["admin", "gerente"])} />}
 
       {/* ─── SECTION 4: Agents + Recent Cases ─── */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -417,7 +417,7 @@ function KpiMini({ label, value, icon, badge }: { label: string; value: number; 
 }
 
 /* ─── Financial Module ─── */
-function FinancialModule({ campana }: { campana: { id: string; nombre: string } }) {
+function FinancialModule({ campana, showPctRecuperado = true }: { campana: { id: string; nombre: string }; showPctRecuperado?: boolean }) {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [activeStates, setActiveStates] = useState<Set<string>>(new Set(["Renovado", "Pendiente de pago"]));
 
@@ -565,10 +565,12 @@ function FinancialModule({ campana }: { campana: { id: string; nombre: string } 
                 <p className="text-[11px] text-muted-foreground">📊 Total en gestión</p>
                 <p className="text-lg font-bold">{total ? formatCOP(total) : "—"}</p>
               </div>
-              <div className="rounded-lg bg-muted/50 p-3 text-center">
-                <p className="text-[11px] text-muted-foreground">📈 % Recuperado</p>
-                <p className="text-lg font-bold">{pctRecuperado}%</p>
-              </div>
+              {showPctRecuperado && (
+                <div className="rounded-lg bg-muted/50 p-3 text-center">
+                  <p className="text-[11px] text-muted-foreground">📈 % Recuperado</p>
+                  <p className="text-lg font-bold">{pctRecuperado}%</p>
+                </div>
+              )}
             </div>
 
             <ResponsiveContainer width="100%" height={280}>
