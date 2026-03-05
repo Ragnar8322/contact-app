@@ -417,7 +417,7 @@ function KpiMini({ label, value, icon, badge }: { label: string; value: number; 
 }
 
 /* ─── Financial Module ─── */
-function FinancialModule({ campana }: { campana: { id: string; nombre: string } }) {
+function FinancialModule({ campana, showPctRecuperado = true }: { campana: { id: string; nombre: string }; showPctRecuperado?: boolean }) {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [activeStates, setActiveStates] = useState<Set<string>>(new Set(["Renovado", "Pendiente de pago"]));
 
