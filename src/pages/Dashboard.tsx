@@ -60,7 +60,7 @@ function useLastUpdated(dataUpdatedAt: number) {
 }
 
 export default function Dashboard() {
-  const { user, profile, isAdmin } = useAuth();
+  const { user, profile, isAdmin, isAgente, hasRole } = useAuth();
   const { campanaActiva } = useCampana();
   const queryClient = useQueryClient();
   const { data: allCampanas = [], isError: campanasError } = useCampanasList();
