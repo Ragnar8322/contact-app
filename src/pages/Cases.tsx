@@ -300,7 +300,7 @@ export default function Cases() {
         estados={estados || []}
         tiposServicio={tiposServicio || []}
         agentes={agentesData || []}
-        showAgenteFilter={isAdmin}
+        showAgenteFilter={hasRole(["admin", "supervisor", "gerente"])}
       />
 
       <Card className="border-0 shadow-sm">
