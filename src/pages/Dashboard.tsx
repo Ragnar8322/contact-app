@@ -313,8 +313,8 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* ─── SECTION 3: Financial Module ─── */}
-      {renovacionCampana && <FinancialModule campana={renovacionCampana} />}
+      {/* ─── SECTION 3: Financial Module (hidden for agente) ─── */}
+      {renovacionCampana && !isAgente && <FinancialModule campana={renovacionCampana} showPctRecuperado={hasRole(["admin", "gerente"])} />}
 
       {/* ─── SECTION 4: Agents + Recent Cases ─── */}
       <div className="grid gap-6 lg:grid-cols-2">
