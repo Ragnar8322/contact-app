@@ -534,8 +534,8 @@ export default function Cases() {
                   )}
                 </div>
 
-                {/* Transfer - hidden for already transferred cases */}
-                {!isTransferredCase && (
+                {/* Transfer - hidden for transferred cases and gerente */}
+                {!isTransferredCase && !isGerente && (
                   <CaseTransfer caso={selectedCase} onTransferred={() => setSelectedCaseId(null)} />
                 )}
               </div>

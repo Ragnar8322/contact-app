@@ -565,10 +565,12 @@ function FinancialModule({ campana, showPctRecuperado = true }: { campana: { id:
                 <p className="text-[11px] text-muted-foreground">📊 Total en gestión</p>
                 <p className="text-lg font-bold">{total ? formatCOP(total) : "—"}</p>
               </div>
-              <div className="rounded-lg bg-muted/50 p-3 text-center">
-                <p className="text-[11px] text-muted-foreground">📈 % Recuperado</p>
-                <p className="text-lg font-bold">{pctRecuperado}%</p>
-              </div>
+              {showPctRecuperado && (
+                <div className="rounded-lg bg-muted/50 p-3 text-center">
+                  <p className="text-[11px] text-muted-foreground">📈 % Recuperado</p>
+                  <p className="text-lg font-bold">{pctRecuperado}%</p>
+                </div>
+              )}
             </div>
 
             <ResponsiveContainer width="100%" height={280}>
