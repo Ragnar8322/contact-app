@@ -40,28 +40,43 @@ export type Database = {
       }
       caso_historial: {
         Row: {
+          agente_id: string | null
+          agente_nombre: string | null
           cambiado_en: string
           cambiado_por: string
           caso_id: number
           comentario: string | null
           estado_id: number
+          estado_nuevo: string | null
+          fecha_cambio: string | null
           id: number
+          observacion: string | null
         }
         Insert: {
+          agente_id?: string | null
+          agente_nombre?: string | null
           cambiado_en?: string
           cambiado_por: string
           caso_id: number
           comentario?: string | null
           estado_id: number
+          estado_nuevo?: string | null
+          fecha_cambio?: string | null
           id?: number
+          observacion?: string | null
         }
         Update: {
+          agente_id?: string | null
+          agente_nombre?: string | null
           cambiado_en?: string
           cambiado_por?: string
           caso_id?: number
           comentario?: string | null
           estado_id?: number
+          estado_nuevo?: string | null
+          fecha_cambio?: string | null
           id?: number
+          observacion?: string | null
         }
         Relationships: [
           {

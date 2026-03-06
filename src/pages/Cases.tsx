@@ -30,7 +30,7 @@ type QuickFilter = "activos" | "cerrados" | "transferidos";
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 export default function Cases() {
-  const { user, isAdmin, isGerente, isSupervisor, hasRole } = useAuth();
+  const { user, profile, isAdmin, isGerente, isSupervisor, hasRole } = useAuth();
   const { campanaActiva } = useCampana();
   const { data: estados } = useEstados();
   const { data: tiposServicio } = useTiposServicio();
@@ -168,6 +168,7 @@ export default function Cases() {
   const [obsError, setObsError] = useState("");
   const [editValorDisplay, setEditValorDisplay] = useState("");
   const [valorError, setValorError] = useState("");
+  const [detailObservacion, setDetailObservacion] = useState("");
 
   const estadoChanged = editEstado !== originalEstado;
   const selectedEstadoFinal = estados?.find(e => e.id === editEstado)?.es_final;
@@ -180,6 +181,7 @@ export default function Cases() {
     setObsError("");
     setEditValorDisplay(caso.valor_pagar ? formatCOP(caso.valor_pagar) : "");
     setValorError("");
+    setDetailObservacion("");
   };
 
   const isRenovacionWeb = selectedCase?.cat_tipo_servicio?.nombre?.toLowerCase() === "renovación web";
@@ -206,25 +208,40 @@ export default function Cases() {
 
   const handleUpdate = async () => {
     if (!selectedCaseId || !user) return;
-    if (!estadoChanged) { toast.info("No has cambiado el estado del caso."); return; }
-    if (!validateObservaciones()) return;
+    if (!estadoChanged && !detailObservacion.trim()) { toast.info("No hay cambios para guardar."); return; }
+    if (estadoChanged && !validateObservaciones()) return;
     if (showValorPagar) {
       const val = parseCOPInput(editValorDisplay);
       if (!val) { setValorError("El valor a pagar es obligatorio para este estado."); return; }
       setValorError("");
     }
     try {
-      const updates: any = { id: selectedCaseId, estado_id: editEstado, updated_by: user.id };
-      if (showValorPagar) updates.valor_pagar = parseCOPInput(editValorDisplay);
-      if (selectedEstadoFinal) {
-        updates.fecha_cierre = new Date().toISOString();
-        updates.observacion_cierre = editObservaciones.trim();
+      if (estadoChanged) {
+        const updates: any = { id: selectedCaseId, estado_id: editEstado, updated_by: user.id };
+        if (showValorPagar) updates.valor_pagar = parseCOPInput(editValorDisplay);
+        if (selectedEstadoFinal) {
+          updates.fecha_cierre = new Date().toISOString();
+          updates.observacion_cierre = editObservaciones.trim();
+        }
+        await updateCase.mutateAsync(updates);
       }
-      await updateCase.mutateAsync(updates);
-      await insertHistorial.mutateAsync({ caso_id: selectedCaseId, estado_id: editEstado, cambiado_por: user.id, comentario: editObservaciones.trim() });
+      // Always insert historial if there's an observation or estado change
+      const historialComment = estadoChanged ? editObservaciones.trim() : undefined;
+      const agenteName = profile?.nombre || user?.email || "";
+      await insertHistorial.mutateAsync({
+        caso_id: selectedCaseId,
+        estado_id: editEstado,
+        cambiado_por: user.id,
+        comentario: historialComment || undefined,
+        observacion: detailObservacion.trim() || undefined,
+        agente_id: user.id,
+        agente_nombre: agenteName,
+        estado_nuevo: estados?.find(e => e.id === editEstado)?.nombre || undefined,
+      });
       setOriginalEstado(editEstado);
       setEditObservaciones("");
       setObsError("");
+      setDetailObservacion("");
       toast.success("Caso actualizado");
     } catch (err: any) {
       toast.error("Error: " + err.message);
@@ -471,6 +488,34 @@ export default function Cases() {
                 <p className="mt-1">{selectedCase.descripcion_inicial}</p>
               </div>
 
+              {/* Client Contact Info */}
+              <div className="text-sm space-y-1.5">
+                <span className="font-medium text-foreground">Datos de Contacto</span>
+                <div className="flex items-center gap-1.5">
+                  <span>📞</span>
+                  <span className="text-muted-foreground">Teléfonos:</span>
+                  {(() => {
+                    const phones = [selectedCase.clientes?.telefono, selectedCase.clientes?.celular].filter(Boolean);
+                    if (phones.length === 0) return <span className="text-muted-foreground/60 italic">No registrado</span>;
+                    return phones.map((p, i) => (
+                      <span key={i}>
+                        {i > 0 && <span className="text-muted-foreground">, </span>}
+                        <a href={`tel:${p}`} className="text-primary hover:underline">{p}</a>
+                      </span>
+                    ));
+                  })()}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span>✉️</span>
+                  <span className="text-muted-foreground">Correo:</span>
+                  {selectedCase.clientes?.correo ? (
+                    <a href={`mailto:${selectedCase.clientes.correo}`} className="text-primary hover:underline">{selectedCase.clientes.correo}</a>
+                  ) : (
+                    <span className="text-muted-foreground/60 italic">No registrado</span>
+                  )}
+                </div>
+              </div>
+
               <Separator />
 
               {!isReadOnly && !isFullyLocked && (
@@ -505,7 +550,20 @@ export default function Cases() {
                     </div>
                   )}
 
-                  <Button onClick={handleUpdate} disabled={updateCase.isPending || !estadoChanged} className="w-full">
+                  {/* Always-visible observations */}
+                  <div className="space-y-2">
+                    <Label>Observaciones (opcional)</Label>
+                    <Textarea
+                      value={detailObservacion}
+                      onChange={e => { if (e.target.value.length <= 500) setDetailObservacion(e.target.value); }}
+                      rows={3}
+                      placeholder="Escribe una observación sobre esta gestión..."
+                      maxLength={500}
+                    />
+                    <p className="text-xs text-muted-foreground text-right">{detailObservacion.length} / 500</p>
+                  </div>
+
+                  <Button onClick={handleUpdate} disabled={updateCase.isPending || (!estadoChanged && !detailObservacion.trim())} className="w-full">
                     {updateCase.isPending ? "Guardando..." : "Actualizar Caso"}
                   </Button>
                 </div>
@@ -517,18 +575,38 @@ export default function Cases() {
               <div>
                 <h3 className="mb-3 text-sm font-semibold">Historial de gestiones</h3>
                 <div className="space-y-2">
-                  {history?.map((h: any) => (
-                    <div key={h.id} className="rounded-lg bg-muted p-3 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{h.cat_estados?.nombre}</span>
-                        <span className="text-xs text-muted-foreground">{format(new Date(h.cambiado_en), "dd/MM/yyyy HH:mm", { locale: es })}</span>
+                  {history?.map((h: any) => {
+                    const isFinal = h.cat_estados?.es_final;
+                    const isTransferido = h.cat_estados?.nombre === "Transferido";
+                    const badgeClass = isTransferido
+                      ? "text-white"
+                      : isFinal
+                        ? "bg-muted text-muted-foreground"
+                        : "bg-secondary text-secondary-foreground";
+                    return (
+                      <div key={h.id} className="rounded-lg bg-muted/50 p-3 text-sm">
+                        <div className="flex items-center justify-between">
+                          {isTransferido ? (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: "hsl(280, 60%, 55%)" }}>
+                              🔄 {h.cat_estados?.nombre || h.estado_nuevo}
+                            </span>
+                          ) : (
+                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass}`}>
+                              {h.cat_estados?.nombre || h.estado_nuevo}
+                            </span>
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(h.fecha_cambio || h.cambiado_en), "dd/MM/yyyy HH:mm", { locale: es })}
+                          </span>
+                        </div>
+                        {(h.agente_nombre || h.profiles?.nombre) && (
+                          <p className="text-xs text-muted-foreground mt-0.5">Por: {h.agente_nombre || h.profiles?.nombre}</p>
+                        )}
+                        {h.observacion && <p className="mt-1 text-muted-foreground">{h.observacion}</p>}
+                        {h.comentario && <p className="mt-1 text-muted-foreground">{h.comentario}</p>}
                       </div>
-                      {h.profiles?.nombre && (
-                        <p className="text-xs text-muted-foreground mt-0.5">Por: {h.profiles.nombre}</p>
-                      )}
-                      {h.comentario && <p className="mt-1 text-muted-foreground">{h.comentario}</p>}
-                    </div>
-                  ))}
+                    );
+                  })}
                   {(!history || history.length === 0) && (
                     <p className="text-sm text-muted-foreground">Sin historial</p>
                   )}

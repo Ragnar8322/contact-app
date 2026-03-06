@@ -32,7 +32,7 @@ export function useCases(filters?: CasesFilters, pagination?: PaginationParams) 
     queryFn: async (): Promise<PaginatedResult<any>> => {
       let query = supabase
         .from("casos")
-        .select("*, clientes(nombre_contacto, razon_social, identificacion), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)", { count: "exact" })
+        .select("*, clientes(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)", { count: "exact" })
         .order("fecha_caso", { ascending: false });
 
       if (filters?.estadoIds && filters.estadoIds.length > 0) {
@@ -82,7 +82,7 @@ export function useCaseById(id: number | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("casos")
-        .select("*, clientes(nombre_contacto, razon_social, identificacion), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)")
+        .select("*, clientes(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)")
         .eq("id", id!)
         .single();
       if (error) throw error;
@@ -130,7 +130,7 @@ export function useUpdateCase() {
 export function useInsertHistorial() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (values: { caso_id: number; estado_id: number; cambiado_por: string; comentario?: string }) => {
+    mutationFn: async (values: { caso_id: number; estado_id: number; cambiado_por: string; comentario?: string; observacion?: string; agente_id?: string; agente_nombre?: string; estado_nuevo?: string }) => {
       const { error } = await supabase.from("caso_historial").insert(values);
       if (error) throw error;
     },
@@ -145,7 +145,7 @@ export function useCaseHistory(casoId: number | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("caso_historial")
-        .select("*, cat_estados(nombre), profiles!caso_historial_cambiado_por_fkey(nombre)")
+        .select("*, cat_estados(nombre, es_final), profiles!caso_historial_cambiado_por_fkey(nombre)")
         .eq("caso_id", casoId!)
         .order("cambiado_en", { ascending: false });
       if (error) throw error;
