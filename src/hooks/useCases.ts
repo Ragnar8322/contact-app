@@ -130,7 +130,7 @@ export function useUpdateCase() {
 export function useInsertHistorial() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (values: { caso_id: number; estado_id: number; cambiado_por: string; comentario?: string }) => {
+    mutationFn: async (values: { caso_id: number; estado_id: number; cambiado_por: string; comentario?: string; observacion?: string; agente_id?: string; agente_nombre?: string; estado_nuevo?: string }) => {
       const { error } = await supabase.from("caso_historial").insert(values);
       if (error) throw error;
     },

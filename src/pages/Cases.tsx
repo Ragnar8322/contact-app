@@ -227,7 +227,7 @@ export default function Cases() {
       }
       // Always insert historial if there's an observation or estado change
       const historialComment = estadoChanged ? editObservaciones.trim() : undefined;
-      const agenteName = user.nombre || user.email || "";
+      const agenteName = profile?.nombre || user?.email || "";
       await insertHistorial.mutateAsync({
         caso_id: selectedCaseId,
         estado_id: editEstado,
