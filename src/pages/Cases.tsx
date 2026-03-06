@@ -208,25 +208,40 @@ export default function Cases() {
 
   const handleUpdate = async () => {
     if (!selectedCaseId || !user) return;
-    if (!estadoChanged) { toast.info("No has cambiado el estado del caso."); return; }
-    if (!validateObservaciones()) return;
+    if (!estadoChanged && !detailObservacion.trim()) { toast.info("No hay cambios para guardar."); return; }
+    if (estadoChanged && !validateObservaciones()) return;
     if (showValorPagar) {
       const val = parseCOPInput(editValorDisplay);
       if (!val) { setValorError("El valor a pagar es obligatorio para este estado."); return; }
       setValorError("");
     }
     try {
-      const updates: any = { id: selectedCaseId, estado_id: editEstado, updated_by: user.id };
-      if (showValorPagar) updates.valor_pagar = parseCOPInput(editValorDisplay);
-      if (selectedEstadoFinal) {
-        updates.fecha_cierre = new Date().toISOString();
-        updates.observacion_cierre = editObservaciones.trim();
+      if (estadoChanged) {
+        const updates: any = { id: selectedCaseId, estado_id: editEstado, updated_by: user.id };
+        if (showValorPagar) updates.valor_pagar = parseCOPInput(editValorDisplay);
+        if (selectedEstadoFinal) {
+          updates.fecha_cierre = new Date().toISOString();
+          updates.observacion_cierre = editObservaciones.trim();
+        }
+        await updateCase.mutateAsync(updates);
       }
-      await updateCase.mutateAsync(updates);
-      await insertHistorial.mutateAsync({ caso_id: selectedCaseId, estado_id: editEstado, cambiado_por: user.id, comentario: editObservaciones.trim() });
+      // Always insert historial if there's an observation or estado change
+      const historialComment = estadoChanged ? editObservaciones.trim() : undefined;
+      const agenteName = user.nombre || user.email || "";
+      await insertHistorial.mutateAsync({
+        caso_id: selectedCaseId,
+        estado_id: editEstado,
+        cambiado_por: user.id,
+        comentario: historialComment || undefined,
+        observacion: detailObservacion.trim() || undefined,
+        agente_id: user.id,
+        agente_nombre: agenteName,
+        estado_nuevo: estados?.find(e => e.id === editEstado)?.nombre || undefined,
+      });
       setOriginalEstado(editEstado);
       setEditObservaciones("");
       setObsError("");
+      setDetailObservacion("");
       toast.success("Caso actualizado");
     } catch (err: any) {
       toast.error("Error: " + err.message);
