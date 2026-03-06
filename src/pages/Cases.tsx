@@ -30,7 +30,7 @@ type QuickFilter = "activos" | "cerrados" | "transferidos";
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 export default function Cases() {
-  const { user, isAdmin, isGerente, isSupervisor, hasRole } = useAuth();
+  const { user, profile, isAdmin, isGerente, isSupervisor, hasRole } = useAuth();
   const { campanaActiva } = useCampana();
   const { data: estados } = useEstados();
   const { data: tiposServicio } = useTiposServicio();
