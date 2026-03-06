@@ -181,6 +181,7 @@ export default function Cases() {
     setObsError("");
     setEditValorDisplay(caso.valor_pagar ? formatCOP(caso.valor_pagar) : "");
     setValorError("");
+    setDetailObservacion("");
   };
 
   const isRenovacionWeb = selectedCase?.cat_tipo_servicio?.nombre?.toLowerCase() === "renovación web";
