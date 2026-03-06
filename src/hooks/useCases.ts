@@ -145,7 +145,7 @@ export function useCaseHistory(casoId: number | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("caso_historial")
-        .select("*, cat_estados(nombre), profiles!caso_historial_cambiado_por_fkey(nombre)")
+        .select("*, cat_estados(nombre, es_final), profiles!caso_historial_cambiado_por_fkey(nombre)")
         .eq("caso_id", casoId!)
         .order("cambiado_en", { ascending: false });
       if (error) throw error;
