@@ -82,7 +82,7 @@ export function useCaseById(id: number | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("casos")
-        .select("*, clientes(nombre_contacto, razon_social, identificacion), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)")
+        .select("*, clientes(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)")
         .eq("id", id!)
         .single();
       if (error) throw error;
