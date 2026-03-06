@@ -488,6 +488,34 @@ export default function Cases() {
                 <p className="mt-1">{selectedCase.descripcion_inicial}</p>
               </div>
 
+              {/* Client Contact Info */}
+              <div className="text-sm space-y-1.5">
+                <span className="font-medium text-foreground">Datos de Contacto</span>
+                <div className="flex items-center gap-1.5">
+                  <span>📞</span>
+                  <span className="text-muted-foreground">Teléfonos:</span>
+                  {(() => {
+                    const phones = [selectedCase.clientes?.telefono, selectedCase.clientes?.celular].filter(Boolean);
+                    if (phones.length === 0) return <span className="text-muted-foreground/60 italic">No registrado</span>;
+                    return phones.map((p, i) => (
+                      <span key={i}>
+                        {i > 0 && <span className="text-muted-foreground">, </span>}
+                        <a href={`tel:${p}`} className="text-primary hover:underline">{p}</a>
+                      </span>
+                    ));
+                  })()}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span>✉️</span>
+                  <span className="text-muted-foreground">Correo:</span>
+                  {selectedCase.clientes?.correo ? (
+                    <a href={`mailto:${selectedCase.clientes.correo}`} className="text-primary hover:underline">{selectedCase.clientes.correo}</a>
+                  ) : (
+                    <span className="text-muted-foreground/60 italic">No registrado</span>
+                  )}
+                </div>
+              </div>
+
               <Separator />
 
               {!isReadOnly && !isFullyLocked && (
