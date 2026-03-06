@@ -32,7 +32,7 @@ export function useCases(filters?: CasesFilters, pagination?: PaginationParams) 
     queryFn: async (): Promise<PaginatedResult<any>> => {
       let query = supabase
         .from("casos")
-        .select("*, clientes(nombre_contacto, razon_social, identificacion), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)", { count: "exact" })
+        .select("*, clientes(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)", { count: "exact" })
         .order("fecha_caso", { ascending: false });
 
       if (filters?.estadoIds && filters.estadoIds.length > 0) {
