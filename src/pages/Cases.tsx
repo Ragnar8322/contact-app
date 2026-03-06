@@ -550,7 +550,20 @@ export default function Cases() {
                     </div>
                   )}
 
-                  <Button onClick={handleUpdate} disabled={updateCase.isPending || !estadoChanged} className="w-full">
+                  {/* Always-visible observations */}
+                  <div className="space-y-2">
+                    <Label>Observaciones (opcional)</Label>
+                    <Textarea
+                      value={detailObservacion}
+                      onChange={e => { if (e.target.value.length <= 500) setDetailObservacion(e.target.value); }}
+                      rows={3}
+                      placeholder="Escribe una observación sobre esta gestión..."
+                      maxLength={500}
+                    />
+                    <p className="text-xs text-muted-foreground text-right">{detailObservacion.length} / 500</p>
+                  </div>
+
+                  <Button onClick={handleUpdate} disabled={updateCase.isPending || (!estadoChanged && !detailObservacion.trim())} className="w-full">
                     {updateCase.isPending ? "Guardando..." : "Actualizar Caso"}
                   </Button>
                 </div>
@@ -562,18 +575,38 @@ export default function Cases() {
               <div>
                 <h3 className="mb-3 text-sm font-semibold">Historial de gestiones</h3>
                 <div className="space-y-2">
-                  {history?.map((h: any) => (
-                    <div key={h.id} className="rounded-lg bg-muted p-3 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{h.cat_estados?.nombre}</span>
-                        <span className="text-xs text-muted-foreground">{format(new Date(h.cambiado_en), "dd/MM/yyyy HH:mm", { locale: es })}</span>
+                  {history?.map((h: any) => {
+                    const isFinal = h.cat_estados?.es_final;
+                    const isTransferido = h.cat_estados?.nombre === "Transferido";
+                    const badgeClass = isTransferido
+                      ? "text-white"
+                      : isFinal
+                        ? "bg-muted text-muted-foreground"
+                        : "bg-secondary text-secondary-foreground";
+                    return (
+                      <div key={h.id} className="rounded-lg bg-muted/50 p-3 text-sm">
+                        <div className="flex items-center justify-between">
+                          {isTransferido ? (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: "hsl(280, 60%, 55%)" }}>
+                              🔄 {h.cat_estados?.nombre || h.estado_nuevo}
+                            </span>
+                          ) : (
+                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass}`}>
+                              {h.cat_estados?.nombre || h.estado_nuevo}
+                            </span>
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(h.fecha_cambio || h.cambiado_en), "dd/MM/yyyy HH:mm", { locale: es })}
+                          </span>
+                        </div>
+                        {(h.agente_nombre || h.profiles?.nombre) && (
+                          <p className="text-xs text-muted-foreground mt-0.5">Por: {h.agente_nombre || h.profiles?.nombre}</p>
+                        )}
+                        {h.observacion && <p className="mt-1 text-muted-foreground">{h.observacion}</p>}
+                        {h.comentario && <p className="mt-1 text-muted-foreground">{h.comentario}</p>}
                       </div>
-                      {h.profiles?.nombre && (
-                        <p className="text-xs text-muted-foreground mt-0.5">Por: {h.profiles.nombre}</p>
-                      )}
-                      {h.comentario && <p className="mt-1 text-muted-foreground">{h.comentario}</p>}
-                    </div>
-                  ))}
+                    );
+                  })}
                   {(!history || history.length === 0) && (
                     <p className="text-sm text-muted-foreground">Sin historial</p>
                   )}
