@@ -168,6 +168,7 @@ export default function Cases() {
   const [obsError, setObsError] = useState("");
   const [editValorDisplay, setEditValorDisplay] = useState("");
   const [valorError, setValorError] = useState("");
+  const [detailObservacion, setDetailObservacion] = useState("");
 
   const estadoChanged = editEstado !== originalEstado;
   const selectedEstadoFinal = estados?.find(e => e.id === editEstado)?.es_final;
