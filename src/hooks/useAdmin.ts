@@ -58,7 +58,7 @@ export function useAllCases(filters?: { estado_id?: number; agente_id?: string; 
     queryFn: async () => {
       let q = supabase
         .from("casos")
-        .select("*, clientes(nombre_contacto, identificacion), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)")
+        .select("*, clientes(nombre_contacto, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)")
         .order("fecha_caso", { ascending: false });
       if (filters?.estado_id) q = q.eq("estado_id", filters.estado_id);
       if (filters?.agente_id) q = q.eq("agente_id", filters.agente_id);
