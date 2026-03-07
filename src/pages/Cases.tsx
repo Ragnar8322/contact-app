@@ -543,7 +543,22 @@ export default function Cases() {
                     </div>
                   )}
 
-                  {estadoChanged && (
+                  {/* MUTUALLY EXCLUSIVE observation fields */}
+                  {isEnGestion ? (
+                    /* "En gestión" → optional observations */
+                    <div className="space-y-2">
+                      <Label>Observaciones (opcional)</Label>
+                      <Textarea
+                        value={detailObservacion}
+                        onChange={e => { if (e.target.value.length <= 500) setDetailObservacion(e.target.value); }}
+                        rows={3}
+                        placeholder="Escribe una observación sobre esta gestión..."
+                        maxLength={500}
+                      />
+                      <p className="text-xs text-muted-foreground text-right">{detailObservacion.length} / 500</p>
+                    </div>
+                  ) : estadoChanged ? (
+                    /* Any other state → required observations */
                     <div className="space-y-2">
                       <Label>
                         Observaciones de gestión *
@@ -555,22 +570,17 @@ export default function Cases() {
                       )}
                       {obsError && <p className="text-sm text-destructive">{obsError}</p>}
                     </div>
-                  )}
+                  ) : null}
 
-                  {/* Always-visible observations */}
-                  <div className="space-y-2">
-                    <Label>Observaciones (opcional)</Label>
-                    <Textarea
-                      value={detailObservacion}
-                      onChange={e => { if (e.target.value.length <= 500) setDetailObservacion(e.target.value); }}
-                      rows={3}
-                      placeholder="Escribe una observación sobre esta gestión..."
-                      maxLength={500}
-                    />
-                    <p className="text-xs text-muted-foreground text-right">{detailObservacion.length} / 500</p>
-                  </div>
-
-                  <Button onClick={handleUpdate} disabled={updateCase.isPending || (!estadoChanged && !detailObservacion.trim())} className="w-full">
+                  <Button
+                    onClick={handleUpdate}
+                    disabled={
+                      updateCase.isPending ||
+                      (!estadoChanged && !detailObservacion.trim()) ||
+                      (estadoChanged && !isEnGestion && !editObservaciones.trim())
+                    }
+                    className="w-full"
+                  >
                     {updateCase.isPending ? "Guardando..." : "Actualizar Caso"}
                   </Button>
                 </div>
