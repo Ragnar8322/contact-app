@@ -211,8 +211,14 @@ export default function Cases() {
 
   const handleUpdate = async () => {
     if (!selectedCaseId || !user) return;
-    if (!estadoChanged && !detailObservacion.trim()) { toast.info("No hay cambios para guardar."); return; }
+    // Determine which observation text to use
+    const observationText = isEnGestion ? detailObservacion.trim() : editObservaciones.trim();
+    const hasObservation = observationText.length > 0;
+
+    if (!estadoChanged && !hasObservation) { toast.info("No hay cambios para guardar."); return; }
     if (estadoChanged && !validateObservaciones()) return;
+    // For non-"En gestión" states, block if required obs is empty
+    if (estadoChanged && !isEnGestion && !editObservaciones.trim()) return;
     if (showValorPagar) {
       const val = parseCOPInput(editValorDisplay);
       if (!val) { setValorError("El valor a pagar es obligatorio para este estado."); return; }
@@ -224,19 +230,17 @@ export default function Cases() {
         if (showValorPagar) updates.valor_pagar = parseCOPInput(editValorDisplay);
         if (selectedEstadoFinal) {
           updates.fecha_cierre = new Date().toISOString();
-          updates.observacion_cierre = editObservaciones.trim();
+          updates.observacion_cierre = observationText;
         }
         await updateCase.mutateAsync(updates);
       }
-      // Always insert historial if there's an observation or estado change
-      const historialComment = estadoChanged ? editObservaciones.trim() : undefined;
       const agenteName = profile?.nombre || user?.email || "";
       await insertHistorial.mutateAsync({
         caso_id: selectedCaseId,
         estado_id: editEstado,
         cambiado_por: user.id,
-        comentario: historialComment || undefined,
-        observacion: detailObservacion.trim() || undefined,
+        comentario: estadoChanged ? observationText || undefined : undefined,
+        observacion: hasObservation ? observationText : undefined,
         agente_id: user.id,
         agente_nombre: agenteName,
         estado_nuevo: estados?.find(e => e.id === editEstado)?.nombre || undefined,
