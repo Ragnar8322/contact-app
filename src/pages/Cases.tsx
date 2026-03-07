@@ -171,6 +171,7 @@ export default function Cases() {
   const [detailObservacion, setDetailObservacion] = useState("");
 
   const estadoChanged = editEstado !== originalEstado;
+  const isEnGestion = estados?.find(e => e.id === editEstado)?.nombre === "En gestión";
   const selectedEstadoFinal = estados?.find(e => e.id === editEstado)?.es_final;
 
   const openDetail = (caso: any) => {
