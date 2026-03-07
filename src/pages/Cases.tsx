@@ -171,6 +171,7 @@ export default function Cases() {
   const [detailObservacion, setDetailObservacion] = useState("");
 
   const estadoChanged = editEstado !== originalEstado;
+  const isEnGestion = estados?.find(e => e.id === editEstado)?.nombre === "En gestión";
   const selectedEstadoFinal = estados?.find(e => e.id === editEstado)?.es_final;
 
   const openDetail = (caso: any) => {
@@ -194,6 +195,8 @@ export default function Cases() {
 
   const validateObservaciones = (): boolean => {
     if (!estadoChanged) return true;
+    // "En gestión" uses the optional field — no required validation
+    if (isEnGestion) return true;
     if (!editObservaciones.trim()) {
       setObsError(isRenovacionWeb && selectedEstadoFinal ? "Las observaciones son obligatorias." : "Las observaciones de gestión son obligatorias para cambiar el estado.");
       return false;
@@ -208,8 +211,14 @@ export default function Cases() {
 
   const handleUpdate = async () => {
     if (!selectedCaseId || !user) return;
-    if (!estadoChanged && !detailObservacion.trim()) { toast.info("No hay cambios para guardar."); return; }
+    // Determine which observation text to use
+    const observationText = isEnGestion ? detailObservacion.trim() : editObservaciones.trim();
+    const hasObservation = observationText.length > 0;
+
+    if (!estadoChanged && !hasObservation) { toast.info("No hay cambios para guardar."); return; }
     if (estadoChanged && !validateObservaciones()) return;
+    // For non-"En gestión" states, block if required obs is empty
+    if (estadoChanged && !isEnGestion && !editObservaciones.trim()) return;
     if (showValorPagar) {
       const val = parseCOPInput(editValorDisplay);
       if (!val) { setValorError("El valor a pagar es obligatorio para este estado."); return; }
@@ -221,19 +230,17 @@ export default function Cases() {
         if (showValorPagar) updates.valor_pagar = parseCOPInput(editValorDisplay);
         if (selectedEstadoFinal) {
           updates.fecha_cierre = new Date().toISOString();
-          updates.observacion_cierre = editObservaciones.trim();
+          updates.observacion_cierre = observationText;
         }
         await updateCase.mutateAsync(updates);
       }
-      // Always insert historial if there's an observation or estado change
-      const historialComment = estadoChanged ? editObservaciones.trim() : undefined;
       const agenteName = profile?.nombre || user?.email || "";
       await insertHistorial.mutateAsync({
         caso_id: selectedCaseId,
         estado_id: editEstado,
         cambiado_por: user.id,
-        comentario: historialComment || undefined,
-        observacion: detailObservacion.trim() || undefined,
+        comentario: estadoChanged ? observationText || undefined : undefined,
+        observacion: hasObservation ? observationText : undefined,
         agente_id: user.id,
         agente_nombre: agenteName,
         estado_nuevo: estados?.find(e => e.id === editEstado)?.nombre || undefined,
@@ -536,7 +543,22 @@ export default function Cases() {
                     </div>
                   )}
 
-                  {estadoChanged && (
+                  {/* MUTUALLY EXCLUSIVE observation fields */}
+                  {isEnGestion ? (
+                    /* "En gestión" → optional observations */
+                    <div className="space-y-2">
+                      <Label>Observaciones (opcional)</Label>
+                      <Textarea
+                        value={detailObservacion}
+                        onChange={e => { if (e.target.value.length <= 500) setDetailObservacion(e.target.value); }}
+                        rows={3}
+                        placeholder="Escribe una observación sobre esta gestión..."
+                        maxLength={500}
+                      />
+                      <p className="text-xs text-muted-foreground text-right">{detailObservacion.length} / 500</p>
+                    </div>
+                  ) : estadoChanged ? (
+                    /* Any other state → required observations */
                     <div className="space-y-2">
                       <Label>
                         Observaciones de gestión *
@@ -548,22 +570,17 @@ export default function Cases() {
                       )}
                       {obsError && <p className="text-sm text-destructive">{obsError}</p>}
                     </div>
-                  )}
+                  ) : null}
 
-                  {/* Always-visible observations */}
-                  <div className="space-y-2">
-                    <Label>Observaciones (opcional)</Label>
-                    <Textarea
-                      value={detailObservacion}
-                      onChange={e => { if (e.target.value.length <= 500) setDetailObservacion(e.target.value); }}
-                      rows={3}
-                      placeholder="Escribe una observación sobre esta gestión..."
-                      maxLength={500}
-                    />
-                    <p className="text-xs text-muted-foreground text-right">{detailObservacion.length} / 500</p>
-                  </div>
-
-                  <Button onClick={handleUpdate} disabled={updateCase.isPending || (!estadoChanged && !detailObservacion.trim())} className="w-full">
+                  <Button
+                    onClick={handleUpdate}
+                    disabled={
+                      updateCase.isPending ||
+                      (!estadoChanged && !detailObservacion.trim()) ||
+                      (estadoChanged && !isEnGestion && !editObservaciones.trim())
+                    }
+                    className="w-full"
+                  >
                     {updateCase.isPending ? "Guardando..." : "Actualizar Caso"}
                   </Button>
                 </div>
