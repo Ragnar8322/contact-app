@@ -195,6 +195,8 @@ export default function Cases() {
 
   const validateObservaciones = (): boolean => {
     if (!estadoChanged) return true;
+    // "En gestión" uses the optional field — no required validation
+    if (isEnGestion) return true;
     if (!editObservaciones.trim()) {
       setObsError(isRenovacionWeb && selectedEstadoFinal ? "Las observaciones son obligatorias." : "Las observaciones de gestión son obligatorias para cambiar el estado.");
       return false;
