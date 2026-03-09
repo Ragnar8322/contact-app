@@ -43,25 +43,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     try {
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("*, user_roles(name)")
-        .eq("user_id", userId)
-        .maybeSingle();
+      const [profileResult, rolesResult] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("*, user_roles(name)")
+          .eq("user_id", userId)
+          .maybeSingle(),
+        supabase
+          .from("user_role_assignments")
+          .select("role_id, user_roles(name)")
+          .eq("user_id", userId),
+      ]);
 
-      if (profileError) {
-        console.error("Error loading profile:", profileError.message);
+      if (profileResult.error) {
+        console.error("Error loading profile:", profileResult.error.message);
         return;
       }
-
-      const { data: assignments, error: assignError } = await supabase
-        .from("user_role_assignments")
-        .select("role_id, user_roles(name)")
-        .eq("user_id", userId);
-
-      if (assignError) {
-        console.error("Error loading roles:", assignError.message);
+      if (rolesResult.error) {
+        console.error("Error loading roles:", rolesResult.error.message);
       }
+
+      const profileData = profileResult.data;
+      const assignments = rolesResult.data;
 
       if (profileData) {
         const fallbackRole = (profileData.user_roles as any)?.name || "agent";
