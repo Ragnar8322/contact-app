@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { Eye, Lock } from "lucide-react";
+import { getEstadoInlineStyle } from "@/lib/estadoColors";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
