@@ -29,6 +29,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     navItems.push({ to: "/casos", icon: FolderOpen, label: "Casos" });
   }
 
+  // Analítica: admin, gerente only
+  if (hasRole(["admin", "gerente"])) {
+    navItems.push({ to: "/analitica", icon: BarChart2, label: "Analítica" });
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
