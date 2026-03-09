@@ -32,7 +32,8 @@ export function useClientByIdentificacion(identificacion: string) {
         .limit(1);
       if (error) throw error;
       setData(rows && rows.length > 0 ? rows[0] : null);
-    } catch {
+    } catch (err) {
+      console.error("Error fetching client:", err);
       setData(null);
     } finally {
       setIsLoading(false);

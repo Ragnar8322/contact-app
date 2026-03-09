@@ -14,6 +14,7 @@ import { useAnalyticsFilters } from "@/hooks/useAnalyticsFilters";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { safeFormat } from "@/lib/date";
 import {
   PieChart,
   Pie,
@@ -30,7 +31,7 @@ import {
 } from "recharts";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-import ExcelJS from "exceljs";
+import * as XLSX from "xlsx";
 
 const ESTADO_COLORS: Record<string, string> = {
   "Registrado":          "#3b82f6",
@@ -45,12 +46,6 @@ const ESTADO_COLORS: Record<string, string> = {
 };
 
 const PIE_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"];
-
-function safeFormat(dateStr: string | null | undefined, fmt: string): string {
-  if (!dateStr) return "—";
-  const d = new Date(dateStr);
-  return isNaN(d.getTime()) ? "—" : format(d, fmt);
-}
 
 const formatCOPValue = (n: number) =>
   `$ ${n.toLocaleString("es-CO", { maximumFractionDigits: 0 })}`;
@@ -291,137 +286,83 @@ export default function Analytics() {
     setExportingExcel(true);
 
     try {
-      const wb = new ExcelJS.Workbook();
-
-      const headerFill: ExcelJS.Fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF2563EB" },
-      };
-      const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" } };
-
-      const applyHeaderStyle = (ws: ExcelJS.Worksheet, colCount: number) => {
-        const row = ws.getRow(1);
-        for (let i = 1; i <= colCount; i++) {
-          const cell = row.getCell(i);
-          cell.fill = headerFill;
-          cell.font = headerFont;
-        }
-      };
-
-      const autoWidth = (ws: ExcelJS.Worksheet) => {
-        ws.columns.forEach((col) => {
-          if (col.header) {
-            col.width = Math.max(col.header.length + 4, 12);
-          }
-        });
-      };
+      const wb = XLSX.utils.book_new();
 
       // Sheet 1: Resumen
-      const wsResumen = wb.addWorksheet("Resumen");
-      wsResumen.addRow(["Reporte de Analítica"]);
-      wsResumen.addRow([`Período: ${format(appliedFilters.dateFrom, "dd/MM/yyyy")} - ${format(appliedFilters.dateTo, "dd/MM/yyyy")}`]);
-      wsResumen.addRow([`Filtros: ${getFilterSummary()}`]);
-      wsResumen.addRow([]);
-      wsResumen.addRow(["Métrica", "Valor"]);
-      wsResumen.addRow(["Total Casos", data.totalCasos]);
-      wsResumen.addRow(["Casos Renovados", data.casosRenovados]);
-      wsResumen.addRow(["Tasa de Renovación", `${data.tasaRenovacion.toFixed(1)}%`]);
-      wsResumen.addRow(["Gestiones Registradas", data.gestionesRegistradas]);
-      wsResumen.addRow([]);
-      wsResumen.addRow(["Total Facturado", data.totalFacturado]);
-      wsResumen.addRow(["Pendiente de Cobro", data.pendienteCobro]);
-      wsResumen.addRow(["Valor Promedio", data.valorPromedio]);
-      wsResumen.addRow(["% Recaudo", `${data.porcentajeRecaudo.toFixed(1)}%`]);
-      wsResumen.getColumn(1).width = 25;
-      wsResumen.getColumn(2).width = 20;
-      // Style header row (row 5)
-      const resumenHeaderRow = wsResumen.getRow(5);
-      for (let i = 1; i <= 2; i++) {
-        resumenHeaderRow.getCell(i).fill = headerFill;
-        resumenHeaderRow.getCell(i).font = headerFont;
-      }
-      // Format financial numbers
-      [11, 12, 13].forEach((r) => {
-        wsResumen.getRow(r).getCell(2).numFmt = "#,##0";
-      });
+      const resumenRows = [
+        ["Reporte de Analítica"],
+        [`Período: ${format(appliedFilters.dateFrom, "dd/MM/yyyy")} - ${format(appliedFilters.dateTo, "dd/MM/yyyy")}`],
+        [`Filtros: ${getFilterSummary()}`],
+        [],
+        ["Métrica", "Valor"],
+        ["Total Casos", data.totalCasos],
+        ["Casos Renovados", data.casosRenovados],
+        ["Tasa de Renovación", `${data.tasaRenovacion.toFixed(1)}%`],
+        ["Gestiones Registradas", data.gestionesRegistradas],
+        [],
+        ["RESUMEN FINANCIERO"],
+        ["Total Facturado", data.totalFacturado ?? 0],
+        ["Pendiente de Cobro", data.pendienteCobro ?? 0],
+        ["% Recaudo", `${(data.porcentajeRecaudo ?? 0).toFixed(1)}%`],
+      ];
+      const wsResumen = XLSX.utils.aoa_to_sheet(resumenRows);
+      wsResumen["!cols"] = [{ wch: 28 }, { wch: 22 }];
+      XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
 
       // Sheet 2: Rendimiento Agentes
-      const wsAgentes = wb.addWorksheet("Rendimiento Agentes");
-      wsAgentes.columns = [
-        { header: "Agente", key: "agente", width: 30 },
-        { header: "Casos Asignados", key: "casos", width: 18 },
-        { header: "Gestiones", key: "gestiones", width: 14 },
-        { header: "Renovados", key: "renovados", width: 14 },
-        { header: "Tasa Renovación", key: "tasa", width: 18 },
+      const agentesRows = [
+        ["Agente", "Casos Asignados", "Gestiones", "Renovados", "Tasa Renovación"],
+        ...data.rendimientoAgentes.map((a) => [
+          a.agente,
+          a.casosAsignados,
+          a.gestiones,
+          a.renovados,
+          `${a.tasaRenovacion.toFixed(1)}%`,
+        ]),
       ];
-      data.rendimientoAgentes.forEach((a) => {
-        wsAgentes.addRow({
-          agente: a.agente,
-          casos: a.casosAsignados,
-          gestiones: a.gestiones,
-          renovados: a.renovados,
-          tasa: a.tasaRenovacion / 100,
-        });
-      });
-      applyHeaderStyle(wsAgentes, 5);
-      wsAgentes.getColumn(2).numFmt = "#,##0";
-      wsAgentes.getColumn(3).numFmt = "#,##0";
-      wsAgentes.getColumn(4).numFmt = "#,##0";
-      wsAgentes.getColumn(5).numFmt = "0.0%";
+      const wsAgentes = XLSX.utils.aoa_to_sheet(agentesRows);
+      wsAgentes["!cols"] = [{ wch: 30 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 16 }];
+      XLSX.utils.book_append_sheet(wb, wsAgentes, "Rendimiento Agentes");
 
       // Sheet 3: Casos por Estado
-      const wsEstados = wb.addWorksheet("Casos por Estado");
-      wsEstados.columns = [
-        { header: "Estado", key: "estado", width: 22 },
-        { header: "Cantidad", key: "count", width: 14 },
-        { header: "Porcentaje", key: "pct", width: 14 },
+      const estadosRows = [
+        ["Estado", "Cantidad", "Porcentaje"],
+        ...data.casosPorEstado.map((e) => [
+          e.estado,
+          e.count,
+          `${e.percentage.toFixed(1)}%`,
+        ]),
       ];
-      data.casosPorEstado.forEach((e) => {
-        wsEstados.addRow({ estado: e.estado, count: e.count, pct: e.percentage / 100 });
-      });
-      applyHeaderStyle(wsEstados, 3);
-      wsEstados.getColumn(2).numFmt = "#,##0";
-      wsEstados.getColumn(3).numFmt = "0.0%";
+      const wsEstados = XLSX.utils.aoa_to_sheet(estadosRows);
+      wsEstados["!cols"] = [{ wch: 22 }, { wch: 12 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, wsEstados, "Casos por Estado");
 
       // Sheet 4: Gestiones por Día
-      const wsGestiones = wb.addWorksheet("Gestiones por Día");
-      wsGestiones.columns = [
-        { header: "Fecha", key: "fecha", width: 16 },
-        { header: "Cantidad", key: "count", width: 14 },
+      const gestionesRows = [
+        ["Fecha", "Cantidad"],
+        ...data.gestionesPorDia.map((g) => [
+          safeFormat(g.fecha, "dd/MM/yyyy"),
+          g.count,
+        ]),
       ];
-      data.gestionesPorDia.forEach((g) => {
-        wsGestiones.addRow({ fecha: safeFormat(g.fecha, "dd/MM/yyyy"), count: g.count });
-      });
-      applyHeaderStyle(wsGestiones, 2);
-      wsGestiones.getColumn(2).numFmt = "#,##0";
+      const wsGestiones = XLSX.utils.aoa_to_sheet(gestionesRows);
+      wsGestiones["!cols"] = [{ wch: 15 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, wsGestiones, "Gestiones por Día");
 
       // Sheet 5: Clientes
-      const wsClientes = wb.addWorksheet("Clientes");
-      wsClientes.columns = [
-        { header: "Tipo Cliente", key: "tipo", width: 18 },
-        { header: "Cantidad", key: "count", width: 14 },
-        { header: "Porcentaje", key: "pct", width: 14 },
+      const clientesRows = [
+        ["Tipo Cliente", "Cantidad", "Porcentaje"],
+        ...data.distribucionClientes.map((c) => [
+          c.tipo,
+          c.count,
+          `${c.percentage.toFixed(1)}%`,
+        ]),
       ];
-      data.distribucionClientes.forEach((c) => {
-        wsClientes.addRow({ tipo: c.tipo, count: c.count, pct: c.percentage / 100 });
-      });
-      applyHeaderStyle(wsClientes, 3);
-      wsClientes.getColumn(2).numFmt = "#,##0";
-      wsClientes.getColumn(3).numFmt = "0.0%";
+      const wsClientes = XLSX.utils.aoa_to_sheet(clientesRows);
+      wsClientes["!cols"] = [{ wch: 18 }, { wch: 12 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, wsClientes, "Clientes");
 
-      // Write and download
-      const buffer = await wb.xlsx.writeBuffer();
-      const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Reporte_Analitica_${format(new Date(), "yyyyMMdd")}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(url);
-
+      XLSX.writeFile(wb, `Reporte_Analitica_${format(new Date(), "yyyyMMdd")}.xlsx`);
       toast.success("Reporte Excel generado exitosamente");
     } catch (error) {
       console.error("Error generating Excel:", error);

@@ -111,7 +111,8 @@ export function useAnalyticsData(filters: AnalyticsQueryFilters) {
       // Fetch clientes
       const { data: clientes, error: clientesError } = await supabase
         .from("clientes")
-        .select("id, tipo_cliente");
+        .select("id, tipo_cliente")
+        .limit(5000);
 
       if (clientesError) throw clientesError;
 

@@ -44,6 +44,10 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
     if (!user || !targetCampanaId || !caso.id) return;
     setTransferring(true);
     try {
+      // Look up "Registrado" estado dynamically
+      const registradoEstado = estados?.find((e: any) => e.nombre === "Registrado");
+      const registradoId = registradoEstado?.id ?? caso.estado_id;
+
       // Get first admin user_id as fallback agente
       const { data: adminProfile } = await supabase
         .from("profiles")
@@ -57,7 +61,7 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
       // Mark current case as "Transferido"
       const transferidoId = transferidoEstado?.id;
       if (transferidoId) {
-        await supabase
+        const { error: updateError } = await supabase
           .from("casos")
           .update({
             estado_id: transferidoId,
@@ -67,6 +71,7 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
             updated_at: new Date().toISOString(),
           })
           .eq("id", caso.id);
+        if (updateError) throw new Error("Error al actualizar caso original: " + updateError.message);
       }
 
       // Create new case in target campaign
@@ -78,7 +83,7 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
           descripcion_inicial: caso.descripcion_inicial,
           agente_id: newAgenteId,
           created_by: user.id,
-          estado_id: caso.estado_id === transferidoId ? 7 : caso.estado_id, // Registrado as default
+          estado_id: registradoId,
           campana_id: targetCampanaId,
         })
         .select("id")
@@ -88,12 +93,13 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
 
       // Update observacion_cierre with new case reference
       if (newCase) {
-        await supabase
+        const { error: refError } = await supabase
           .from("casos")
           .update({
             observacion_cierre: `Transferido a campaña: ${targetCampana?.nombre}. Nuevo caso #${newCase.id}`,
           })
           .eq("id", caso.id);
+        if (refError) console.error("Error updating case reference:", refError.message);
       }
 
       const comentario = `Caso transferido de ${currentCampana?.nombre || "campaña anterior"} a ${targetCampana?.nombre || "nueva campaña"} por ${profile?.nombre || "usuario"}. Nuevo caso #${newCase?.id || ""}`;

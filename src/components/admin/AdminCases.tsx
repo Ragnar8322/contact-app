@@ -16,8 +16,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useCaseHistory } from "@/hooks/useCases";
-
-import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
+/lib/currency";
 
 export default function AdminCases() {
   const { user } = useAuth();
@@ -244,7 +243,7 @@ export default function AdminCases() {
                     <Label>Valor a Pagar *</Label>
                     <InputField
                       placeholder="$ 0"
-                      value={editValorDisplay}
+                 value={editValorDisplay}
                       onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }}
                     />
                     {valorError && <p className="text-sm text-destructive">{valorError}</p>}

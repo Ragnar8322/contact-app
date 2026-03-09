@@ -31,11 +31,6 @@ type QuickFilter = "activos" | "cerrados" | "transferidos";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
-function safeFormat(dateStr: string | null | undefined, fmt: string): string {
-  if (!dateStr) return "—";
-  const d = new Date(dateStr);
-  return isNaN(d.getTime()) ? "—" : format(d, fmt, { locale: es });
-}
 
 export default function Cases() {
   const { user, profile, isAdmin, isGerente, isSupervisor, hasRole } = useAuth();
