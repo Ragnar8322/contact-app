@@ -287,7 +287,13 @@ export default function AdminCases() {
                   {history?.map((h: any) => (
                     <div key={h.id} className="rounded-lg bg-muted p-3 text-sm">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">{h.cat_estados?.nombre}</span>
+                        <span
+                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                          style={getEstadoInlineStyle(h.cat_estados?.nombre)}
+                        >
+                          {h.cat_estados?.nombre === "Transferido" && "🔄 "}
+                          {h.cat_estados?.nombre}
+                        </span>
                         <span className="text-xs text-muted-foreground">{format(new Date(h.cambiado_en), "dd/MM/yyyy HH:mm", { locale: es })}</span>
                       </div>
                       {h.profiles?.nombre && (

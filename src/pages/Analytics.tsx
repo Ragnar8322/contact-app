@@ -681,7 +681,7 @@ export default function Analytics() {
                         {data!.casosPorEstado.map((entry, index) => (
                           <Cell
                             key={`cell-${index}`}
-                            fill={ESTADO_COLORS[entry.estado] || PIE_COLORS[index % PIE_COLORS.length]}
+                            fill={getEstadoStyle(entry.estado).hex}
                           />
                         ))}
                       </Pie>

@@ -634,7 +634,10 @@ function TransferColumns({ caso, campanaName }: { caso: any; campanaName: (id: s
       <TableCell className="text-sm">{safeFormat(caso.fecha_cierre, "dd/MM/yyyy HH:mm")}</TableCell>
       <TableCell className="text-sm font-medium">{caseMatch ? `#${caseMatch[1]}` : "—"}</TableCell>
       <TableCell className="text-sm text-muted-foreground">
-        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: TRANSFERIDO_BG }}>
+        <span
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+          style={getEstadoInlineStyle("Transferido")}
+        >
           🔄 Transferido
         </span>
       </TableCell>

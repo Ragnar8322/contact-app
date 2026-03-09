@@ -377,7 +377,11 @@ export default function Dashboard() {
                     <p className="text-sm font-medium truncate">#{caso.id}</p>
                   </div>
                   <div className="text-right flex items-center gap-2">
-                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${caseBadgeClass(caso)}`}>
+                    <span
+                      className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      style={getEstadoInlineStyle(caso.cat_estados?.nombre)}
+                    >
+                      {caso.cat_estados?.nombre === "Transferido" && "🔄 "}
                       {caso.cat_estados?.nombre || "—"}
                     </span>
                     <span className="text-xs text-muted-foreground whitespace-nowrap">{timeAgo(caso.fecha_caso)}</span>
