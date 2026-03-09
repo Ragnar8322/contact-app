@@ -631,6 +631,8 @@ export default function Cases() {
           )}
         </SheetContent>
       </Sheet>
+
+      <ProportionalAssignModal open={assignModalOpen} onOpenChange={setAssignModalOpen} />
     </div>
   );
 }
