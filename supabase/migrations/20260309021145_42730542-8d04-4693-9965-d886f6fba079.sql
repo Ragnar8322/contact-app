@@ -1,0 +1,1 @@
+ALTER FUNCTION get_casos_counts(UUID) SET search_path = public;

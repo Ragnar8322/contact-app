@@ -36,6 +36,19 @@ export function CampanaProvider({ children }: { children: ReactNode }) {
     setNeedsSelection(false);
   }, []);
 
+  // Listen for signout event to clear campaign state
+  useEffect(() => {
+    const handleSignOut = () => {
+      setCampanaActivaState(null);
+      setCampanas([]);
+      setNeedsSelection(false);
+      setNoCampaigns(false);
+      localStorage.removeItem(STORAGE_KEY);
+    };
+    window.addEventListener("auth:signout", handleSignOut);
+    return () => window.removeEventListener("auth:signout", handleSignOut);
+  }, []);
+
   useEffect(() => {
     if (authLoading || !user) {
       setLoading(false);
@@ -45,13 +58,11 @@ export function CampanaProvider({ children }: { children: ReactNode }) {
     const fetchCampanas = async () => {
       setLoading(true);
       try {
-        // Get all active campaigns
         const { data: allCampanas } = await supabase
           .from("campanas")
           .select("*")
           .eq("activa", true);
 
-        // Get user's assigned campaigns
         const { data: perfilCampanas } = await supabase
           .from("perfil_campanas")
           .select("campana_id")
@@ -61,7 +72,6 @@ export function CampanaProvider({ children }: { children: ReactNode }) {
         
         let userCampanas: Campana[];
         if (isAdmin) {
-          // Admins see all active campaigns
           userCampanas = allCampanas || [];
         } else {
           userCampanas = (allCampanas || []).filter(c => assignedIds.has(c.id));
@@ -77,7 +87,6 @@ export function CampanaProvider({ children }: { children: ReactNode }) {
 
         setNoCampaigns(false);
 
-        // Try to restore from localStorage
         const savedId = localStorage.getItem(STORAGE_KEY);
         const savedCampana = savedId ? userCampanas.find(c => c.id === savedId) : null;
 

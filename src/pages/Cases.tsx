@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
 import { useCases, useEstados, useTiposServicio, useAgentes, useUpdateCase, useInsertHistorial, useCaseHistory, CasesFilters } from "@/hooks/useCases";
@@ -23,11 +25,19 @@ import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
 import CasesFilterBar from "@/components/cases/CasesFilterBar";
 import CaseTransfer from "@/components/cases/CaseTransfer";
 
+const TRANSFERIDO_BG = "hsl(280, 60%, 55%)";
+
 type SortField = "id" | "identificacion" | null;
 type SortDir = "asc" | "desc";
 type QuickFilter = "activos" | "cerrados" | "transferidos";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+
+function safeFormat(dateStr: string | null | undefined, fmt: string): string {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? "—" : format(d, fmt, { locale: es });
+}
 
 export default function Cases() {
   const { user, profile, isAdmin, isGerente, isSupervisor, hasRole } = useAuth();
@@ -53,6 +63,7 @@ export default function Cases() {
     const base: CasesFilters = {
       ...filters,
       campanaId: campanaActiva?.id,
+      searchText: searchText.trim() || undefined,
     };
 
     if (!estados || estados.length === 0) return base;
@@ -61,16 +72,13 @@ export default function Cases() {
     const transferidoId = transferidoEstado?.id;
 
     if (quickFilter === "transferidos") {
-      // Only show transferred
       base.estadoIds = transferidoId ? [transferidoId] : [];
     } else if (quickFilter === "cerrados") {
-      // Final states excluding Transferido
       const closedIds = estados
         .filter((e: any) => e.es_final && e.nombre !== "Transferido")
         .map((e: any) => e.id);
       base.estadoIds = closedIds.length > 0 ? closedIds : undefined;
     } else {
-      // Activos: non-final, excluding Transferido
       const activeIds = estados
         .filter((e: any) => !e.es_final && e.nombre !== "Transferido")
         .map((e: any) => e.id);
@@ -78,7 +86,7 @@ export default function Cases() {
     }
 
     return base;
-  }, [filters, campanaActiva, estados, quickFilter]);
+  }, [filters, campanaActiva, estados, quickFilter, searchText]);
 
   // Reset to page 1 when filters or quickFilter change
   useEffect(() => {
@@ -93,14 +101,26 @@ export default function Cases() {
   const hasNextPage = paginatedResult?.hasNextPage ?? false;
   const hasPrevPage = paginatedResult?.hasPrevPage ?? false;
 
-  // Counts for tabs — use separate lightweight queries
-  const activosCount = useCasesCount(campanaActiva?.id, estados, "activos");
-  const cerradosCount = useCasesCount(campanaActiva?.id, estados, "cerrados");
-  const transferidosCount = useCasesCount(campanaActiva?.id, estados, "transferidos");
+  // Counts for tabs — use single RPC
+  const { data: tabCounts } = useQuery({
+    queryKey: ["casos-counts", campanaActiva?.id],
+    enabled: !!campanaActiva?.id,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .rpc("get_casos_counts", { p_campana_id: campanaActiva!.id });
+      if (error) throw error;
+      return data as { activos: number; cerrados: number; transferidos: number };
+    },
+  });
+
+  const activosCount = tabCounts?.activos ?? null;
+  const cerradosCount = tabCounts?.cerrados ?? null;
+  const transferidosCount = tabCounts?.transferidos ?? null;
 
   const showPageOverlay = isFetching && !isLoading;
 
-  // Sorting
+  // Sorting (client-side on current page)
   const [sortField, setSortField] = useState<SortField>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -113,18 +133,9 @@ export default function Cases() {
     }
   };
 
-  // Client-side text search + sorting (on current page)
+  // Client-side sorting on current page (search is now server-side)
   const filteredCases = useMemo(() => {
     let result = cases;
-    const q = searchText.trim().toLowerCase();
-    if (q) {
-      result = result.filter((c: any) => {
-        const nombre = (c.clientes?.nombre_contacto || "").toLowerCase();
-        const ident = (c.clientes?.identificacion || "").toLowerCase();
-        const idStr = String(c.id);
-        return nombre.includes(q) || ident.includes(q) || idStr.includes(q);
-      });
-    }
     if (sortField) {
       result = [...result].sort((a: any, b: any) => {
         let valA: any, valB: any;
@@ -136,7 +147,7 @@ export default function Cases() {
       });
     }
     return result;
-  }, [cases, searchText, sortField, sortDir]);
+  }, [cases, sortField, sortDir]);
 
   const updateCase = useUpdateCase();
   const insertHistorial = useInsertHistorial();
@@ -191,11 +202,10 @@ export default function Cases() {
 
   const isCaseClosed = selectedCase?.cat_estados?.es_final === true;
   const isReadOnly = isGerente || (isCaseClosed && !isAdmin);
-  const isFullyLocked = isTransferredCase || isGerente; // Transferred or gerente = locked
+  const isFullyLocked = isTransferredCase || isGerente;
 
   const validateObservaciones = (): boolean => {
     if (!estadoChanged) return true;
-    // "En gestión" uses the optional field — no required validation
     if (isEnGestion) return true;
     if (!editObservaciones.trim()) {
       setObsError(isRenovacionWeb && selectedEstadoFinal ? "Las observaciones son obligatorias." : "Las observaciones de gestión son obligatorias para cambiar el estado.");
@@ -211,13 +221,11 @@ export default function Cases() {
 
   const handleUpdate = async () => {
     if (!selectedCaseId || !user) return;
-    // Determine which observation text to use
     const observationText = isEnGestion ? detailObservacion.trim() : editObservaciones.trim();
     const hasObservation = observationText.length > 0;
 
     if (!estadoChanged && !hasObservation) { toast.info("No hay cambios para guardar."); return; }
     if (estadoChanged && !validateObservaciones()) return;
-    // For non-"En gestión" states, block if required obs is empty
     if (estadoChanged && !isEnGestion && !editObservaciones.trim()) return;
     if (showValorPagar) {
       const val = parseCOPInput(editValorDisplay);
@@ -283,7 +291,6 @@ export default function Cases() {
           <h1 className="text-2xl font-bold tracking-tight">Casos</h1>
           <p className="text-muted-foreground">Gestión y seguimiento de casos</p>
         </div>
-        {/* Gerente cannot create cases */}
         {!isGerente && (
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
@@ -382,7 +389,7 @@ export default function Cases() {
                       <TableCell>{caso.cat_tipo_servicio?.nombre}</TableCell>
                       <TableCell>
                         {caso.cat_estados?.nombre === "Transferido" ? (
-                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: "hsl(280, 60%, 55%)" }}>
+                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: TRANSFERIDO_BG }}>
                             🔄 Transferido
                           </span>
                         ) : (
@@ -393,7 +400,7 @@ export default function Cases() {
                       </TableCell>
                       <TableCell>{caso.cat_agentes?.nombre || "-"}</TableCell>
                       <TableCell>{formatCOP(caso.valor_pagar)}</TableCell>
-                      <TableCell>{format(new Date(caso.fecha_caso), "dd/MM/yyyy", { locale: es })}</TableCell>
+                      <TableCell>{safeFormat(caso.fecha_caso, "dd/MM/yyyy")}</TableCell>
                       <TableCell>
                         {caso.cat_estados?.es_final ? (
                           <Lock className="h-4 w-4 text-muted-foreground" />
@@ -485,7 +492,7 @@ export default function Cases() {
                 <div><span className="text-muted-foreground">NIT / Cédula:</span><p className="font-medium font-mono">{selectedCase.clientes?.identificacion || "-"}</p></div>
                 <div><span className="text-muted-foreground">Tipo:</span><p className="font-medium">{selectedCase.cat_tipo_servicio?.nombre}</p></div>
                 <div><span className="text-muted-foreground">Agente:</span><p className="font-medium">{selectedCase.cat_agentes?.nombre}</p></div>
-                <div><span className="text-muted-foreground">Fecha:</span><p className="font-medium">{format(new Date(selectedCase.fecha_caso), "dd/MM/yyyy HH:mm", { locale: es })}</p></div>
+                <div><span className="text-muted-foreground">Fecha:</span><p className="font-medium">{safeFormat(selectedCase.fecha_caso, "dd/MM/yyyy HH:mm")}</p></div>
                 {selectedCase.valor_pagar != null && selectedCase.valor_pagar > 0 && (
                   <div><span className="text-muted-foreground">Valor a Pagar:</span><p className="font-medium">{formatCOP(selectedCase.valor_pagar)}</p></div>
                 )}
@@ -543,9 +550,7 @@ export default function Cases() {
                     </div>
                   )}
 
-                  {/* MUTUALLY EXCLUSIVE observation fields */}
                   {isEnGestion ? (
-                    /* "En gestión" → optional observations */
                     <div className="space-y-2">
                       <Label>Observaciones (opcional)</Label>
                       <Textarea
@@ -558,7 +563,6 @@ export default function Cases() {
                       <p className="text-xs text-muted-foreground text-right">{detailObservacion.length} / 500</p>
                     </div>
                   ) : estadoChanged ? (
-                    /* Any other state → required observations */
                     <div className="space-y-2">
                       <Label>
                         Observaciones de gestión *
@@ -604,7 +608,7 @@ export default function Cases() {
                       <div key={h.id} className="rounded-lg bg-muted/50 p-3 text-sm">
                         <div className="flex items-center justify-between">
                           {isTransferido ? (
-                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: "hsl(280, 60%, 55%)" }}>
+                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: TRANSFERIDO_BG }}>
                               🔄 {h.cat_estados?.nombre || h.estado_nuevo}
                             </span>
                           ) : (
@@ -613,7 +617,7 @@ export default function Cases() {
                             </span>
                           )}
                           <span className="text-xs text-muted-foreground">
-                            {format(new Date(h.fecha_cambio || h.cambiado_en), "dd/MM/yyyy HH:mm", { locale: es })}
+                            {safeFormat(h.fecha_cambio || h.cambiado_en, "dd/MM/yyyy HH:mm")}
                           </span>
                         </div>
                         {(h.agente_nombre || h.profiles?.nombre) && (
@@ -648,58 +652,17 @@ function TransferColumns({ caso, campanaName }: { caso: any; campanaName: (id: s
   const caseMatch = obs.match(/Nuevo caso #(\d+)/);
   const campMatch = obs.match(/Transferido a campaña: ([^.]+)/);
 
-  // Get the last history entry for "who transferred"
-  // We show from observacion_cierre data
   return (
     <>
       <TableCell className="text-sm">{campanaName(caso.campana_id)}</TableCell>
       <TableCell className="text-sm">{campMatch ? campMatch[1] : "—"}</TableCell>
-      <TableCell className="text-sm">{caso.fecha_cierre ? format(new Date(caso.fecha_cierre), "dd/MM/yyyy HH:mm", { locale: es }) : "—"}</TableCell>
+      <TableCell className="text-sm">{safeFormat(caso.fecha_cierre, "dd/MM/yyyy HH:mm")}</TableCell>
       <TableCell className="text-sm font-medium">{caseMatch ? `#${caseMatch[1]}` : "—"}</TableCell>
       <TableCell className="text-sm text-muted-foreground">
-        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: "hsl(280, 60%, 55%)" }}>
+        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: TRANSFERIDO_BG }}>
           🔄 Transferido
         </span>
       </TableCell>
     </>
   );
-}
-
-/* ─── Hook for tab counts ─── */
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-
-function useCasesCount(campanaId: string | undefined, estados: any[] | undefined, type: QuickFilter): number | null {
-  const { data } = useQuery({
-    queryKey: ["casos-count", campanaId, type, estados?.map(e => e.id)],
-    enabled: !!campanaId && !!estados && estados.length > 0,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-    queryFn: async () => {
-      const transferidoEstado = estados!.find((e: any) => e.nombre === "Transferido");
-      const transferidoId = transferidoEstado?.id;
-
-      let ids: number[] = [];
-      if (type === "transferidos") {
-        ids = transferidoId ? [transferidoId] : [];
-      } else if (type === "cerrados") {
-        ids = estados!.filter((e: any) => e.es_final && e.nombre !== "Transferido").map((e: any) => e.id);
-      } else {
-        ids = estados!.filter((e: any) => !e.es_final && e.nombre !== "Transferido").map((e: any) => e.id);
-      }
-
-      if (ids.length === 0) return 0;
-
-      const { count, error } = await supabase
-        .from("casos")
-        .select("id", { count: "exact", head: true })
-        .eq("campana_id", campanaId!)
-        .in("estado_id", ids);
-
-      if (error) throw error;
-      return count ?? 0;
-    },
-  });
-
-  return data ?? null;
 }
