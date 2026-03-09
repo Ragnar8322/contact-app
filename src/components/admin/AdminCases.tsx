@@ -189,8 +189,12 @@ export default function AdminCases() {
                   <TableCell>{caso.clientes?.nombre_contacto || "-"}</TableCell>
                   <TableCell>{caso.cat_tipo_servicio?.nombre}</TableCell>
                   <TableCell>
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${caso.cat_estados?.es_final ? 'bg-accent text-accent-foreground' : 'bg-secondary text-secondary-foreground'}`}>
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      style={getEstadoInlineStyle(caso.cat_estados?.nombre)}
+                    >
                       {caso.cat_estados?.es_final && <Lock className="h-3 w-3" />}
+                      {caso.cat_estados?.nombre === "Transferido" && "🔄 "}
                       {caso.cat_estados?.nombre}
                     </span>
                   </TableCell>
