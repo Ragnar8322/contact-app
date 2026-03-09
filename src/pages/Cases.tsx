@@ -286,7 +286,7 @@ export default function Cases() {
             {hasRole(["admin", "supervisor"]) && (
               <Button
                 onClick={() => setAssignModalOpen(true)}
-                className="bg-amber-500 hover:bg-amber-600 text-white border-0 shadow-sm"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white border-0 shadow-sm"
               >
                 <Users className="mr-2 h-4 w-4" />
                 Asignación Proporcional
