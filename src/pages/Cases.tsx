@@ -27,7 +27,7 @@ import CaseTransfer from "@/components/cases/CaseTransfer";
 
 type SortField = "id" | "identificacion" | null;
 type SortDir = "asc" | "desc";
-type QuickFilter = "activos" | "cerrados" | "transferidos";
+type QuickFilter = "todos" | "activos" | "cerrados" | "transferidos";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
