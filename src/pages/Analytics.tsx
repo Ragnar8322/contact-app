@@ -85,6 +85,9 @@ export default function Analytics() {
     estadoId: appliedFilters.estadoId,
   });
 
+  // Role-based access check (after all hooks)
+  if (!hasRole(["admin", "gerente"])) return <Navigate to="/" replace />;
+
   const ROWS_PER_PAGE = 20;
   const totalPages = Math.ceil((data?.rendimientoAgentes.length || 0) / ROWS_PER_PAGE);
   const paginatedAgentes = data?.rendimientoAgentes.slice(
