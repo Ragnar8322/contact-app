@@ -6,9 +6,11 @@ import { LayoutDashboard, Users, FolderOpen, LogOut, Menu, X, Settings, ChevronD
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { getHighestRole } from "@/lib/roleUtils";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { profile, isAdmin, hasRole, signOut } = useAuth();
+  const { profile, roles, isAdmin, hasRole, signOut } = useAuth();
+  const highestRole = getHighestRole(roles);
   const { campanaActiva, campanas, setCampanaActiva } = useCampana();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
