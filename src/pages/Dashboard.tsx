@@ -181,14 +181,8 @@ export default function Dashboard() {
     return [...filtered].sort((a: any, b: any) => new Date(b.fecha_caso).getTime() - new Date(a.fecha_caso).getTime()).slice(0, 10);
   }, [stats?.allCases, campanaActiva?.id, alertFilter, safeSlaConfigs]);
 
-  function caseBadgeClass(caso: any): string {
-    if (caso.cat_estados?.es_final) return "bg-muted text-muted-foreground";
-    const cfg = safeSlaConfigs[caso.campana_id] || { horas_riesgo: 2, horas_vencido: 6 };
-    const hrs = (Date.now() - new Date(caso.fecha_caso).getTime()) / 3600000;
-    if (hrs >= cfg.horas_vencido) return "bg-destructive text-destructive-foreground";
-    if (hrs >= cfg.horas_riesgo) return "bg-warning text-warning-foreground";
-    return "bg-primary/10 text-primary";
-  }
+  // Import at module level
+
 
   // ─── First load: show skeletons ───
   const isFirstLoad = (statsLoading || slaLoading) && !stats;
