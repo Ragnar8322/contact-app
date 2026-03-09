@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { getHighestRole } from "@/lib/roleUtils";
 
 function sanitizeSearch(text: string): string {
   return text.replace(/[%()]/g, "").trim();
