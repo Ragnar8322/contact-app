@@ -31,16 +31,23 @@ export interface PaginatedResult<T> {
 }
 
 export function useCases(filters?: CasesFilters, pagination?: PaginationParams) {
+  const { user, roles } = useAuth();
+  const highestRole = getHighestRole(roles);
   const page = pagination?.page ?? 1;
   const pageSize = pagination?.pageSize ?? 25;
 
   return useQuery({
-    queryKey: ["casos", filters, page, pageSize],
+    queryKey: ["casos", filters, page, pageSize, highestRole, user?.id],
     queryFn: async (): Promise<PaginatedResult<any>> => {
       let query = supabase
         .from("casos")
         .select("*, clientes!inner(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)", { count: "exact" })
         .order("fecha_caso", { ascending: false });
+
+      // Agents only see their own cases; supervisor/admin/gerente see all
+      if (highestRole === "agent" && user?.id) {
+        query = query.eq("agente_id", user.id);
+      }
 
       if (filters?.estadoIds && filters.estadoIds.length > 0) {
         query = query.in("estado_id", filters.estadoIds);
