@@ -64,7 +64,9 @@ export default function Cases() {
     const transferidoEstado = estados.find((e: any) => e.nombre === "Transferido");
     const transferidoId = transferidoEstado?.id;
 
-    if (quickFilter === "transferidos") {
+    if (quickFilter === "todos") {
+      base.estadoIds = undefined;
+    } else if (quickFilter === "transferidos") {
       base.estadoIds = transferidoId ? [transferidoId] : [];
     } else if (quickFilter === "cerrados") {
       const closedIds = estados
