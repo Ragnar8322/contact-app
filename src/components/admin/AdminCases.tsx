@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useCaseHistory } from "@/hooks/useCases";
-import { Input as InputField } from "@/components/ui/input";
+
 import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
 
 export default function AdminCases() {
