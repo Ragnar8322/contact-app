@@ -6,12 +6,33 @@ export function useAllProfiles() {
   return useQuery({
     queryKey: ["admin-profiles"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Fetch profiles
+      const { data: profiles, error } = await supabase
         .from("profiles")
         .select("*, user_roles(name)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+
+      // Fetch all role assignments
+      const { data: assignments } = await supabase
+        .from("user_role_assignments")
+        .select("user_id, role_id, user_roles(id, name)");
+
+      // Group assignments by user_id
+      const assignmentsByUser: Record<string, { role_id: number; role_name: string }[]> = {};
+      assignments?.forEach(a => {
+        if (!assignmentsByUser[a.user_id]) assignmentsByUser[a.user_id] = [];
+        assignmentsByUser[a.user_id].push({
+          role_id: a.role_id,
+          role_name: (a.user_roles as any)?.name || "",
+        });
+      });
+
+      // Attach assignments to profiles
+      return profiles?.map(p => ({
+        ...p,
+        role_assignments: assignmentsByUser[p.user_id] || [],
+      }));
     },
   });
 }
@@ -27,12 +48,44 @@ export function useUpdateProfile() {
   });
 }
 
+export function useSaveRoleAssignments() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ user_id, role_ids }: { user_id: string; role_ids: number[] }) => {
+      // Delete existing assignments
+      const { error: deleteError } = await supabase
+        .from("user_role_assignments")
+        .delete()
+        .eq("user_id", user_id);
+      if (deleteError) throw deleteError;
+
+      // Insert new assignments
+      if (role_ids.length > 0) {
+        const { error: insertError } = await supabase
+          .from("user_role_assignments")
+          .insert(role_ids.map(role_id => ({ user_id, role_id })));
+        if (insertError) throw insertError;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-profiles"] }),
+  });
+}
+
 export function useInviteUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (values: { email: string; nombre: string; telefono?: string; role_id: number }) => {
+    mutationFn: async (values: { email: string; nombre: string; telefono?: string; role_id: number; role_ids?: number[] }) => {
       const { data, error } = await supabase.functions.invoke("invite-user", { body: values });
       if (error) throw error;
+      
+      // If role_ids provided and user created, save role assignments
+      if (data?.user?.id && values.role_ids && values.role_ids.length > 0) {
+        const { error: assignError } = await supabase
+          .from("user_role_assignments")
+          .insert(values.role_ids.map(role_id => ({ user_id: data.user.id, role_id })));
+        if (assignError) throw assignError;
+      }
+      
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-profiles"] }),

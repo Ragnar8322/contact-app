@@ -405,6 +405,35 @@ export type Database = {
         }
         Relationships: []
       }
+      user_role_assignments: {
+        Row: {
+          assigned_at: string | null
+          id: number
+          role_id: number
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          id?: number
+          role_id: number
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string | null
+          id?: number
+          role_id?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_role_assignments_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "user_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: number
