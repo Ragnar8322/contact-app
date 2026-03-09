@@ -1,6 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+function sanitizeSearch(text: string): string {
+  return text.replace(/[%()]/g, "").trim();
+}
+
 export interface CasesFilters {
   estadoIds?: number[];
   tipoServicioId?: number | null;
@@ -55,10 +59,13 @@ export function useCases(filters?: CasesFilters, pagination?: PaginationParams) 
         query = query.eq("campana_id", filters.campanaId);
       }
       if (filters?.searchText) {
-        query = query.or(
-          `nombre_contacto.ilike.%${filters.searchText}%,identificacion.ilike.%${filters.searchText}%`,
-          { referencedTable: "clientes" }
-        );
+        const safe = sanitizeSearch(filters.searchText);
+        if (safe) {
+          query = query.or(
+            `nombre_contacto.ilike.%${safe}%,identificacion.ilike.%${safe}%`,
+            { referencedTable: "clientes" }
+          );
+        }
       }
 
       const from = (page - 1) * pageSize;

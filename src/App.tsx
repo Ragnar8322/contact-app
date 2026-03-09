@@ -2,18 +2,21 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import { AuthProvider, useAuth, RoleName } from "@/contexts/AuthContext";
 import { CampanaProvider, useCampana } from "@/contexts/CampanaContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
 import ChangePassword from "@/pages/ChangePassword";
 import SelectCampaign from "@/pages/SelectCampaign";
-import Dashboard from "@/pages/Dashboard";
-import Clients from "@/pages/Clients";
-import Cases from "@/pages/Cases";
-import Analytics from "@/pages/Analytics";
-import Settings from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
+
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Clients = lazy(() => import("@/pages/Clients"));
+const Cases = lazy(() => import("@/pages/Cases"));
+const Analytics = lazy(() => import("@/pages/Analytics"));
+const Settings = lazy(() => import("@/pages/Settings"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -78,34 +81,44 @@ function ChangePasswordRoute() {
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <CampanaProvider>
-            <Routes>
-              <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
-              <Route path="/cambiar-contrasena" element={<ChangePasswordRoute />} />
-              <Route path="/seleccionar-campana" element={<CampaignRoute />} />
-              <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/clientes" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
-              <Route path="/casos" element={<ProtectedRoute><Cases /></ProtectedRoute>} />
-              <Route path="/analitica" element={
-                <ProtectedRoute>
-                  <RoleRoute roles={["admin", "gerente"]}>
-                    <Analytics />
-                  </RoleRoute>
-                </ProtectedRoute>
-              } />
-              <Route path="/ajustes" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </CampanaProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <CampanaProvider>
+              <Suspense fallback={<LoadingScreen />}>
+                <Routes>
+                  <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
+                  <Route path="/cambiar-contrasena" element={<ChangePasswordRoute />} />
+                  <Route path="/seleccionar-campana" element={<CampaignRoute />} />
+                  <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                  <Route path="/clientes" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
+                  <Route path="/casos" element={
+                    <ProtectedRoute>
+                      <RoleRoute roles={["admin", "supervisor", "agent"]}>
+                        <Cases />
+                      </RoleRoute>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/analitica" element={
+                    <ProtectedRoute>
+                      <RoleRoute roles={["admin", "gerente"]}>
+                        <Analytics />
+                      </RoleRoute>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/ajustes" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </CampanaProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

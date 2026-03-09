@@ -117,6 +117,8 @@ export function useAllCases(filters?: { estado_id?: number; agente_id?: string; 
       if (filters?.agente_id) q = q.eq("agente_id", filters.agente_id);
       if (filters?.from) q = q.gte("fecha_caso", filters.from);
       if (filters?.to) q = q.lte("fecha_caso", filters.to);
+      // TODO: Add full pagination. Current limit: 500 cases.
+      q = q.limit(500);
       const { data, error } = await q;
       if (error) throw error;
       return data;
