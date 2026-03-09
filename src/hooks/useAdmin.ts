@@ -77,15 +77,9 @@ export function useInviteUser() {
     mutationFn: async (values: { email: string; nombre: string; telefono?: string; role_id: number; role_ids?: number[] }) => {
       const { data, error } = await supabase.functions.invoke("invite-user", { body: values });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       
-      // If role_ids provided and user created, save role assignments
-      if (data?.user?.id && values.role_ids && values.role_ids.length > 0) {
-        const { error: assignError } = await supabase
-          .from("user_role_assignments")
-          .insert(values.role_ids.map(role_id => ({ user_id: data.user.id, role_id })));
-        if (assignError) throw assignError;
-      }
-      
+      // Role assignments are already saved by the edge function
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-profiles"] }),
