@@ -284,7 +284,10 @@ export default function Cases() {
         {!isGerente && (
           <div className="flex gap-2">
             {hasRole(["admin", "supervisor"]) && (
-              <Button variant="outline" onClick={() => setAssignModalOpen(true)}>
+              <Button
+                onClick={() => setAssignModalOpen(true)}
+                className="bg-amber-500 hover:bg-amber-600 text-white border-0 shadow-sm"
+              >
                 <Users className="mr-2 h-4 w-4" />
                 Asignación Proporcional
               </Button>
