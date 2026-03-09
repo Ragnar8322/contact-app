@@ -31,8 +31,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     navItems.push({ to: "/casos", icon: FolderOpen, label: "Casos" });
   }
 
-  // Analítica: admin, gerente only
-  if (hasRole(["admin", "gerente"])) {
+  // Analítica: admin, gerente, supervisor
+  if (hasRole(["admin", "gerente", "supervisor"])) {
     navItems.push({ to: "/analitica", icon: BarChart2, label: "Analítica" });
   }
 
