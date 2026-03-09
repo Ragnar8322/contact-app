@@ -11,12 +11,13 @@ interface Profile {
   must_change_password?: boolean;
 }
 
-type RoleName = "admin" | "agent" | "supervisor" | "gerente";
+export type RoleName = "admin" | "agent" | "supervisor" | "gerente";
 
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  roles: RoleName[];
   isAdmin: boolean;
   isAgente: boolean;
   isSupervisor: boolean;
@@ -34,20 +35,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [roles, setRoles] = useState<RoleName[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = useCallback(async (userId: string) => {
-    const { data } = await supabase
+    // Fetch profile
+    const { data: profileData } = await supabase
       .from("profiles")
       .select("*, user_roles(name)")
       .eq("user_id", userId)
       .maybeSingle();
-    if (data) {
+
+    // Fetch role assignments from junction table
+    const { data: assignments } = await supabase
+      .from("user_role_assignments")
+      .select("role_id, user_roles(name)")
+      .eq("user_id", userId);
+
+    if (profileData) {
+      const fallbackRole = (profileData.user_roles as any)?.name || "agent";
       setProfile({
-        ...data,
-        role_name: (data.user_roles as any)?.name || "agent",
-        must_change_password: (data as any).must_change_password ?? false,
+        ...profileData,
+        role_name: fallbackRole,
+        must_change_password: (profileData as any).must_change_password ?? false,
       });
+
+      // Build roles array from assignments, fallback to profile.role_id
+      if (assignments && assignments.length > 0) {
+        const roleNames = assignments
+          .map(a => (a.user_roles as any)?.name as RoleName)
+          .filter(Boolean);
+        setRoles(roleNames);
+      } else {
+        // Fallback to single role from profiles table
+        setRoles([fallbackRole as RoleName]);
+      }
     }
   }, []);
 
@@ -64,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setTimeout(() => fetchProfile(session.user.id), 0);
         } else {
           setProfile(null);
+          setRoles([]);
         }
         setLoading(false);
       }
@@ -84,18 +107,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setRoles([]);
   };
 
-  const roleName = (profile?.role_name || "agent") as RoleName;
-  const isAdmin = roleName === "admin";
-  const isAgente = roleName === "agent";
-  const isSupervisor = roleName === "supervisor";
-  const isGerente = roleName === "gerente";
-  const hasRole = (roles: RoleName[]) => roles.includes(roleName);
+  // Multi-role checks - user has role if it's in their roles array
+  const isAdmin = roles.includes("admin");
+  const isAgente = roles.includes("agent");
+  const isSupervisor = roles.includes("supervisor");
+  const isGerente = roles.includes("gerente");
+  
+  // hasRole returns true if user has ANY of the specified roles (union/most permissive)
+  const hasRole = (checkRoles: RoleName[]) => checkRoles.some(r => roles.includes(r));
+  
   const mustChangePassword = profile?.must_change_password === true;
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, isAdmin, isAgente, isSupervisor, isGerente, hasRole, mustChangePassword, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ 
+      session, 
+      user, 
+      profile, 
+      roles,
+      isAdmin, 
+      isAgente, 
+      isSupervisor, 
+      isGerente, 
+      hasRole, 
+      mustChangePassword, 
+      loading, 
+      signOut, 
+      refreshProfile 
+    }}>
       {children}
     </AuthContext.Provider>
   );

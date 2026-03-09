@@ -126,7 +126,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ user: newUser.user, temp_password: tempPassword }),
+      JSON.stringify({ user: { id: newUser.user?.id }, temp_password: tempPassword }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

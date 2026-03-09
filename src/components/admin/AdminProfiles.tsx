@@ -1,18 +1,19 @@
 import { useState } from "react";
-import { useAllProfiles, useUpdateProfile, useInviteUser, useRoles } from "@/hooks/useAdmin";
+import { useAllProfiles, useUpdateProfile, useInviteUser, useRoles, useSaveRoleAssignments } from "@/hooks/useAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Check, X, KeyRound, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { cn } from "@/lib/utils";
 
 const passwordSchema = z
   .string()
@@ -22,16 +23,79 @@ const passwordSchema = z
   .regex(/[0-9]/, "Debe incluir al menos un número")
   .regex(/[!@#$%^&*(),.?":{}|<>]/, "Debe incluir al menos un carácter especial");
 
+const ROLE_COLORS: Record<string, string> = {
+  admin: "bg-destructive/10 text-destructive border-destructive/20",
+  supervisor: "bg-primary/10 text-primary border-primary/20",
+  agent: "bg-secondary text-secondary-foreground border-secondary",
+  gerente: "bg-accent text-accent-foreground border-accent",
+};
+
+function RoleBadges({ assignments, fallbackRole }: { assignments: { role_id: number; role_name: string }[]; fallbackRole?: string }) {
+  const rolesToShow = assignments.length > 0 
+    ? assignments.map(a => a.role_name) 
+    : fallbackRole ? [fallbackRole] : [];
+  
+  if (rolesToShow.length === 0) return <span className="text-muted-foreground">—</span>;
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {rolesToShow.map((role, i) => (
+        <Badge
+          key={i}
+          variant="outline"
+          className={cn("text-xs capitalize", ROLE_COLORS[role] || "")}
+        >
+          {role}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+function RoleCheckboxes({ 
+  roles, 
+  selected, 
+  onChange 
+}: { 
+  roles: { id: number; name: string }[]; 
+  selected: number[]; 
+  onChange: (ids: number[]) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {roles.map(r => (
+        <div key={r.id} className="flex items-center gap-2">
+          <Checkbox
+            id={`role-${r.id}`}
+            checked={selected.includes(r.id)}
+            onCheckedChange={(checked) => {
+              if (checked) {
+                onChange([...selected, r.id]);
+              } else {
+                onChange(selected.filter(id => id !== r.id));
+              }
+            }}
+          />
+          <Label htmlFor={`role-${r.id}`} className="capitalize cursor-pointer">
+            {r.name}
+          </Label>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AdminProfiles() {
   const { data: profiles, isLoading, refetch } = useAllProfiles();
   const { data: roles } = useRoles();
   const updateProfile = useUpdateProfile();
   const inviteUser = useInviteUser();
+  const saveRoleAssignments = useSaveRoleAssignments();
 
   const [editId, setEditId] = useState<string | null>(null);
-  const [editData, setEditData] = useState({ nombre: "", telefono: "", role_id: 0 });
+  const [editData, setEditData] = useState({ nombre: "", telefono: "", selectedRoleIds: [] as number[] });
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ email: "", nombre: "", telefono: "", role_id: 2 });
+  const [inviteForm, setInviteForm] = useState({ email: "", nombre: "", telefono: "", selectedRoleIds: [2] as number[] });
   const [inviteResult, setInviteResult] = useState<{ temp_password: string } | null>(null);
 
   // Temp password dialog
@@ -42,13 +106,30 @@ export default function AdminProfiles() {
 
   const startEdit = (p: any) => {
     setEditId(p.user_id);
-    setEditData({ nombre: p.nombre, telefono: p.telefono || "", role_id: p.role_id });
+    const existingRoleIds = p.role_assignments?.map((a: any) => a.role_id) || [];
+    // Fallback to profile.role_id if no assignments
+    const roleIds = existingRoleIds.length > 0 ? existingRoleIds : [p.role_id];
+    setEditData({ 
+      nombre: p.nombre, 
+      telefono: p.telefono || "", 
+      selectedRoleIds: roleIds 
+    });
   };
 
   const saveEdit = async () => {
     if (!editId) return;
     try {
-      await updateProfile.mutateAsync({ user_id: editId, ...editData });
+      // Update profile (nombre, telefono only - don't modify role_id)
+      await updateProfile.mutateAsync({ 
+        user_id: editId, 
+        nombre: editData.nombre, 
+        telefono: editData.telefono 
+      });
+      // Save role assignments
+      await saveRoleAssignments.mutateAsync({ 
+        user_id: editId, 
+        role_ids: editData.selectedRoleIds 
+      });
       toast.success("Perfil actualizado");
       setEditId(null);
     } catch (err: any) {
@@ -59,7 +140,13 @@ export default function AdminProfiles() {
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const result = await inviteUser.mutateAsync(inviteForm);
+      const result = await inviteUser.mutateAsync({
+        email: inviteForm.email,
+        nombre: inviteForm.nombre,
+        telefono: inviteForm.telefono,
+        role_id: inviteForm.selectedRoleIds[0] || 2, // Keep for backward compat
+        role_ids: inviteForm.selectedRoleIds,
+      });
       setInviteResult(result);
       toast.success("Usuario creado exitosamente");
     } catch (err: any) {
@@ -118,7 +205,7 @@ export default function AdminProfiles() {
       <CardContent className="p-0">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="font-semibold">Perfiles de Usuario</h3>
-          <Dialog open={inviteOpen} onOpenChange={(o) => { setInviteOpen(o); if (!o) { setInviteResult(null); setInviteForm({ email: "", nombre: "", telefono: "", role_id: 2 }); } }}>
+          <Dialog open={inviteOpen} onOpenChange={(o) => { setInviteOpen(o); if (!o) { setInviteResult(null); setInviteForm({ email: "", nombre: "", telefono: "", selectedRoleIds: [2] }); } }}>
             <DialogTrigger asChild>
               <Button size="sm"><Plus className="mr-2 h-4 w-4" />Crear Usuario</Button>
             </DialogTrigger>
@@ -131,7 +218,7 @@ export default function AdminProfiles() {
                     <p>Email: {inviteForm.email}</p>
                     <p>Contraseña: {inviteResult.temp_password}</p>
                   </div>
-                  <Button className="w-full" onClick={() => { setInviteOpen(false); setInviteResult(null); setInviteForm({ email: "", nombre: "", telefono: "", role_id: 2 }); }}>Cerrar</Button>
+                  <Button className="w-full" onClick={() => { setInviteOpen(false); setInviteResult(null); setInviteForm({ email: "", nombre: "", telefono: "", selectedRoleIds: [2] }); }}>Cerrar</Button>
                 </div>
               ) : (
                 <form onSubmit={handleInvite} className="space-y-4">
@@ -148,15 +235,19 @@ export default function AdminProfiles() {
                     <Input value={inviteForm.telefono} onChange={e => setInviteForm(f => ({ ...f, telefono: e.target.value }))} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Rol *</Label>
-                    <Select value={String(inviteForm.role_id)} onValueChange={v => setInviteForm(f => ({ ...f, role_id: Number(v) }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {roles?.map(r => <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <Label>Roles *</Label>
+                    {roles && (
+                      <RoleCheckboxes
+                        roles={roles}
+                        selected={inviteForm.selectedRoleIds}
+                        onChange={(ids) => setInviteForm(f => ({ ...f, selectedRoleIds: ids }))}
+                      />
+                    )}
+                    {inviteForm.selectedRoleIds.length === 0 && (
+                      <p className="text-xs text-destructive">Selecciona al menos un rol</p>
+                    )}
                   </div>
-                  <Button type="submit" className="w-full" disabled={inviteUser.isPending}>
+                  <Button type="submit" className="w-full" disabled={inviteUser.isPending || inviteForm.selectedRoleIds.length === 0}>
                     {inviteUser.isPending ? "Creando..." : "Crear Usuario"}
                   </Button>
                 </form>
@@ -169,7 +260,7 @@ export default function AdminProfiles() {
             <TableRow>
               <TableHead>Nombre</TableHead>
               <TableHead>Teléfono</TableHead>
-              <TableHead>Rol</TableHead>
+              <TableHead>Roles</TableHead>
               <TableHead>User ID</TableHead>
               <TableHead className="w-40"></TableHead>
             </TableRow>
@@ -191,23 +282,27 @@ export default function AdminProfiles() {
                 </TableCell>
                 <TableCell>
                   {editId === p.user_id ? (
-                    <Select value={String(editData.role_id)} onValueChange={v => setEditData(d => ({ ...d, role_id: Number(v) }))}>
-                      <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {roles?.map(r => <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    roles && (
+                      <RoleCheckboxes
+                        roles={roles}
+                        selected={editData.selectedRoleIds}
+                        onChange={(ids) => setEditData(d => ({ ...d, selectedRoleIds: ids }))}
+                      />
+                    )
                   ) : (
-                    <span className="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium bg-secondary text-secondary-foreground capitalize">
-                      {(p.user_roles as any)?.name || "—"}
-                    </span>
+                    <RoleBadges 
+                      assignments={p.role_assignments || []} 
+                      fallbackRole={(p.user_roles as any)?.name} 
+                    />
                   )}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground font-mono">{p.user_id.slice(0, 8)}…</TableCell>
                 <TableCell>
                   {editId === p.user_id ? (
                     <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={saveEdit}><Check className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={saveEdit} disabled={editData.selectedRoleIds.length === 0}>
+                        <Check className="h-4 w-4" />
+                      </Button>
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditId(null)}><X className="h-4 w-4" /></Button>
                     </div>
                   ) : (
