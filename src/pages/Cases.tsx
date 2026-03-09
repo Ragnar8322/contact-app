@@ -373,15 +373,13 @@ export default function Cases() {
                       <TableCell className="font-mono text-sm">{caso.clientes?.identificacion || "-"}</TableCell>
                       <TableCell>{caso.cat_tipo_servicio?.nombre}</TableCell>
                       <TableCell>
-                        {caso.cat_estados?.nombre === "Transferido" ? (
-                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: TRANSFERIDO_BG }}>
-                            🔄 Transferido
-                          </span>
-                        ) : (
-                          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${caso.cat_estados?.es_final ? 'bg-muted text-muted-foreground' : 'bg-secondary text-secondary-foreground'}`}>
-                            {caso.cat_estados?.nombre}
-                          </span>
-                        )}
+                        <span
+                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                          style={getEstadoInlineStyle(caso.cat_estados?.nombre)}
+                        >
+                          {caso.cat_estados?.nombre === "Transferido" && "🔄 "}
+                          {caso.cat_estados?.nombre}
+                        </span>
                       </TableCell>
                       <TableCell>{caso.cat_agentes?.nombre || "-"}</TableCell>
                       <TableCell>{formatCOP(caso.valor_pagar)}</TableCell>
