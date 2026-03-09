@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
 import CasesFilterBar from "@/components/cases/CasesFilterBar";
 import CaseTransfer from "@/components/cases/CaseTransfer";
+import ProportionalAssignModal from "@/components/cases/ProportionalAssignModal";
 
 type SortField = "id" | "identificacion" | null;
 type SortDir = "asc" | "desc";
