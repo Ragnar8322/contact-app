@@ -8,6 +8,7 @@ export interface CasesFilters {
   fechaDesde?: string | null;
   fechaHasta?: string | null;
   campanaId?: string | null;
+  searchText?: string;
 }
 
 export interface PaginationParams {
@@ -32,7 +33,7 @@ export function useCases(filters?: CasesFilters, pagination?: PaginationParams) 
     queryFn: async (): Promise<PaginatedResult<any>> => {
       let query = supabase
         .from("casos")
-        .select("*, clientes(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)", { count: "exact" })
+        .select("*, clientes!inner(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)", { count: "exact" })
         .order("fecha_caso", { ascending: false });
 
       if (filters?.estadoIds && filters.estadoIds.length > 0) {
@@ -52,6 +53,12 @@ export function useCases(filters?: CasesFilters, pagination?: PaginationParams) 
       }
       if (filters?.campanaId) {
         query = query.eq("campana_id", filters.campanaId);
+      }
+      if (filters?.searchText) {
+        query = query.or(
+          `nombre_contacto.ilike.%${filters.searchText}%,identificacion.ilike.%${filters.searchText}%`,
+          { referencedTable: "clientes" }
+        );
       }
 
       const from = (page - 1) * pageSize;

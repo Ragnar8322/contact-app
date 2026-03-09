@@ -7,6 +7,10 @@ export interface AnalyticsData {
   casosRenovados: number;
   tasaRenovacion: number;
   gestionesRegistradas: number;
+  totalFacturado: number;
+  pendienteCobro: number;
+  valorPromedio: number;
+  porcentajeRecaudo: number;
   casosPorEstado: { estado: string; count: number; percentage: number }[];
   gestionesPorAgente: { agente: string; count: number }[];
   gestionesPorDia: { fecha: string; count: number }[];
@@ -52,6 +56,7 @@ export function useAnalyticsData(filters: AnalyticsQueryFilters) {
           agente_id,
           estado_id,
           cliente_id,
+          valor_pagar,
           cat_estados!inner(nombre),
           cat_agentes!inner(nombre)
         `)
@@ -132,6 +137,21 @@ export function useAnalyticsData(filters: AnalyticsQueryFilters) {
         casos?.filter((c) => (c.cat_estados as any)?.nombre === "Renovado").length || 0;
       const tasaRenovacion = totalCasos > 0 ? (casosRenovados / totalCasos) * 100 : 0;
       const gestionesRegistradas = filteredHistorial.length;
+
+      // Financial KPIs
+      const totalFacturado = casos
+        ?.filter((c) => (c.cat_estados as any)?.nombre === "Renovado")
+        .reduce((sum, c) => sum + ((c.valor_pagar as number) || 0), 0) ?? 0;
+
+      const pendienteCobro = casos
+        ?.filter((c) => (c.cat_estados as any)?.nombre === "Pendiente de Pago")
+        .reduce((sum, c) => sum + ((c.valor_pagar as number) || 0), 0) ?? 0;
+
+      const totalMonetario = totalFacturado + pendienteCobro;
+      const valorPromedio = casosRenovados > 0 ? totalFacturado / casosRenovados : 0;
+      const porcentajeRecaudo = totalMonetario > 0
+        ? (totalFacturado / totalMonetario) * 100
+        : 0;
 
       // Casos por estado
       const estadoCount: Record<string, number> = {};
@@ -223,6 +243,10 @@ export function useAnalyticsData(filters: AnalyticsQueryFilters) {
         casosRenovados,
         tasaRenovacion,
         gestionesRegistradas,
+        totalFacturado,
+        pendienteCobro,
+        valorPromedio,
+        porcentajeRecaudo,
         casosPorEstado,
         gestionesPorAgente,
         gestionesPorDia,

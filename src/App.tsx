@@ -1,9 +1,8 @@
-import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth, RoleName } from "@/contexts/AuthContext";
 import { CampanaProvider, useCampana } from "@/contexts/CampanaContext";
 import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
@@ -16,24 +15,47 @@ import Analytics from "@/pages/Analytics";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+function LoadingScreen() {
+  return (
+    <div className="flex h-screen items-center justify-center text-muted-foreground">
+      Cargando...
+    </div>
+  );
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading, mustChangePassword } = useAuth();
   const { loading: campLoading, needsSelection, noCampaigns } = useCampana();
 
-  if (loading || campLoading) return <div className="flex h-screen items-center justify-center text-muted-foreground">Cargando...</div>;
+  if (loading || campLoading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" replace />;
   if (mustChangePassword) return <Navigate to="/cambiar-contrasena" replace />;
   if (noCampaigns || needsSelection) return <Navigate to="/seleccionar-campana" replace />;
   return <AppLayout>{children}</AppLayout>;
 }
 
+function RoleRoute({ children, roles }: { children: React.ReactNode; roles: RoleName[] }) {
+  const { hasRole, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!hasRole(roles)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 function CampaignRoute() {
   const { session, loading, mustChangePassword } = useAuth();
   const { loading: campLoading, needsSelection, noCampaigns, campanaActiva } = useCampana();
 
-  if (loading || campLoading) return <div className="flex h-screen items-center justify-center text-muted-foreground">Cargando...</div>;
+  if (loading || campLoading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" replace />;
   if (mustChangePassword) return <Navigate to="/cambiar-contrasena" replace />;
   if (!noCampaigns && !needsSelection && campanaActiva) return <Navigate to="/" replace />;
@@ -49,7 +71,7 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
 
 function ChangePasswordRoute() {
   const { session, loading, mustChangePassword } = useAuth();
-  if (loading) return <div className="flex h-screen items-center justify-center text-muted-foreground">Cargando...</div>;
+  if (loading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" replace />;
   if (!mustChangePassword) return <Navigate to="/" replace />;
   return <ChangePassword />;
@@ -58,7 +80,6 @@ function ChangePasswordRoute() {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
@@ -70,7 +91,13 @@ const App = () => (
               <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/clientes" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
               <Route path="/casos" element={<ProtectedRoute><Cases /></ProtectedRoute>} />
-              <Route path="/analitica" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+              <Route path="/analitica" element={
+                <ProtectedRoute>
+                  <RoleRoute roles={["admin", "gerente"]}>
+                    <Analytics />
+                  </RoleRoute>
+                </ProtectedRoute>
+              } />
               <Route path="/ajustes" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -8,9 +8,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useAnalyticsData } from "@/hooks/useAnalyticsData";
 import { useAnalyticsFilters } from "@/hooks/useAnalyticsFilters";
+import { useAuth } from "@/contexts/AuthContext";
+import { Navigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   PieChart,
@@ -26,23 +28,37 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import jsPDF from "jspdf";
+import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 const ESTADO_COLORS: Record<string, string> = {
-  "Nuevo": "#3b82f6",
-  "En Proceso": "#f59e0b",
-  "Renovado": "#22c55e",
-  "No Renovado": "#ef4444",
-  "Pendiente": "#8b5cf6",
-  "Cerrado": "#6b7280",
+  "Registrado":          "#3b82f6",
+  "En gestión":          "#f59e0b",
+  "Pendiente de Pago":   "#8b5cf6",
+  "En espera cliente":   "#06b6d4",
+  "Renovado":            "#22c55e",
+  "No Renovado":         "#ef4444",
+  "Transferido":         "hsl(280, 60%, 55%)",
+  "Numero Errado":       "#6b7280",
+  "No Interesado":       "#f97316",
 };
 
 const PIE_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"];
 
+function safeFormat(dateStr: string | null | undefined, fmt: string): string {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? "—" : format(d, fmt);
+}
+
+const formatCOPValue = (n: number) =>
+  `$ ${n.toLocaleString("es-CO", { maximumFractionDigits: 0 })}`;
+
 export default function Analytics() {
-  const { toast } = useToast();
+  const { hasRole } = useAuth();
+  if (!hasRole(["admin", "gerente"])) return <Navigate to="/" replace />;
+
   const chartsRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -145,11 +161,36 @@ export default function Analytics() {
         yPos += 7;
       });
 
+      // Financial Summary
+      yPos += 5;
+      pdf.setFontSize(14);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Resumen Financiero", margin, yPos);
+      yPos += 7;
+
+      const financialData = [
+        ["Total Facturado", formatCOPValue(data.totalFacturado)],
+        ["Pendiente de Cobro", formatCOPValue(data.pendienteCobro)],
+        ["Valor Promedio", formatCOPValue(data.valorPromedio)],
+        ["% Recaudo", formatPercentage(data.porcentajeRecaudo)],
+      ];
+
+      pdf.setFontSize(10);
+      financialData.forEach(([label, value]) => {
+        pdf.setFont("helvetica", "normal");
+        pdf.text(label, margin, yPos);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(value, margin + 60, yPos);
+        yPos += 7;
+      });
+
       // Charts as images
       const canvas = await html2canvas(chartsRef.current, {
-        scale: 2,
+        scale: 1.5,
         useCORS: true,
         logging: false,
+        imageTimeout: 15000,
+        windowWidth: 1200,
       });
       const imgData = canvas.toDataURL("image/png");
       const imgWidth = pageWidth - margin * 2;
@@ -188,10 +229,23 @@ export default function Analytics() {
       pdf.setFont("helvetica", "normal");
       yPos += 8;
 
-      data.rendimientoAgentes.slice(0, 30).forEach((agent) => {
+      data.rendimientoAgentes.forEach((agent) => {
         if (yPos > 275) {
           pdf.addPage();
-          yPos = 20;
+          // Re-draw header on new page
+          pdf.setFillColor(37, 99, 235);
+          pdf.rect(margin, 15, pageWidth - margin * 2, 8, "F");
+          pdf.setTextColor(255, 255, 255);
+          pdf.setFontSize(9);
+          pdf.setFont("helvetica", "bold");
+          xPos = margin + 2;
+          tableHeaders.forEach((header, i) => {
+            pdf.text(header, xPos, 21);
+            xPos += colWidths[i];
+          });
+          pdf.setTextColor(0, 0, 0);
+          pdf.setFont("helvetica", "normal");
+          yPos = 30;
         }
         xPos = margin + 2;
         pdf.text(agent.agente.substring(0, 20), xPos, yPos);
@@ -221,10 +275,10 @@ export default function Analytics() {
       }
 
       pdf.save(`Reporte_Analitica_${format(new Date(), "yyyyMMdd")}.pdf`);
-      toast({ title: "Reporte generado exitosamente" });
+      toast.success("Reporte PDF generado exitosamente");
     } catch (error) {
       console.error("Error generating PDF:", error);
-      toast({ title: "Error al generar PDF", variant: "destructive" });
+      toast.error("Error al generar PDF");
     } finally {
       setExportingPdf(false);
     }
@@ -235,82 +289,141 @@ export default function Analytics() {
     setExportingExcel(true);
 
     try {
-      const wb = XLSX.utils.book_new();
+      const wb = new ExcelJS.Workbook();
 
-      // Sheet 1: Resumen (with filter summary)
-      const resumenData = [
-        ["Reporte de Analítica"],
-        [`Período: ${format(appliedFilters.dateFrom, "dd/MM/yyyy")} - ${format(appliedFilters.dateTo, "dd/MM/yyyy")}`],
-        [`Filtros: ${getFilterSummary()}`],
-        [],
-        ["Métrica", "Valor"],
-        ["Total Casos", data.totalCasos],
-        ["Casos Renovados", data.casosRenovados],
-        ["Tasa de Renovación", `${data.tasaRenovacion.toFixed(1)}%`],
-        ["Gestiones Registradas", data.gestionesRegistradas],
-      ];
-      const wsResumen = XLSX.utils.aoa_to_sheet(resumenData);
-      wsResumen["!cols"] = [{ wch: 25 }, { wch: 20 }];
-      XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
+      const headerFill: ExcelJS.Fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF2563EB" },
+      };
+      const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" } };
+
+      const applyHeaderStyle = (ws: ExcelJS.Worksheet, colCount: number) => {
+        const row = ws.getRow(1);
+        for (let i = 1; i <= colCount; i++) {
+          const cell = row.getCell(i);
+          cell.fill = headerFill;
+          cell.font = headerFont;
+        }
+      };
+
+      const autoWidth = (ws: ExcelJS.Worksheet) => {
+        ws.columns.forEach((col) => {
+          if (col.header) {
+            col.width = Math.max(col.header.length + 4, 12);
+          }
+        });
+      };
+
+      // Sheet 1: Resumen
+      const wsResumen = wb.addWorksheet("Resumen");
+      wsResumen.addRow(["Reporte de Analítica"]);
+      wsResumen.addRow([`Período: ${format(appliedFilters.dateFrom, "dd/MM/yyyy")} - ${format(appliedFilters.dateTo, "dd/MM/yyyy")}`]);
+      wsResumen.addRow([`Filtros: ${getFilterSummary()}`]);
+      wsResumen.addRow([]);
+      wsResumen.addRow(["Métrica", "Valor"]);
+      wsResumen.addRow(["Total Casos", data.totalCasos]);
+      wsResumen.addRow(["Casos Renovados", data.casosRenovados]);
+      wsResumen.addRow(["Tasa de Renovación", `${data.tasaRenovacion.toFixed(1)}%`]);
+      wsResumen.addRow(["Gestiones Registradas", data.gestionesRegistradas]);
+      wsResumen.addRow([]);
+      wsResumen.addRow(["Total Facturado", data.totalFacturado]);
+      wsResumen.addRow(["Pendiente de Cobro", data.pendienteCobro]);
+      wsResumen.addRow(["Valor Promedio", data.valorPromedio]);
+      wsResumen.addRow(["% Recaudo", `${data.porcentajeRecaudo.toFixed(1)}%`]);
+      wsResumen.getColumn(1).width = 25;
+      wsResumen.getColumn(2).width = 20;
+      // Style header row (row 5)
+      const resumenHeaderRow = wsResumen.getRow(5);
+      for (let i = 1; i <= 2; i++) {
+        resumenHeaderRow.getCell(i).fill = headerFill;
+        resumenHeaderRow.getCell(i).font = headerFont;
+      }
+      // Format financial numbers
+      [11, 12, 13].forEach((r) => {
+        wsResumen.getRow(r).getCell(2).numFmt = "#,##0";
+      });
 
       // Sheet 2: Rendimiento Agentes
-      const agentesData = [
-        ["Agente", "Casos Asignados", "Gestiones", "Renovados", "Tasa Renovación"],
-        ...data.rendimientoAgentes.map((a) => [
-          a.agente,
-          a.casosAsignados,
-          a.gestiones,
-          a.renovados,
-          `${a.tasaRenovacion.toFixed(1)}%`,
-        ]),
+      const wsAgentes = wb.addWorksheet("Rendimiento Agentes");
+      wsAgentes.columns = [
+        { header: "Agente", key: "agente", width: 30 },
+        { header: "Casos Asignados", key: "casos", width: 18 },
+        { header: "Gestiones", key: "gestiones", width: 14 },
+        { header: "Renovados", key: "renovados", width: 14 },
+        { header: "Tasa Renovación", key: "tasa", width: 18 },
       ];
-      const wsAgentes = XLSX.utils.aoa_to_sheet(agentesData);
-      wsAgentes["!cols"] = [{ wch: 30 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }];
-      XLSX.utils.book_append_sheet(wb, wsAgentes, "Rendimiento Agentes");
+      data.rendimientoAgentes.forEach((a) => {
+        wsAgentes.addRow({
+          agente: a.agente,
+          casos: a.casosAsignados,
+          gestiones: a.gestiones,
+          renovados: a.renovados,
+          tasa: a.tasaRenovacion / 100,
+        });
+      });
+      applyHeaderStyle(wsAgentes, 5);
+      wsAgentes.getColumn(2).numFmt = "#,##0";
+      wsAgentes.getColumn(3).numFmt = "#,##0";
+      wsAgentes.getColumn(4).numFmt = "#,##0";
+      wsAgentes.getColumn(5).numFmt = "0.0%";
 
       // Sheet 3: Casos por Estado
-      const estadosData = [
-        ["Estado", "Cantidad", "Porcentaje"],
-        ...data.casosPorEstado.map((e) => [
-          e.estado,
-          e.count,
-          `${e.percentage.toFixed(1)}%`,
-        ]),
+      const wsEstados = wb.addWorksheet("Casos por Estado");
+      wsEstados.columns = [
+        { header: "Estado", key: "estado", width: 22 },
+        { header: "Cantidad", key: "count", width: 14 },
+        { header: "Porcentaje", key: "pct", width: 14 },
       ];
-      const wsEstados = XLSX.utils.aoa_to_sheet(estadosData);
-      wsEstados["!cols"] = [{ wch: 20 }, { wch: 12 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, wsEstados, "Casos por Estado");
+      data.casosPorEstado.forEach((e) => {
+        wsEstados.addRow({ estado: e.estado, count: e.count, pct: e.percentage / 100 });
+      });
+      applyHeaderStyle(wsEstados, 3);
+      wsEstados.getColumn(2).numFmt = "#,##0";
+      wsEstados.getColumn(3).numFmt = "0.0%";
 
       // Sheet 4: Gestiones por Día
-      const gestionesDiaData = [
-        ["Fecha", "Cantidad"],
-        ...data.gestionesPorDia.map((g) => [
-          format(new Date(g.fecha), "dd/MM/yyyy"),
-          g.count,
-        ]),
+      const wsGestiones = wb.addWorksheet("Gestiones por Día");
+      wsGestiones.columns = [
+        { header: "Fecha", key: "fecha", width: 16 },
+        { header: "Cantidad", key: "count", width: 14 },
       ];
-      const wsGestiones = XLSX.utils.aoa_to_sheet(gestionesDiaData);
-      wsGestiones["!cols"] = [{ wch: 15 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, wsGestiones, "Gestiones por Día");
+      data.gestionesPorDia.forEach((g) => {
+        wsGestiones.addRow({ fecha: safeFormat(g.fecha, "dd/MM/yyyy"), count: g.count });
+      });
+      applyHeaderStyle(wsGestiones, 2);
+      wsGestiones.getColumn(2).numFmt = "#,##0";
 
       // Sheet 5: Clientes
-      const clientesData = [
-        ["Tipo Cliente", "Cantidad", "Porcentaje"],
-        ...data.distribucionClientes.map((c) => [
-          c.tipo,
-          c.count,
-          `${c.percentage.toFixed(1)}%`,
-        ]),
+      const wsClientes = wb.addWorksheet("Clientes");
+      wsClientes.columns = [
+        { header: "Tipo Cliente", key: "tipo", width: 18 },
+        { header: "Cantidad", key: "count", width: 14 },
+        { header: "Porcentaje", key: "pct", width: 14 },
       ];
-      const wsClientes = XLSX.utils.aoa_to_sheet(clientesData);
-      wsClientes["!cols"] = [{ wch: 15 }, { wch: 12 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, wsClientes, "Clientes");
+      data.distribucionClientes.forEach((c) => {
+        wsClientes.addRow({ tipo: c.tipo, count: c.count, pct: c.percentage / 100 });
+      });
+      applyHeaderStyle(wsClientes, 3);
+      wsClientes.getColumn(2).numFmt = "#,##0";
+      wsClientes.getColumn(3).numFmt = "0.0%";
 
-      XLSX.writeFile(wb, `Reporte_Analitica_${format(new Date(), "yyyyMMdd")}.xlsx`);
-      toast({ title: "Reporte generado exitosamente" });
+      // Write and download
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Reporte_Analitica_${format(new Date(), "yyyyMMdd")}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast.success("Reporte Excel generado exitosamente");
     } catch (error) {
       console.error("Error generating Excel:", error);
-      toast({ title: "Error al generar Excel", variant: "destructive" });
+      toast.error("Error al generar Excel");
     } finally {
       setExportingExcel(false);
     }
@@ -506,7 +619,7 @@ export default function Analytics() {
         </Card>
       ) : (
         <>
-          {/* KPI Cards */}
+          {/* KPI Cards Row 1 */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
@@ -515,7 +628,7 @@ export default function Analytics() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(data.totalCasos)}</div>
+                <div className="text-2xl font-bold">{formatNumber(data!.totalCasos)}</div>
               </CardContent>
             </Card>
 
@@ -527,7 +640,7 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-green-600">
-                  {formatNumber(data.casosRenovados)}
+                  {formatNumber(data!.casosRenovados)}
                 </div>
               </CardContent>
             </Card>
@@ -540,7 +653,7 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-blue-600">
-                  {formatPercentage(data.tasaRenovacion)}
+                  {formatPercentage(data!.tasaRenovacion)}
                 </div>
               </CardContent>
             </Card>
@@ -552,7 +665,62 @@ export default function Analytics() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(data.gestionesRegistradas)}</div>
+                <div className="text-2xl font-bold">{formatNumber(data!.gestionesRegistradas)}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* KPI Cards Row 2 — Financial */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  💰 Total Facturado
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">
+                  {formatCOPValue(data!.totalFacturado)}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  ⏳ Pendiente de Cobro
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-amber-600">
+                  {formatCOPValue(data!.pendienteCobro)}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  📊 Valor Promedio
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatCOPValue(data!.valorPromedio)}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  🎯 % Recaudo
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">
+                  {formatPercentage(data!.porcentajeRecaudo)}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -569,7 +737,7 @@ export default function Analytics() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={data.casosPorEstado}
+                        data={data!.casosPorEstado}
                         dataKey="count"
                         nameKey="estado"
                         cx="50%"
@@ -579,7 +747,7 @@ export default function Analytics() {
                         label={({ estado, percentage }) => `${estado}: ${percentage.toFixed(0)}%`}
                         labelLine={false}
                       >
-                        {data.casosPorEstado.map((entry, index) => (
+                        {data!.casosPorEstado.map((entry, index) => (
                           <Cell
                             key={`cell-${index}`}
                             fill={ESTADO_COLORS[entry.estado] || PIE_COLORS[index % PIE_COLORS.length]}
@@ -588,7 +756,7 @@ export default function Analytics() {
                       </Pie>
                       <Tooltip
                         formatter={(value: number, name: string) => [
-                          `${value} (${((value / data.totalCasos) * 100).toFixed(1)}%)`,
+                          `${value} (${((value / data!.totalCasos) * 100).toFixed(1)}%)`,
                           name,
                         ]}
                       />
@@ -607,7 +775,7 @@ export default function Analytics() {
                 <div className="h-[250px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={data.gestionesPorAgente}
+                      data={data!.gestionesPorAgente}
                       layout="vertical"
                       margin={{ left: 80, right: 20, top: 5, bottom: 5 }}
                     >
@@ -636,18 +804,18 @@ export default function Analytics() {
                 <div className="h-[250px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart
-                      data={data.gestionesPorDia}
+                      data={data!.gestionesPorDia}
                       margin={{ left: 0, right: 20, top: 5, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis
                         dataKey="fecha"
-                        tickFormatter={(v) => format(new Date(v), "dd/MM")}
+                        tickFormatter={(v) => safeFormat(v, "dd/MM")}
                         tick={{ fontSize: 10 }}
                       />
                       <YAxis />
                       <Tooltip
-                        labelFormatter={(v) => format(new Date(v), "dd/MM/yyyy")}
+                        labelFormatter={(v) => safeFormat(v, "dd/MM/yyyy")}
                       />
                       <Line
                         type="monotone"
@@ -673,7 +841,7 @@ export default function Analytics() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={data.distribucionClientes}
+                        data={data!.distribucionClientes}
                         dataKey="count"
                         nameKey="tipo"
                         cx="50%"
@@ -683,7 +851,7 @@ export default function Analytics() {
                         label={({ tipo, percentage }) => `${tipo}: ${percentage.toFixed(0)}%`}
                         labelLine={false}
                       >
-                        {data.distribucionClientes.map((entry, index) => (
+                        {data!.distribucionClientes.map((entry, index) => (
                           <Cell
                             key={`cell-${index}`}
                             fill={PIE_COLORS[index % PIE_COLORS.length]}
@@ -692,7 +860,7 @@ export default function Analytics() {
                       </Pie>
                       <Tooltip
                         formatter={(value: number, name: string) => [
-                          `${value} (${data.distribucionClientes.find((c) => c.tipo === name)?.percentage.toFixed(1)}%)`,
+                          `${value} (${data!.distribucionClientes.find((c) => c.tipo === name)?.percentage.toFixed(1)}%)`,
                           name,
                         ]}
                       />
@@ -748,8 +916,8 @@ export default function Analytics() {
                 <div className="flex items-center justify-between mt-4">
                   <p className="text-sm text-muted-foreground">
                     Mostrando {currentPage * ROWS_PER_PAGE + 1} -{" "}
-                    {Math.min((currentPage + 1) * ROWS_PER_PAGE, data.rendimientoAgentes.length)} de{" "}
-                    {data.rendimientoAgentes.length}
+                    {Math.min((currentPage + 1) * ROWS_PER_PAGE, data!.rendimientoAgentes.length)} de{" "}
+                    {data!.rendimientoAgentes.length}
                   </p>
                   <div className="flex gap-2">
                     <Button
