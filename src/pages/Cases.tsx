@@ -17,15 +17,13 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plus, Eye, Lock, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
+import { safeFormat } from "@/lib/date";
+import { TRANSFERIDO_BG } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
 import CasesFilterBar from "@/components/cases/CasesFilterBar";
 import CaseTransfer from "@/components/cases/CaseTransfer";
-
-const TRANSFERIDO_BG = "hsl(280, 60%, 55%)";
 
 type SortField = "id" | "identificacion" | null;
 type SortDir = "asc" | "desc";
