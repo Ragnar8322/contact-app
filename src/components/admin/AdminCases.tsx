@@ -241,7 +241,7 @@ export default function AdminCases() {
                 {estadoChanged && showValorPagar && (
                   <div className="space-y-2">
                     <Label>Valor a Pagar *</Label>
-                    <InputField
+                    <Input
                       placeholder="$ 0"
                  value={editValorDisplay}
                       onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }}
