@@ -266,14 +266,6 @@ export default function Cases() {
     return allCampanas.find((c: any) => c.id === id)?.nombre || "—";
   };
 
-  // Badge class for estado
-  function estadoBadgeClass(caso: any): string {
-    if (caso.cat_estados?.nombre === "Transferido") {
-      return "text-white";
-    }
-    if (caso.cat_estados?.es_final) return "bg-muted text-muted-foreground";
-    return "bg-secondary text-secondary-foreground";
-  }
 
   const isTransferView = quickFilter === "transferidos";
 
