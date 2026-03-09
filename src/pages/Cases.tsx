@@ -150,6 +150,7 @@ export default function Cases() {
   const insertHistorial = useInsertHistorial();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null);
   const { data: history } = useCaseHistory(selectedCaseId);
 
