@@ -1,21 +1,17 @@
 import { useState, useRef } from "react";
-import { format, startOfMonth, endOfMonth } from "date-fns";
-import { es } from "date-fns/locale";
-import { BarChart2, FileSpreadsheet, FileText, RefreshCw, Loader2 } from "lucide-react";
+import { format } from "date-fns";
+import { BarChart2, FileSpreadsheet, FileText, RefreshCw, Loader2, Filter, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { useCampana } from "@/contexts/CampanaContext";
 import { useAnalyticsData } from "@/hooks/useAnalyticsData";
+import { useAnalyticsFilters } from "@/hooks/useAnalyticsFilters";
 import { cn } from "@/lib/utils";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
 import {
   PieChart,
   Pie,
@@ -28,7 +24,6 @@ import {
   LineChart,
   Line,
   ResponsiveContainer,
-  Legend,
   Tooltip,
 } from "recharts";
 import jsPDF from "jspdf";
@@ -48,20 +43,32 @@ const PIE_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b
 
 export default function Analytics() {
   const { toast } = useToast();
-  const { campanaActiva } = useCampana();
   const chartsRef = useRef<HTMLDivElement>(null);
 
-  const [dateFrom, setDateFrom] = useState<Date>(startOfMonth(new Date()));
-  const [dateTo, setDateTo] = useState<Date>(endOfMonth(new Date()));
+  const {
+    appliedFilters,
+    pendingFilters,
+    updatePendingFilter,
+    applyFilters,
+    clearFilters,
+    activeFilterCount,
+    getFilterSummary,
+    campanaOptions,
+    agenteOptions,
+    estadoOptions,
+  } = useAnalyticsFilters();
+
   const [currentPage, setCurrentPage] = useState(0);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
 
-  const { data, isLoading, refetch, isRefetching } = useAnalyticsData(
-    dateFrom,
-    dateTo,
-    campanaActiva?.id
-  );
+  const { data, isLoading, refetch, isRefetching } = useAnalyticsData({
+    dateFrom: appliedFilters.dateFrom,
+    dateTo: appliedFilters.dateTo,
+    campanaId: appliedFilters.campanaId,
+    agenteId: appliedFilters.agenteId,
+    estadoId: appliedFilters.estadoId,
+  });
 
   const ROWS_PER_PAGE = 20;
   const totalPages = Math.ceil((data?.rendimientoAgentes.length || 0) / ROWS_PER_PAGE);
@@ -72,6 +79,16 @@ export default function Analytics() {
 
   const formatNumber = (n: number) => n.toLocaleString("es-CO");
   const formatPercentage = (n: number) => `${n.toFixed(1)}%`;
+
+  const handleApplyFilters = () => {
+    applyFilters();
+    setCurrentPage(0);
+  };
+
+  const handleClearFilters = () => {
+    clearFilters();
+    setCurrentPage(0);
+  };
 
   const handleExportPdf = async () => {
     if (!data || !chartsRef.current) return;
@@ -90,20 +107,26 @@ export default function Analytics() {
       pdf.setFont("helvetica", "bold");
       pdf.text("Contact APP — Reporte de Analítica", margin, 16);
 
-      // Date range
+      // Date range and filter summary
       pdf.setTextColor(0, 0, 0);
       pdf.setFontSize(11);
       pdf.setFont("helvetica", "normal");
       pdf.text(
-        `Del ${format(dateFrom, "dd/MM/yyyy")} al ${format(dateTo, "dd/MM/yyyy")}`,
+        `Período: ${format(appliedFilters.dateFrom, "dd/MM/yyyy")} - ${format(appliedFilters.dateTo, "dd/MM/yyyy")}`,
         margin,
         35
       );
 
+      // Filter summary
+      pdf.setFontSize(9);
+      pdf.setTextColor(80, 80, 80);
+      pdf.text(`Filtros aplicados: ${getFilterSummary()}`, margin, 42);
+
       // KPI Summary Table
+      pdf.setTextColor(0, 0, 0);
       pdf.setFontSize(14);
       pdf.setFont("helvetica", "bold");
-      pdf.text("Resumen de KPIs", margin, 48);
+      pdf.text("Resumen de KPIs", margin, 55);
 
       const kpiData = [
         ["Total Casos", formatNumber(data.totalCasos)],
@@ -112,7 +135,7 @@ export default function Analytics() {
         ["Gestiones Registradas", formatNumber(data.gestionesRegistradas)],
       ];
 
-      let yPos = 55;
+      let yPos = 62;
       pdf.setFontSize(10);
       kpiData.forEach(([label, value]) => {
         pdf.setFont("helvetica", "normal");
@@ -123,7 +146,7 @@ export default function Analytics() {
       });
 
       // Charts as images
-      const canvas = await html2canvas(chartsRef.current, { 
+      const canvas = await html2canvas(chartsRef.current, {
         scale: 2,
         useCORS: true,
         logging: false,
@@ -214,8 +237,12 @@ export default function Analytics() {
     try {
       const wb = XLSX.utils.book_new();
 
-      // Sheet 1: Resumen
+      // Sheet 1: Resumen (with filter summary)
       const resumenData = [
+        ["Reporte de Analítica"],
+        [`Período: ${format(appliedFilters.dateFrom, "dd/MM/yyyy")} - ${format(appliedFilters.dateTo, "dd/MM/yyyy")}`],
+        [`Filtros: ${getFilterSummary()}`],
+        [],
         ["Métrica", "Valor"],
         ["Total Casos", data.totalCasos],
         ["Casos Renovados", data.casosRenovados],
@@ -306,44 +333,6 @@ export default function Analytics() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Date From */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="w-[140px] justify-start text-left">
-                {format(dateFrom, "dd/MM/yyyy")}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={dateFrom}
-                onSelect={(d) => d && setDateFrom(d)}
-                initialFocus
-                className="pointer-events-auto"
-              />
-            </PopoverContent>
-          </Popover>
-
-          <span className="text-muted-foreground">a</span>
-
-          {/* Date To */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="w-[140px] justify-start text-left">
-                {format(dateTo, "dd/MM/yyyy")}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={dateTo}
-                onSelect={(d) => d && setDateTo(d)}
-                initialFocus
-                className="pointer-events-auto"
-              />
-            </PopoverContent>
-          </Popover>
-
           <Button
             variant="outline"
             onClick={() => refetch()}
@@ -385,14 +374,134 @@ export default function Analytics() {
         </div>
       </div>
 
-      {isLoading ? (
+      {/* Filters Bar */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Date From */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-[130px] justify-start text-left text-sm">
+                  {format(pendingFilters.dateFrom, "dd/MM/yyyy")}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={pendingFilters.dateFrom}
+                  onSelect={(d) => d && updatePendingFilter("dateFrom", d)}
+                  initialFocus
+                  className="pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
+
+            <span className="text-muted-foreground text-sm">a</span>
+
+            {/* Date To */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-[130px] justify-start text-left text-sm">
+                  {format(pendingFilters.dateTo, "dd/MM/yyyy")}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={pendingFilters.dateTo}
+                  onSelect={(d) => d && updatePendingFilter("dateTo", d)}
+                  initialFocus
+                  className="pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
+
+            {/* Campaña Filter */}
+            <Select
+              value={pendingFilters.campanaId || "all"}
+              onValueChange={(v) => updatePendingFilter("campanaId", v === "all" ? null : v)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Todas las campañas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las campañas</SelectItem>
+                {campanaOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Agente Filter */}
+            <Select
+              value={pendingFilters.agenteId || "all"}
+              onValueChange={(v) => updatePendingFilter("agenteId", v === "all" ? null : v)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Todos los agentes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los agentes</SelectItem>
+                {agenteOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Estado Filter */}
+            <Select
+              value={pendingFilters.estadoId ? String(pendingFilters.estadoId) : "all"}
+              onValueChange={(v) =>
+                updatePendingFilter("estadoId", v === "all" ? null : Number(v))
+              }
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Todos los estados" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los estados</SelectItem>
+                {estadoOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Action Buttons */}
+            <Button onClick={handleApplyFilters} className="bg-primary hover:bg-primary/90">
+              <Filter className="h-4 w-4 mr-1" />
+              Aplicar
+            </Button>
+
+            <Button variant="ghost" onClick={handleClearFilters}>
+              <X className="h-4 w-4 mr-1" />
+              Limpiar filtros
+            </Button>
+
+            {/* Active Filter Badge */}
+            {activeFilterCount > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {activeFilterCount} filtro{activeFilterCount > 1 ? "s" : ""} activo
+                {activeFilterCount > 1 ? "s" : ""}
+              </Badge>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {isLoading || isRefetching ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : !hasData ? (
         <Card>
           <CardContent className="py-20 text-center">
-            <p className="text-muted-foreground">Sin datos para el período seleccionado</p>
+            <p className="text-muted-foreground">Sin datos para los filtros seleccionados</p>
           </CardContent>
         </Card>
       ) : (
@@ -583,7 +692,7 @@ export default function Analytics() {
                       </Pie>
                       <Tooltip
                         formatter={(value: number, name: string) => [
-                          `${value} (${data.distribucionClientes.find(c => c.tipo === name)?.percentage.toFixed(1)}%)`,
+                          `${value} (${data.distribucionClientes.find((c) => c.tipo === name)?.percentage.toFixed(1)}%)`,
                           name,
                         ]}
                       />
@@ -618,10 +727,15 @@ export default function Analytics() {
                       <TableCell className="text-right">{formatNumber(agent.gestiones)}</TableCell>
                       <TableCell className="text-right">{formatNumber(agent.renovados)}</TableCell>
                       <TableCell className="text-right">
-                        <span className={cn(
-                          agent.tasaRenovacion >= 50 ? "text-green-600" : 
-                          agent.tasaRenovacion >= 25 ? "text-amber-600" : "text-red-600"
-                        )}>
+                        <span
+                          className={cn(
+                            agent.tasaRenovacion >= 50
+                              ? "text-green-600"
+                              : agent.tasaRenovacion >= 25
+                              ? "text-amber-600"
+                              : "text-red-600"
+                          )}
+                        >
                           {formatPercentage(agent.tasaRenovacion)}
                         </span>
                       </TableCell>
@@ -633,7 +747,9 @@ export default function Analytics() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4">
                   <p className="text-sm text-muted-foreground">
-                    Mostrando {currentPage * ROWS_PER_PAGE + 1} - {Math.min((currentPage + 1) * ROWS_PER_PAGE, data.rendimientoAgentes.length)} de {data.rendimientoAgentes.length}
+                    Mostrando {currentPage * ROWS_PER_PAGE + 1} -{" "}
+                    {Math.min((currentPage + 1) * ROWS_PER_PAGE, data.rendimientoAgentes.length)} de{" "}
+                    {data.rendimientoAgentes.length}
                   </p>
                   <div className="flex gap-2">
                     <Button
