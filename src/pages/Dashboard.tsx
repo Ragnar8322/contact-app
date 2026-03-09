@@ -17,6 +17,7 @@ import {
   AlertTriangle, Clock, FolderOpen, CheckCircle, UserX, ShieldAlert, TrendingUp, RefreshCw,
 } from "lucide-react";
 import { formatCOP } from "@/lib/currency";
+import { getEstadoInlineStyle } from "@/lib/estadoColors";
 import { format, startOfDay, startOfWeek, startOfMonth, startOfYear, endOfDay, endOfWeek, endOfMonth, endOfYear, differenceInMinutes, differenceInHours, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 
