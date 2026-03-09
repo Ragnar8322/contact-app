@@ -27,7 +27,7 @@ import CaseTransfer from "@/components/cases/CaseTransfer";
 
 type SortField = "id" | "identificacion" | null;
 type SortDir = "asc" | "desc";
-type QuickFilter = "activos" | "cerrados" | "transferidos";
+type QuickFilter = "todos" | "activos" | "cerrados" | "transferidos";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
@@ -64,7 +64,9 @@ export default function Cases() {
     const transferidoEstado = estados.find((e: any) => e.nombre === "Transferido");
     const transferidoId = transferidoEstado?.id;
 
-    if (quickFilter === "transferidos") {
+    if (quickFilter === "todos") {
+      base.estadoIds = undefined;
+    } else if (quickFilter === "transferidos") {
       base.estadoIds = transferidoId ? [transferidoId] : [];
     } else if (quickFilter === "cerrados") {
       const closedIds = estados
@@ -103,12 +105,13 @@ export default function Cases() {
       const { data, error } = await supabase
         .rpc("get_casos_counts", { p_campana_id: campanaActiva!.id });
       if (error) throw error;
-      return data as { activos: number; cerrados: number; transferidos: number };
+      return data as { todos: number; activos: number; cerrados: number; transferidos: number };
     },
   });
 
-  const activosCount = tabCounts?.activos ?? null;
-  const cerradosCount = tabCounts?.cerrados ?? null;
+  const todosCount        = tabCounts?.todos ?? null;
+  const activosCount      = tabCounts?.activos ?? null;
+  const cerradosCount     = tabCounts?.cerrados ?? null;
   const transferidosCount = tabCounts?.transferidos ?? null;
 
   const showPageOverlay = isFetching && !isLoading;
@@ -289,8 +292,9 @@ export default function Cases() {
       {/* Quick Filter Tabs */}
       <div className="flex items-center gap-2">
         {([
-          { key: "activos" as QuickFilter, label: "Activos", count: activosCount },
-          { key: "cerrados" as QuickFilter, label: "Cerrados", count: cerradosCount },
+          { key: "todos" as QuickFilter,        label: "Todos",        count: todosCount },
+          { key: "activos" as QuickFilter,      label: "Activos",      count: activosCount },
+          { key: "cerrados" as QuickFilter,     label: "Cerrados",     count: cerradosCount },
           { key: "transferidos" as QuickFilter, label: "Transferidos", count: transferidosCount },
         ]).map((tab) => (
           <button
