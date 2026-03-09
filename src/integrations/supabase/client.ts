@@ -20,12 +20,13 @@ export const supabase = createClient<Database>(
       storage: localStorage,
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl: false,
     },
     global: {
-      headers: {
-        "x-app-name": "contact-app",
-        "x-app-version": "1.0.0",
-      },
+      headers: { "x-app-name": "contact-app" },
+    },
+    realtime: {
+      params: { eventsPerSecond: 2 },
     },
   }
 );
