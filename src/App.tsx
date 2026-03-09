@@ -12,6 +12,7 @@ import SelectCampaign from "@/pages/SelectCampaign";
 import Dashboard from "@/pages/Dashboard";
 import Clients from "@/pages/Clients";
 import Cases from "@/pages/Cases";
+import Analytics from "@/pages/Analytics";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
 
