@@ -125,7 +125,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <div className="border-t border-sidebar-border p-4">
           <div className="mb-3 px-1">
             <p className="text-sm font-medium truncate">{profile?.nombre}</p>
-            <p className="text-xs text-sidebar-foreground/50 capitalize">{profile?.role_name}</p>
+            <p className="text-xs text-sidebar-foreground/50 capitalize">{highestRole}</p>
           </div>
           <Button
             variant="ghost"

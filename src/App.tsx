@@ -102,9 +102,9 @@ const App = () => (
                       </RoleRoute>
                     </ProtectedRoute>
                   } />
-                  <Route path="/analitica" element={
+                    <Route path="/analitica" element={
                     <ProtectedRoute>
-                      <RoleRoute roles={["admin", "gerente"]}>
+                      <RoleRoute roles={["admin", "gerente", "supervisor"]}>
                         <Analytics />
                       </RoleRoute>
                     </ProtectedRoute>
