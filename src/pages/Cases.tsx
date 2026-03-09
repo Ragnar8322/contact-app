@@ -580,25 +580,17 @@ export default function Cases() {
                 <h3 className="mb-3 text-sm font-semibold">Historial de gestiones</h3>
                 <div className="space-y-2">
                   {history?.map((h: any) => {
-                    const isFinal = h.cat_estados?.es_final;
-                    const isTransferido = h.cat_estados?.nombre === "Transferido";
-                    const badgeClass = isTransferido
-                      ? "text-white"
-                      : isFinal
-                        ? "bg-muted text-muted-foreground"
-                        : "bg-secondary text-secondary-foreground";
+                    const estadoNombre = h.cat_estados?.nombre || h.estado_nuevo;
                     return (
                       <div key={h.id} className="rounded-lg bg-muted/50 p-3 text-sm">
                         <div className="flex items-center justify-between">
-                          {isTransferido ? (
-                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: TRANSFERIDO_BG }}>
-                              🔄 {h.cat_estados?.nombre || h.estado_nuevo}
-                            </span>
-                          ) : (
-                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass}`}>
-                              {h.cat_estados?.nombre || h.estado_nuevo}
-                            </span>
-                          )}
+                          <span
+                            className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                            style={getEstadoInlineStyle(estadoNombre)}
+                          >
+                            {estadoNombre === "Transferido" && "🔄 "}
+                            {estadoNombre}
+                          </span>
                           <span className="text-xs text-muted-foreground">
                             {safeFormat(h.fecha_cambio || h.cambiado_en, "dd/MM/yyyy HH:mm")}
                           </span>
