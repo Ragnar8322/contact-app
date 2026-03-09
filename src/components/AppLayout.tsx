@@ -2,7 +2,7 @@ import { ReactNode, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
-import { LayoutDashboard, Users, FolderOpen, LogOut, Menu, X, Settings, ChevronDown } from "lucide-react";
+import { LayoutDashboard, Users, FolderOpen, LogOut, Menu, X, Settings, ChevronDown, BarChart2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // Casos: agent, supervisor, admin (not gerente — gerente is read-only via dashboard)
   if (hasRole(["agent", "supervisor", "admin"])) {
     navItems.push({ to: "/casos", icon: FolderOpen, label: "Casos" });
+  }
+
+  // Analítica: admin, gerente only
+  if (hasRole(["admin", "gerente"])) {
+    navItems.push({ to: "/analitica", icon: BarChart2, label: "Analítica" });
   }
 
   return (

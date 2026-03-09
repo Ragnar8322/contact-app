@@ -12,6 +12,7 @@ import SelectCampaign from "@/pages/SelectCampaign";
 import Dashboard from "@/pages/Dashboard";
 import Clients from "@/pages/Clients";
 import Cases from "@/pages/Cases";
+import Analytics from "@/pages/Analytics";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
 
@@ -69,6 +70,7 @@ const App = () => (
               <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/clientes" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
               <Route path="/casos" element={<ProtectedRoute><Cases /></ProtectedRoute>} />
+              <Route path="/analitica" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
               <Route path="/ajustes" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
