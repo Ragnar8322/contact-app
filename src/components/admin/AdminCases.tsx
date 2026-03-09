@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { Eye, Lock } from "lucide-react";
+import { getEstadoInlineStyle } from "@/lib/estadoColors";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -188,8 +189,12 @@ export default function AdminCases() {
                   <TableCell>{caso.clientes?.nombre_contacto || "-"}</TableCell>
                   <TableCell>{caso.cat_tipo_servicio?.nombre}</TableCell>
                   <TableCell>
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${caso.cat_estados?.es_final ? 'bg-accent text-accent-foreground' : 'bg-secondary text-secondary-foreground'}`}>
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      style={getEstadoInlineStyle(caso.cat_estados?.nombre)}
+                    >
                       {caso.cat_estados?.es_final && <Lock className="h-3 w-3" />}
+                      {caso.cat_estados?.nombre === "Transferido" && "🔄 "}
                       {caso.cat_estados?.nombre}
                     </span>
                   </TableCell>
@@ -282,7 +287,13 @@ export default function AdminCases() {
                   {history?.map((h: any) => (
                     <div key={h.id} className="rounded-lg bg-muted p-3 text-sm">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">{h.cat_estados?.nombre}</span>
+                        <span
+                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                          style={getEstadoInlineStyle(h.cat_estados?.nombre)}
+                        >
+                          {h.cat_estados?.nombre === "Transferido" && "🔄 "}
+                          {h.cat_estados?.nombre}
+                        </span>
                         <span className="text-xs text-muted-foreground">{format(new Date(h.cambiado_en), "dd/MM/yyyy HH:mm", { locale: es })}</span>
                       </div>
                       {h.profiles?.nombre && (

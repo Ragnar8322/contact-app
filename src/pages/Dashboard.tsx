@@ -17,6 +17,7 @@ import {
   AlertTriangle, Clock, FolderOpen, CheckCircle, UserX, ShieldAlert, TrendingUp, RefreshCw,
 } from "lucide-react";
 import { formatCOP } from "@/lib/currency";
+import { getEstadoInlineStyle } from "@/lib/estadoColors";
 import { format, startOfDay, startOfWeek, startOfMonth, startOfYear, endOfDay, endOfWeek, endOfMonth, endOfYear, differenceInMinutes, differenceInHours, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -181,14 +182,8 @@ export default function Dashboard() {
     return [...filtered].sort((a: any, b: any) => new Date(b.fecha_caso).getTime() - new Date(a.fecha_caso).getTime()).slice(0, 10);
   }, [stats?.allCases, campanaActiva?.id, alertFilter, safeSlaConfigs]);
 
-  function caseBadgeClass(caso: any): string {
-    if (caso.cat_estados?.es_final) return "bg-muted text-muted-foreground";
-    const cfg = safeSlaConfigs[caso.campana_id] || { horas_riesgo: 2, horas_vencido: 6 };
-    const hrs = (Date.now() - new Date(caso.fecha_caso).getTime()) / 3600000;
-    if (hrs >= cfg.horas_vencido) return "bg-destructive text-destructive-foreground";
-    if (hrs >= cfg.horas_riesgo) return "bg-warning text-warning-foreground";
-    return "bg-primary/10 text-primary";
-  }
+  // Import at module level
+
 
   // ─── First load: show skeletons ───
   const isFirstLoad = (statsLoading || slaLoading) && !stats;
@@ -382,7 +377,11 @@ export default function Dashboard() {
                     <p className="text-sm font-medium truncate">#{caso.id}</p>
                   </div>
                   <div className="text-right flex items-center gap-2">
-                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${caseBadgeClass(caso)}`}>
+                    <span
+                      className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      style={getEstadoInlineStyle(caso.cat_estados?.nombre)}
+                    >
+                      {caso.cat_estados?.nombre === "Transferido" && "🔄 "}
                       {caso.cat_estados?.nombre || "—"}
                     </span>
                     <span className="text-xs text-muted-foreground whitespace-nowrap">{timeAgo(caso.fecha_caso)}</span>

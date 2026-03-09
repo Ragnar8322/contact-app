@@ -33,19 +33,7 @@ import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
 
-const ESTADO_COLORS: Record<string, string> = {
-  "Registrado":          "#3b82f6",
-  "En gestión":          "#f59e0b",
-  "Pendiente de Pago":   "#8b5cf6",
-  "En espera cliente":   "#06b6d4",
-  "Renovado":            "#22c55e",
-  "No Renovado":         "#ef4444",
-  "Transferido":         "hsl(280, 60%, 55%)",
-  "Numero Errado":       "#6b7280",
-  "No Interesado":       "#f97316",
-};
-
-const PIE_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"];
+import { getEstadoStyle } from "@/lib/estadoColors";
 
 const formatCOPValue = (n: number) =>
   `$ ${n.toLocaleString("es-CO", { maximumFractionDigits: 0 })}`;
@@ -693,7 +681,7 @@ export default function Analytics() {
                         {data!.casosPorEstado.map((entry, index) => (
                           <Cell
                             key={`cell-${index}`}
-                            fill={ESTADO_COLORS[entry.estado] || PIE_COLORS[index % PIE_COLORS.length]}
+                            fill={getEstadoStyle(entry.estado).hex}
                           />
                         ))}
                       </Pie>
@@ -797,7 +785,7 @@ export default function Analytics() {
                         {data!.distribucionClientes.map((entry, index) => (
                           <Cell
                             key={`cell-${index}`}
-                            fill={PIE_COLORS[index % PIE_COLORS.length]}
+                            fill={["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"][index % 7]}
                           />
                         ))}
                       </Pie>

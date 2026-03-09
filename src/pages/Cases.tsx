@@ -19,7 +19,7 @@ import { Plus, Eye, Lock, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, Arrow
 import { toast } from "sonner";
 import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
 import { safeFormat } from "@/lib/date";
-import { TRANSFERIDO_BG } from "@/lib/constants";
+import { getEstadoInlineStyle } from "@/lib/estadoColors";
 import { Input } from "@/components/ui/input";
 import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
 import CasesFilterBar from "@/components/cases/CasesFilterBar";
@@ -266,14 +266,6 @@ export default function Cases() {
     return allCampanas.find((c: any) => c.id === id)?.nombre || "—";
   };
 
-  // Badge class for estado
-  function estadoBadgeClass(caso: any): string {
-    if (caso.cat_estados?.nombre === "Transferido") {
-      return "text-white";
-    }
-    if (caso.cat_estados?.es_final) return "bg-muted text-muted-foreground";
-    return "bg-secondary text-secondary-foreground";
-  }
 
   const isTransferView = quickFilter === "transferidos";
 
@@ -381,15 +373,13 @@ export default function Cases() {
                       <TableCell className="font-mono text-sm">{caso.clientes?.identificacion || "-"}</TableCell>
                       <TableCell>{caso.cat_tipo_servicio?.nombre}</TableCell>
                       <TableCell>
-                        {caso.cat_estados?.nombre === "Transferido" ? (
-                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: TRANSFERIDO_BG }}>
-                            🔄 Transferido
-                          </span>
-                        ) : (
-                          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${caso.cat_estados?.es_final ? 'bg-muted text-muted-foreground' : 'bg-secondary text-secondary-foreground'}`}>
-                            {caso.cat_estados?.nombre}
-                          </span>
-                        )}
+                        <span
+                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                          style={getEstadoInlineStyle(caso.cat_estados?.nombre)}
+                        >
+                          {caso.cat_estados?.nombre === "Transferido" && "🔄 "}
+                          {caso.cat_estados?.nombre}
+                        </span>
                       </TableCell>
                       <TableCell>{caso.cat_agentes?.nombre || "-"}</TableCell>
                       <TableCell>{formatCOP(caso.valor_pagar)}</TableCell>
@@ -590,25 +580,17 @@ export default function Cases() {
                 <h3 className="mb-3 text-sm font-semibold">Historial de gestiones</h3>
                 <div className="space-y-2">
                   {history?.map((h: any) => {
-                    const isFinal = h.cat_estados?.es_final;
-                    const isTransferido = h.cat_estados?.nombre === "Transferido";
-                    const badgeClass = isTransferido
-                      ? "text-white"
-                      : isFinal
-                        ? "bg-muted text-muted-foreground"
-                        : "bg-secondary text-secondary-foreground";
+                    const estadoNombre = h.cat_estados?.nombre || h.estado_nuevo;
                     return (
                       <div key={h.id} className="rounded-lg bg-muted/50 p-3 text-sm">
                         <div className="flex items-center justify-between">
-                          {isTransferido ? (
-                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: TRANSFERIDO_BG }}>
-                              🔄 {h.cat_estados?.nombre || h.estado_nuevo}
-                            </span>
-                          ) : (
-                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass}`}>
-                              {h.cat_estados?.nombre || h.estado_nuevo}
-                            </span>
-                          )}
+                          <span
+                            className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                            style={getEstadoInlineStyle(estadoNombre)}
+                          >
+                            {estadoNombre === "Transferido" && "🔄 "}
+                            {estadoNombre}
+                          </span>
                           <span className="text-xs text-muted-foreground">
                             {safeFormat(h.fecha_cambio || h.cambiado_en, "dd/MM/yyyy HH:mm")}
                           </span>
@@ -652,7 +634,10 @@ function TransferColumns({ caso, campanaName }: { caso: any; campanaName: (id: s
       <TableCell className="text-sm">{safeFormat(caso.fecha_cierre, "dd/MM/yyyy HH:mm")}</TableCell>
       <TableCell className="text-sm font-medium">{caseMatch ? `#${caseMatch[1]}` : "—"}</TableCell>
       <TableCell className="text-sm text-muted-foreground">
-        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: TRANSFERIDO_BG }}>
+        <span
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+          style={getEstadoInlineStyle("Transferido")}
+        >
           🔄 Transferido
         </span>
       </TableCell>
