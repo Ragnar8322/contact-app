@@ -57,7 +57,6 @@ const formatCOPValue = (n: number) =>
 
 export default function Analytics() {
   const { hasRole } = useAuth();
-  if (!hasRole(["admin", "gerente"])) return <Navigate to="/" replace />;
 
   const chartsRef = useRef<HTMLDivElement>(null);
 
