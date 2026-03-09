@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Eye, Lock, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, ArrowRightLeft } from "lucide-react";
+import { Plus, Eye, Lock, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, ArrowRightLeft, Users } from "lucide-react";
 import { toast } from "sonner";
 import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
 import { safeFormat } from "@/lib/date";
@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
 import CasesFilterBar from "@/components/cases/CasesFilterBar";
 import CaseTransfer from "@/components/cases/CaseTransfer";
+import ProportionalAssignModal from "@/components/cases/ProportionalAssignModal";
 
 type SortField = "id" | "identificacion" | null;
 type SortDir = "asc" | "desc";
@@ -149,6 +150,7 @@ export default function Cases() {
   const insertHistorial = useInsertHistorial();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null);
   const { data: history } = useCaseHistory(selectedCaseId);
 
@@ -280,12 +282,20 @@ export default function Cases() {
           <p className="text-muted-foreground">Gestión y seguimiento de casos</p>
         </div>
         {!isGerente && (
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" />Crear Caso</Button>
-            </DialogTrigger>
-            <UnifiedCaseForm onSuccess={() => setCreateOpen(false)} />
-          </Dialog>
+          <div className="flex gap-2">
+            {hasRole(["admin", "supervisor"]) && (
+              <Button variant="outline" onClick={() => setAssignModalOpen(true)}>
+                <Users className="mr-2 h-4 w-4" />
+                Asignación Proporcional
+              </Button>
+            )}
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button><Plus className="mr-2 h-4 w-4" />Crear Caso</Button>
+              </DialogTrigger>
+              <UnifiedCaseForm onSuccess={() => setCreateOpen(false)} />
+            </Dialog>
+          </div>
         )}
       </div>
 
@@ -621,6 +631,8 @@ export default function Cases() {
           )}
         </SheetContent>
       </Sheet>
+
+      <ProportionalAssignModal open={assignModalOpen} onOpenChange={setAssignModalOpen} />
     </div>
   );
 }

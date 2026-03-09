@@ -52,9 +52,23 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { email, nombre, telefono, role_id } = await req.json();
+    const { email, nombre, telefono, role_id, role_ids } = await req.json();
     if (!email || !role_id) {
       return new Response(JSON.stringify({ error: "email and role_id required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Validate the role_id exists in user_roles
+    const { data: roleCheck } = await adminClient
+      .from("user_roles")
+      .select("id, name")
+      .eq("id", role_id)
+      .maybeSingle();
+
+    if (!roleCheck) {
+      return new Response(JSON.stringify({ error: "Rol no encontrado en BD con id: " + role_id }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -117,6 +131,16 @@ Deno.serve(async (req) => {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      }
+
+      // Save role assignments if role_ids provided
+      if (role_ids && Array.isArray(role_ids) && role_ids.length > 0) {
+        const { error: assignError } = await adminClient
+          .from("user_role_assignments")
+          .insert(role_ids.map((rid: number) => ({ user_id: newUser.user!.id, role_id: rid })));
+        if (assignError) {
+          console.error("Error saving role assignments:", assignError.message);
+        }
       }
 
       // Also create cat_agentes entry
