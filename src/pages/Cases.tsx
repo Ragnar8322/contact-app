@@ -105,12 +105,13 @@ export default function Cases() {
       const { data, error } = await supabase
         .rpc("get_casos_counts", { p_campana_id: campanaActiva!.id });
       if (error) throw error;
-      return data as { activos: number; cerrados: number; transferidos: number };
+      return data as { todos: number; activos: number; cerrados: number; transferidos: number };
     },
   });
 
-  const activosCount = tabCounts?.activos ?? null;
-  const cerradosCount = tabCounts?.cerrados ?? null;
+  const todosCount        = tabCounts?.todos ?? null;
+  const activosCount      = tabCounts?.activos ?? null;
+  const cerradosCount     = tabCounts?.cerrados ?? null;
   const transferidosCount = tabCounts?.transferidos ?? null;
 
   const showPageOverlay = isFetching && !isLoading;
