@@ -19,7 +19,7 @@ import { Plus, Eye, Lock, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, Arrow
 import { toast } from "sonner";
 import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
 import { safeFormat } from "@/lib/date";
-import { TRANSFERIDO_BG } from "@/lib/constants";
+import { getEstadoInlineStyle } from "@/lib/estadoColors";
 import { Input } from "@/components/ui/input";
 import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
 import CasesFilterBar from "@/components/cases/CasesFilterBar";
