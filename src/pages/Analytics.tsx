@@ -785,7 +785,7 @@ export default function Analytics() {
                         {data!.distribucionClientes.map((entry, index) => (
                           <Cell
                             key={`cell-${index}`}
-                            fill={PIE_COLORS[index % PIE_COLORS.length]}
+                            fill={["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"][index % 7]}
                           />
                         ))}
                       </Pie>
