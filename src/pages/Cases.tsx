@@ -292,8 +292,9 @@ export default function Cases() {
       {/* Quick Filter Tabs */}
       <div className="flex items-center gap-2">
         {([
-          { key: "activos" as QuickFilter, label: "Activos", count: activosCount },
-          { key: "cerrados" as QuickFilter, label: "Cerrados", count: cerradosCount },
+          { key: "todos" as QuickFilter,        label: "Todos",        count: todosCount },
+          { key: "activos" as QuickFilter,      label: "Activos",      count: activosCount },
+          { key: "cerrados" as QuickFilter,     label: "Cerrados",     count: cerradosCount },
           { key: "transferidos" as QuickFilter, label: "Transferidos", count: transferidosCount },
         ]).map((tab) => (
           <button
