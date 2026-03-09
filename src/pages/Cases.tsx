@@ -282,12 +282,20 @@ export default function Cases() {
           <p className="text-muted-foreground">Gestión y seguimiento de casos</p>
         </div>
         {!isGerente && (
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" />Crear Caso</Button>
-            </DialogTrigger>
-            <UnifiedCaseForm onSuccess={() => setCreateOpen(false)} />
-          </Dialog>
+          <div className="flex gap-2">
+            {hasRole(["admin", "supervisor"]) && (
+              <Button variant="outline" onClick={() => setAssignModalOpen(true)}>
+                <Users className="mr-2 h-4 w-4" />
+                Asignación Proporcional
+              </Button>
+            )}
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button><Plus className="mr-2 h-4 w-4" />Crear Caso</Button>
+              </DialogTrigger>
+              <UnifiedCaseForm onSuccess={() => setCreateOpen(false)} />
+            </Dialog>
+          </div>
         )}
       </div>
 
