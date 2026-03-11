@@ -12,7 +12,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Verify the caller is admin
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No authorization" }), {
@@ -24,7 +23,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify caller is admin using their token
     const callerClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -36,7 +34,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check admin role
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const { data: profile } = await adminClient
       .from("profiles")
@@ -45,8 +42,10 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const roleName = (profile?.user_roles as any)?.name;
-    if (roleName !== "admin") {
-      return new Response(JSON.stringify({ error: "Admin only" }), {
+
+    // ✅ FIX 1: Permitir admin y supervisor crear usuarios
+    if (!["admin", "supervisor"].includes(roleName)) {
+      return new Response(JSON.stringify({ error: "No tienes permisos para crear usuarios" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -60,7 +59,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Validate the role_id exists in user_roles
     const { data: roleCheck } = await adminClient
       .from("user_roles")
       .select("id, name")
@@ -74,30 +72,27 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check if user already exists and handle accordingly
-    const { data: existingUsers } = await adminClient.auth.admin.listUsers();
+    // ✅ FIX 2: Paginación para evitar perder usuarios existentes
+    const { data: existingUsers } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
     const existingUser = existingUsers?.users?.find((u: any) => u.email === email);
-    
+
     if (existingUser) {
-      // Check if they have a profile
       const { data: existingProfile } = await adminClient
         .from("profiles")
         .select("user_id")
         .eq("user_id", existingUser.id)
         .maybeSingle();
-      
+
       if (existingProfile) {
         return new Response(JSON.stringify({ error: "Este usuario ya existe y tiene un perfil asignado." }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      
-      // User exists in Auth but has no profile - delete and recreate
+
       await adminClient.auth.admin.deleteUser(existingUser.id);
     }
 
-    // Create auth user with a temporary password
     const tempPassword = crypto.randomUUID().slice(0, 12) + "Aa1!";
     const { data: newUser, error: authError } = await adminClient.auth.admin.createUser({
       email,
@@ -113,7 +108,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Upsert profile to handle race condition with trigger
     if (newUser?.user) {
       const { error: profileError } = await adminClient
         .from("profiles")
@@ -125,7 +119,6 @@ Deno.serve(async (req) => {
         }, { onConflict: "user_id" });
 
       if (profileError) {
-        // Cleanup: delete the auth user if profile creation fails
         await adminClient.auth.admin.deleteUser(newUser.user.id);
         return new Response(JSON.stringify({ error: "Error creando perfil: " + profileError.message }), {
           status: 500,
@@ -133,7 +126,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Save role assignments if role_ids provided
       if (role_ids && Array.isArray(role_ids) && role_ids.length > 0) {
         const { error: assignError } = await adminClient
           .from("user_role_assignments")
@@ -143,10 +135,12 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Also create cat_agentes entry
-      await adminClient
-        .from("cat_agentes")
-        .upsert({ user_id: newUser.user.id, nombre: nombre || email, activo: true });
+      // ✅ FIX 3: cat_agentes solo para agentes
+      if (roleCheck.name === "agent") {
+        await adminClient
+          .from("cat_agentes")
+          .upsert({ user_id: newUser.user.id, nombre: nombre || email, activo: true });
+      }
     }
 
     return new Response(
