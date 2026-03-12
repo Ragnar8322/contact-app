@@ -21,6 +21,9 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      // Temporal: warning mientras se elimina any progresivamente (Fase 3)
+      // Cambiar a "error" cuando se completen los tipos de dominio
+      "@typescript-eslint/no-explicit-any": "warn",
     },
   },
 );
