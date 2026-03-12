@@ -18,6 +18,40 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // Recharts + D3 → chunk separado (era el chunk de 969 kB)
+          if (id.includes("recharts") || id.includes("d3-") || id.includes("victory-")) {
+            return "charts";
+          }
+          // Radix UI → chunk de componentes UI
+          if (id.includes("@radix-ui")) {
+            return "radix-ui";
+          }
+          // React core + router → vendor
+          if (
+            id.includes("node_modules/react/") ||
+            id.includes("node_modules/react-dom/") ||
+            id.includes("node_modules/react-router-dom/") ||
+            id.includes("node_modules/react-router/")
+          ) {
+            return "vendor";
+          }
+          // Supabase → chunk separado
+          if (id.includes("@supabase")) {
+            return "supabase";
+          }
+          // date-fns → chunk separado (era format--RL8_NGy.js de 18kB + calendar)
+          if (id.includes("date-fns")) {
+            return "date-fns";
+          }
+        },
+      },
+    },
+  },
   test: {
     globals: true,
     environment: "jsdom",
