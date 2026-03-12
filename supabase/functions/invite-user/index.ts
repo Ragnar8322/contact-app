@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization" }), {
+      return new Response(JSON.stringify({ error: "No autorizado: falta token" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -22,43 +22,54 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    const callerClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    // 1. Verificar sesion del caller
+    const callerClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: { user: caller } } = await callerClient.auth.getUser();
-    if (!caller) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+    const { data: { user: caller }, error: callerError } = await callerClient.auth.getUser();
+    if (!caller || callerError) {
+      return new Response(JSON.stringify({ error: "Sesion invalida o expirada" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const { data: profile } = await adminClient
+
+    // 2. Verificar rol del caller en tabla "profiles"
+    const { data: callerProfile, error: profileFetchError } = await adminClient
       .from("profiles")
       .select("role_id, user_roles(name)")
       .eq("user_id", caller.id)
       .maybeSingle();
 
-    const roleName = (profile?.user_roles as any)?.name;
+    console.log("DEBUG caller_id:", caller.id, "| profile:", JSON.stringify(callerProfile), "| fetchError:", profileFetchError?.message);
 
-    // ✅ FIX 1: Permitir admin y supervisor crear usuarios
-    if (!["admin", "supervisor"].includes(roleName)) {
-      return new Response(JSON.stringify({ error: "No tienes permisos para crear usuarios" }), {
+    const callerRoleName = (callerProfile?.user_roles as any)?.name;
+
+    // Solo admin y supervisor pueden crear usuarios
+    if (!["admin", "supervisor"].includes(callerRoleName)) {
+      return new Response(JSON.stringify({
+        error: `Sin permisos. Tu rol es: ${callerRoleName ?? "sin perfil"}`
+      }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // 3. Leer body — el frontend envia role_id (numero)
     const { email, nombre, telefono, role_id, role_ids } = await req.json();
+
     if (!email || !role_id) {
-      return new Response(JSON.stringify({ error: "email and role_id required" }), {
+      return new Response(JSON.stringify({ error: "email y role_id son obligatorios" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // 4. Validar que el role_id existe en user_roles
     const { data: roleCheck } = await adminClient
       .from("user_roles")
       .select("id, name")
@@ -66,13 +77,13 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!roleCheck) {
-      return new Response(JSON.stringify({ error: "Rol no encontrado en BD con id: " + role_id }), {
+      return new Response(JSON.stringify({ error: "Rol no encontrado con id: " + role_id }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // ✅ FIX 2: Paginación para evitar perder usuarios existentes
+    // 5. Verificar si el email ya existe
     const { data: existingUsers } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
     const existingUser = existingUsers?.users?.find((u: any) => u.email === email);
 
@@ -84,15 +95,17 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (existingProfile) {
-        return new Response(JSON.stringify({ error: "Este usuario ya existe y tiene un perfil asignado." }), {
+        return new Response(JSON.stringify({
+          error: `El correo ${email} ya esta registrado en el sistema`
+        }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
       await adminClient.auth.admin.deleteUser(existingUser.id);
     }
 
+    // 6. Crear usuario con contrasena temporal
     const tempPassword = crypto.randomUUID().slice(0, 12) + "Aa1!";
     const { data: newUser, error: authError } = await adminClient.auth.admin.createUser({
       email,
@@ -102,14 +115,15 @@ Deno.serve(async (req) => {
     });
 
     if (authError) {
-      return new Response(JSON.stringify({ error: authError.message }), {
+      return new Response(JSON.stringify({ error: "Error creando usuario: " + authError.message }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (newUser?.user) {
-      const { error: profileError } = await adminClient
+      // 7. Crear perfil en tabla "profiles"
+      const { error: upsertError } = await adminClient
         .from("profiles")
         .upsert({
           user_id: newUser.user.id,
@@ -118,24 +132,22 @@ Deno.serve(async (req) => {
           role_id,
         }, { onConflict: "user_id" });
 
-      if (profileError) {
+      if (upsertError) {
         await adminClient.auth.admin.deleteUser(newUser.user.id);
-        return new Response(JSON.stringify({ error: "Error creando perfil: " + profileError.message }), {
+        return new Response(JSON.stringify({ error: "Error creando perfil: " + upsertError.message }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
+      // 8. Guardar asignaciones de roles adicionales
       if (role_ids && Array.isArray(role_ids) && role_ids.length > 0) {
-        const { error: assignError } = await adminClient
+        await adminClient
           .from("user_role_assignments")
           .insert(role_ids.map((rid: number) => ({ user_id: newUser.user!.id, role_id: rid })));
-        if (assignError) {
-          console.error("Error saving role assignments:", assignError.message);
-        }
       }
 
-      // ✅ FIX 3: cat_agentes solo para agentes
+      // 9. cat_agentes solo para agentes (role_id = 2)
       if (roleCheck.name === "agent") {
         await adminClient
           .from("cat_agentes")
@@ -144,14 +156,16 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ user: { id: newUser.user?.id }, temp_password: tempPassword }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({
+        success: true,
+        user: { id: newUser.user?.id },
+        temp_password: tempPassword,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+
   } catch (err) {
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
+    return new Response(JSON.stringify({ error: "Error interno: " + (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
