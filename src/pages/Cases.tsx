@@ -41,18 +41,12 @@ export default function Cases() {
   const { data: agentesData } = useAgentes();
   const { data: allCampanas = [] } = useCampanasList();
 
-  // Quick filter tabs
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("activos");
-
-  // Filters
   const [searchText, setSearchText] = useState("");
   const [filters, setFilters] = useState<CasesFilters>({});
-
-  // Pagination
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  // Build estado filters based on quick filter
   const filtersWithCampana = useMemo(() => {
     const base: CasesFilters = {
       ...filters,
@@ -84,7 +78,6 @@ export default function Cases() {
     return base;
   }, [filters, campanaActiva, estados, quickFilter, searchText]);
 
-  // Reset to page 1 when filters or quickFilter change
   useEffect(() => {
     setPage(1);
   }, [filtersWithCampana, quickFilter]);
@@ -97,7 +90,6 @@ export default function Cases() {
   const hasNextPage = paginatedResult?.hasNextPage ?? false;
   const hasPrevPage = paginatedResult?.hasPrevPage ?? false;
 
-  // Counts for tabs — use single RPC
   const { data: tabCounts } = useQuery({
     queryKey: ["casos-counts", campanaActiva?.id],
     enabled: !!campanaActiva?.id,
@@ -117,7 +109,6 @@ export default function Cases() {
 
   const showPageOverlay = isFetching && !isLoading;
 
-  // Sorting (client-side on current page)
   const [sortField, setSortField] = useState<SortField>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -130,7 +121,6 @@ export default function Cases() {
     }
   };
 
-  // Client-side sorting on current page (search is now server-side)
   const filteredCases = useMemo(() => {
     let result = cases;
     if (sortField) {
@@ -155,10 +145,8 @@ export default function Cases() {
   const { data: history } = useCaseHistory(selectedCaseId);
 
   const selectedCase = filteredCases?.find((c: any) => c.id === selectedCaseId) || cases?.find((c: any) => c.id === selectedCaseId);
-
   const isTransferredCase = selectedCase?.cat_estados?.nombre === "Transferido";
 
-  // Parse transfer info from observacion_cierre
   const transferInfo = useMemo(() => {
     if (!isTransferredCase || !selectedCase?.observacion_cierre) return null;
     const obs = selectedCase.observacion_cierre as string;
@@ -170,7 +158,6 @@ export default function Cases() {
     };
   }, [isTransferredCase, selectedCase]);
 
-  // Edit form
   const [editEstado, setEditEstado] = useState(0);
   const [originalEstado, setOriginalEstado] = useState(0);
   const [editObservaciones, setEditObservaciones] = useState("");
@@ -261,16 +248,13 @@ export default function Cases() {
     }
   };
 
-  // Pagination display
   const fromRecord = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
   const toRecord = Math.min(page * pageSize, totalCount);
 
-  // Helper: campana name by id
   const campanaName = (id: string | null) => {
     if (!id) return "—";
     return allCampanas.find((c: any) => c.id === id)?.nombre || "—";
   };
-
 
   const isTransferView = quickFilter === "transferidos";
 
@@ -289,7 +273,7 @@ export default function Cases() {
                 className="bg-indigo-600 hover:bg-indigo-700 text-white border-0 shadow-sm"
               >
                 <Users className="mr-2 h-4 w-4" />
-                Asignación Proporcional
+                Asignar Casos
               </Button>
             )}
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -415,7 +399,6 @@ export default function Cases() {
             </TableBody>
           </Table>
 
-          {/* Pagination Bar */}
           {totalCount > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t px-4 py-3">
               <p className="text-sm text-muted-foreground">
@@ -463,7 +446,6 @@ export default function Cases() {
           </SheetHeader>
           {selectedCase && (
             <div className="mt-4 space-y-5">
-              {/* Transferred banner */}
               {isTransferredCase && transferInfo && (
                 <Alert className="border-primary/50 bg-primary/5">
                   <AlertDescription className="text-sm">
@@ -502,7 +484,6 @@ export default function Cases() {
                 <p className="mt-1">{selectedCase.descripcion_inicial}</p>
               </div>
 
-              {/* Client Contact Info */}
               <div className="text-sm space-y-1.5">
                 <span className="font-medium text-foreground">Datos de Contacto</span>
                 <div className="flex items-center gap-1.5">
@@ -592,7 +573,6 @@ export default function Cases() {
 
               <Separator />
 
-              {/* History */}
               <div>
                 <h3 className="mb-3 text-sm font-semibold">Historial de gestiones</h3>
                 <div className="space-y-2">
@@ -625,7 +605,6 @@ export default function Cases() {
                   )}
                 </div>
 
-                {/* Transfer - hidden for transferred cases and gerente */}
                 {!isTransferredCase && !isGerente && (
                   <CaseTransfer caso={selectedCase} onTransferred={() => setSelectedCaseId(null)} />
                 )}
@@ -640,7 +619,6 @@ export default function Cases() {
   );
 }
 
-/* ─── Transfer Columns Component ─── */
 function TransferColumns({ caso, campanaName }: { caso: any; campanaName: (id: string | null) => string }) {
   const obs = (caso.observacion_cierre || "") as string;
   const caseMatch = obs.match(/Nuevo caso #(\d+)/);
