@@ -1,12 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-app-name",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -24,7 +21,7 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // 1. Verificar sesion del caller
+    // 1. Verificar sesión del caller
     const callerClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -38,7 +35,7 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // 2. Verificar rol del caller en tabla "profiles"
+    // 2. Verificar rol del caller
     const { data: callerProfile, error: profileFetchError } = await adminClient
       .from("profiles")
       .select("role_id, user_roles(name)")
@@ -47,10 +44,8 @@ Deno.serve(async (req) => {
 
     console.log("DEBUG caller_id:", caller.id, "| profile:", JSON.stringify(callerProfile), "| fetchError:", profileFetchError?.message);
 
-    // Comparar en minúsculas para evitar fallos por capitalización (Admin vs admin)
     const callerRoleName = ((callerProfile?.user_roles as any)?.name ?? "").toLowerCase();
 
-    // Solo admin y supervisor pueden crear usuarios
     if (!["admin", "supervisor"].includes(callerRoleName)) {
       return new Response(JSON.stringify({
         error: `Sin permisos. Tu rol es: ${callerRoleName || "sin perfil"}`
@@ -60,7 +55,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 3. Leer body — el frontend envia role_id (numero)
+    // 3. Leer body
     const { email, nombre, telefono, role_id, role_ids } = await req.json();
 
     if (!email || !role_id) {
@@ -70,7 +65,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 4. Validar que el role_id existe en user_roles
+    // 4. Validar que el role_id existe
     const { data: roleCheck } = await adminClient
       .from("user_roles")
       .select("id, name")
@@ -84,9 +79,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 5. Verificar si el email ya existe
-    const { data: existingUsers } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
-    const existingUser = existingUsers?.users?.find((u: any) => u.email === email);
+    // 5. Verificar si el email ya existe — búsqueda filtrada server-side (no listUsers masivo)
+    // Usa el endpoint REST con ?filter= para traer solo 1 resultado en vez de hasta 1000 usuarios
+    const filterRes = await fetch(
+      `${supabaseUrl}/auth/v1/admin/users?filter=${encodeURIComponent(email)}&page=1&per_page=1`,
+      {
+        headers: {
+          Authorization: `Bearer ${serviceRoleKey}`,
+          apikey: serviceRoleKey,
+        },
+      }
+    );
+    const filterData = await filterRes.json();
+    const existingUser = filterData?.users?.[0] || null;
 
     if (existingUser) {
       const { data: existingProfile } = await adminClient
@@ -106,7 +111,7 @@ Deno.serve(async (req) => {
       await adminClient.auth.admin.deleteUser(existingUser.id);
     }
 
-    // 6. Crear usuario con contrasena temporal
+    // 6. Crear usuario con contraseña temporal
     const tempPassword = crypto.randomUUID().slice(0, 12) + "Aa1!";
     const { data: newUser, error: authError } = await adminClient.auth.admin.createUser({
       email,
@@ -123,7 +128,7 @@ Deno.serve(async (req) => {
     }
 
     if (newUser?.user) {
-      // 7. Crear perfil en tabla "profiles"
+      // 7. Crear perfil
       const { error: upsertError } = await adminClient
         .from("profiles")
         .upsert({
@@ -141,7 +146,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      // 8. Guardar asignaciones de roles adicionales
+      // 8. Roles adicionales
       if (role_ids && Array.isArray(role_ids) && role_ids.length > 0) {
         await adminClient
           .from("user_role_assignments")
