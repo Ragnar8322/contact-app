@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -39,11 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<RoleName[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
-  const isFetchingRef = useRef(false);
 
   const fetchProfile = useCallback(async (userId: string) => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
     setProfileLoading(true);
     try {
       const [profileResult, rolesResult] = await Promise.all([
@@ -62,32 +59,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error("Error loading profile:", profileResult.error.message);
         return;
       }
-      if (rolesResult.error) {
-        console.error("Error loading roles:", rolesResult.error.message);
-      }
 
       const profileData = profileResult.data;
-      const assignments = rolesResult.data;
+      const assignments = rolesResult.data ?? [];
 
       if (profileData) {
-        const fallbackRole = (profileData.user_roles as any)?.name || "agent";
+        const fallbackRole = (profileData.user_roles as any)?.name as RoleName || "agent";
+
         setProfile({
           ...profileData,
           role_name: fallbackRole,
           must_change_password: (profileData as any).must_change_password ?? false,
         });
 
-        if (assignments && assignments.length > 0) {
+        if (assignments.length > 0) {
           const roleNames = assignments
             .map(a => (a.user_roles as any)?.name as RoleName)
             .filter(Boolean);
-          setRoles(roleNames);
+          setRoles(roleNames.length > 0 ? roleNames : [fallbackRole]);
         } else {
-          setRoles([fallbackRole as RoleName]);
+          setRoles([fallbackRole]);
         }
       }
+    } catch (err) {
+      console.error("fetchProfile error:", err);
     } finally {
-      isFetchingRef.current = false;
       setProfileLoading(false);
     }
   }, []);
@@ -97,20 +93,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, fetchProfile]);
 
   useEffect(() => {
+    let lastUserId: string | null = null;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+      (event, newSession) => {
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
         setLoading(false);
 
-        if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
-          if (session?.user) {
-            fetchProfile(session.user.id);
-          } else {
-            setProfileLoading(false);
+        if (newSession?.user) {
+          // Solo cargar perfil si cambió el usuario (evita doble carga INITIAL_SESSION + SIGNED_IN)
+          if (newSession.user.id !== lastUserId) {
+            lastUserId = newSession.user.id;
+            fetchProfile(newSession.user.id);
           }
-        }
-        if (event === "SIGNED_OUT") {
+        } else {
+          lastUserId = null;
           setProfile(null);
           setRoles([]);
           setProfileLoading(false);
