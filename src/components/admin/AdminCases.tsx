@@ -11,13 +11,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { Eye, Lock } from "lucide-react";
+import { Eye, Lock, ChevronLeft, ChevronRight } from "lucide-react";
 import { getEstadoInlineStyle } from "@/lib/estadoColors";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useCaseHistory } from "@/hooks/useCases";
 import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
+
+const PAGE_SIZE = 50;
 
 export default function AdminCases() {
   const { user } = useAuth();
@@ -32,14 +34,27 @@ export default function AdminCases() {
   const [filterAgente, setFilterAgente] = useState<string>("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [page, setPage] = useState(0);
 
   const filters = {
     estado_id: filterEstado && filterEstado !== "all" ? Number(filterEstado) : undefined,
     agente_id: filterAgente && filterAgente !== "all" ? filterAgente : undefined,
     from: filterFrom || undefined,
     to: filterTo || undefined,
+    page,
+    pageSize: PAGE_SIZE,
   };
-  const { data: cases, isLoading } = useAllCases(filters);
+
+  // Resetear página al cambiar filtros
+  const handleFilterChange = (setter: (v: string) => void) => (v: string) => {
+    setter(v);
+    setPage(0);
+  };
+
+  const { data: result, isLoading } = useAllCases(filters);
+  const cases = result?.data ?? [];
+  const totalCount = result?.count ?? 0;
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   // Detail
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -133,7 +148,7 @@ export default function AdminCases() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
               <Label className="text-xs">Estado</Label>
-              <Select value={filterEstado} onValueChange={setFilterEstado}>
+              <Select value={filterEstado} onValueChange={handleFilterChange(setFilterEstado)}>
                 <SelectTrigger className="h-8"><SelectValue placeholder="Todos" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
@@ -143,7 +158,7 @@ export default function AdminCases() {
             </div>
             <div>
               <Label className="text-xs">Agente</Label>
-              <Select value={filterAgente} onValueChange={setFilterAgente}>
+              <Select value={filterAgente} onValueChange={handleFilterChange(setFilterAgente)}>
                 <SelectTrigger className="h-8"><SelectValue placeholder="Todos" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
@@ -153,11 +168,11 @@ export default function AdminCases() {
             </div>
             <div>
               <Label className="text-xs">Desde</Label>
-              <Input type="date" className="h-8" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} />
+              <Input type="date" className="h-8" value={filterFrom} onChange={e => { setFilterFrom(e.target.value); setPage(0); }} />
             </div>
             <div>
               <Label className="text-xs">Hasta</Label>
-              <Input type="date" className="h-8" value={filterTo} onChange={e => setFilterTo(e.target.value)} />
+              <Input type="date" className="h-8" value={filterTo} onChange={e => { setFilterTo(e.target.value); setPage(0); }} />
             </div>
           </div>
         </CardContent>
@@ -206,6 +221,38 @@ export default function AdminCases() {
               ))}
             </TableBody>
           </Table>
+
+          {/* Paginación */}
+          {totalCount > 0 && (
+            <div className="flex items-center justify-between border-t px-4 py-3">
+              <p className="text-sm text-muted-foreground">
+                Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalCount)} de {totalCount.toLocaleString("es-CO")} casos
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0 || isLoading}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Anterior
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Página {page + 1} de {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={page >= totalPages - 1 || isLoading}
+                >
+                  Siguiente
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -248,7 +295,7 @@ export default function AdminCases() {
                     <Label>Valor a Pagar *</Label>
                     <Input
                       placeholder="$ 0"
-                 value={editValorDisplay}
+                      value={editValorDisplay}
                       onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }}
                     />
                     {valorError && <p className="text-sm text-destructive">{valorError}</p>}
