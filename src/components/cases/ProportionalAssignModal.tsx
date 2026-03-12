@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
-import { useEstados, useAgentes } from "@/hooks/useCases";
+import { useEstados } from "@/hooks/useCases";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,7 +17,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-type AssignMode = "sin_agente" | "todos_activos";
+type AssignMode = "registrado" | "todos_activos";
 
 interface AgentWithCount {
   user_id: string;
@@ -30,10 +30,9 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
   const { user } = useAuth();
   const { campanaActiva } = useCampana();
   const { data: estados } = useEstados();
-  const { data: agentesData } = useAgentes();
   const qc = useQueryClient();
 
-  const [mode, setMode] = useState<AssignMode>("sin_agente");
+  const [mode, setMode] = useState<AssignMode>("registrado");
   const [selectedAgentId, setSelectedAgentId] = useState<string>("all");
   const [agentsWithCounts, setAgentsWithCounts] = useState<AgentWithCount[]>([]);
   const [casesToAssignCount, setCasesToAssignCount] = useState(0);
@@ -44,17 +43,46 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
     ?.filter((e: any) => !e.es_final && e.nombre !== "Transferido")
     .map((e: any) => e.id) ?? [];
 
+  const registradoEstadoId = estados?.find((e: any) => e.nombre === "Registrado")?.id;
+
   useEffect(() => {
-    if (!open || !campanaActiva?.id || !agentesData || activeEstadoIds.length === 0) return;
+    if (!open || !campanaActiva?.id || activeEstadoIds.length === 0) return;
     loadData();
-  }, [open, campanaActiva?.id, agentesData, mode, estados]);
+  }, [open, campanaActiva?.id, mode, estados]);
 
   async function loadData() {
-    if (!campanaActiva?.id || !agentesData) return;
+    if (!campanaActiva?.id) return;
     setLoading(true);
     try {
-      const counts = await Promise.all(
-        agentesData.map(async (agent: any) => {
+      // Cargar solo usuarios con rol 'agent'
+      const { data: roleAssignments, error: roleErr } = await supabase
+        .from("user_role_assignments")
+        .select("user_id, user_roles(name)");
+
+      if (roleErr) throw roleErr;
+
+      const agentUserIds = (roleAssignments ?? [])
+        .filter((r: any) => r.user_roles?.name === "agent")
+        .map((r: any) => r.user_id);
+
+      if (agentUserIds.length === 0) {
+        setAgentsWithCounts([]);
+        setCasesToAssignCount(0);
+        setLoading(false);
+        return;
+      }
+
+      // Obtener nombres desde profiles
+      const { data: profiles, error: profErr } = await supabase
+        .from("profiles")
+        .select("user_id, nombre")
+        .in("user_id", agentUserIds);
+
+      if (profErr) throw profErr;
+
+      // Contar casos activos por agente
+      const counts: AgentWithCount[] = await Promise.all(
+        (profiles ?? []).map(async (agent: any) => {
           const { count } = await supabase
             .from("casos")
             .select("id", { count: "exact", head: true })
@@ -65,20 +93,28 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
         })
       );
 
+      // Casos a asignar según modo
       let casesQuery = supabase
         .from("casos")
         .select("id", { count: "exact", head: true })
-        .eq("campana_id", campanaActiva.id)
-        .in("estado_id", activeEstadoIds);
+        .eq("campana_id", campanaActiva.id);
 
-      if (mode === "sin_agente") {
-        casesQuery = casesQuery.is("agente_id", null);
+      if (mode === "registrado") {
+        if (!registradoEstadoId) {
+          toast.error("No se encontró el estado 'Registrado'.");
+          setLoading(false);
+          return;
+        }
+        casesQuery = casesQuery.eq("estado_id", registradoEstadoId);
+      } else {
+        casesQuery = casesQuery.in("estado_id", activeEstadoIds);
       }
 
       const { count: casesCount } = await casesQuery;
       const toAssign = casesCount ?? 0;
       setCasesToAssignCount(toAssign);
 
+      // Calcular distribución proyectada
       if (counts.length > 0 && toAssign > 0) {
         if (mode === "todos_activos") {
           const totalActive = counts.reduce((s, a) => s + a.currentCount, 0);
@@ -108,7 +144,6 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
     }
   }
 
-  // Agente seleccionado actualmente en el dropdown (para previsualizar)
   const selectedAgent = selectedAgentId === "all"
     ? null
     : agentsWithCounts.find(a => a.user_id === selectedAgentId);
@@ -120,11 +155,13 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
       let casesQuery = supabase
         .from("casos")
         .select("id, estado_id")
-        .eq("campana_id", campanaActiva.id)
-        .in("estado_id", activeEstadoIds);
+        .eq("campana_id", campanaActiva.id);
 
-      if (mode === "sin_agente") {
-        casesQuery = casesQuery.is("agente_id", null);
+      if (mode === "registrado") {
+        if (!registradoEstadoId) throw new Error("Estado 'Registrado' no encontrado.");
+        casesQuery = casesQuery.eq("estado_id", registradoEstadoId);
+      } else {
+        casesQuery = casesQuery.in("estado_id", activeEstadoIds);
       }
 
       const { data: casesToAssign, error: fetchErr } = await casesQuery;
@@ -174,7 +211,7 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
         if (error) throw error;
       }
 
-      toast.success(`${updates.length} casos asignados proporcionalmente entre ${sorted.length} agentes`);
+      toast.success(`${updates.length} casos asignados entre ${sorted.length} agentes`);
       qc.invalidateQueries({ queryKey: ["casos"] });
       qc.invalidateQueries({ queryKey: ["casos-counts"] });
       onOpenChange(false);
@@ -194,12 +231,12 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
             Asignar Casos
           </DialogTitle>
           <DialogDescription>
-            Redistribuye casos activos proporcionalmente entre los agentes.
+            Distribuye casos entre los agentes activos de la campaña.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Modo de asignación */}
+          {/* Modo */}
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground uppercase tracking-wide">¿Qué casos asignar?</Label>
             <Select value={mode} onValueChange={(v) => setMode(v as AssignMode)}>
@@ -207,7 +244,7 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="sin_agente">Solo casos sin agente asignado</SelectItem>
+                <SelectItem value="registrado">Casos en estado "Registrado"</SelectItem>
                 <SelectItem value="todos_activos">Todos los casos activos (redistribuir todo)</SelectItem>
               </SelectContent>
             </Select>
@@ -219,15 +256,15 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
             </div>
           ) : (
             <>
-              {/* Resumen general */}
+              {/* Resumen */}
               <div className="rounded-lg border bg-muted/40 px-4 py-3 flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Casos a reasignar</span>
+                <span className="text-sm text-muted-foreground">Casos a asignar</span>
                 <Badge variant={casesToAssignCount > 0 ? "default" : "secondary"} className="text-sm font-bold px-3">
                   {casesToAssignCount}
                 </Badge>
               </div>
 
-              {/* Dropdown de agentes con preview */}
+              {/* Dropdown agentes */}
               {agentsWithCounts.length > 0 && (
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground uppercase tracking-wide">Ver distribución por agente</Label>
@@ -253,7 +290,7 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
                     </SelectContent>
                   </Select>
 
-                  {/* Preview card */}
+                  {/* Preview */}
                   {selectedAgent ? (
                     <div className="rounded-lg border bg-card p-3 space-y-2">
                       <p className="text-sm font-medium">{selectedAgent.nombre}</p>
@@ -290,7 +327,7 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
               )}
 
               {agentsWithCounts.length === 0 && (
-                <p className="text-sm text-center text-muted-foreground py-2">No hay agentes activos</p>
+                <p className="text-sm text-center text-muted-foreground py-2">No hay agentes con rol Agente activos</p>
               )}
             </>
           )}
