@@ -1,6 +1,8 @@
 import { useCampana } from "@/contexts/CampanaContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
-import { FolderOpen, Headphones } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { FolderOpen, Headphones, LogOut } from "lucide-react";
 
 const CAMPAIGN_ICONS: Record<string, React.ReactNode> = {
   "renovación web": <FolderOpen className="h-10 w-10" />,
@@ -13,10 +15,26 @@ function getIcon(nombre: string) {
 
 export default function SelectCampaign() {
   const { campanas, setCampanaActiva, noCampaigns } = useCampana();
+  const { signOut, profile } = useAuth();
+
+  const headerBar = (
+    <div className="absolute top-4 right-4">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={signOut}
+        className="text-muted-foreground hover:text-foreground gap-2"
+      >
+        <LogOut className="h-4 w-4" />
+        Cerrar sesión
+      </Button>
+    </div>
+  );
 
   if (noCampaigns) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="relative flex min-h-screen items-center justify-center bg-background p-4">
+        {headerBar}
         <Card className="w-full max-w-md border-0 shadow-xl">
           <CardContent className="p-8 text-center space-y-4">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
@@ -26,6 +44,9 @@ export default function SelectCampaign() {
             <p className="text-muted-foreground text-sm">
               No tienes campañas asignadas. Contacta a un administrador.
             </p>
+            {profile && (
+              <p className="text-xs text-muted-foreground">Sesión iniciada como <strong>{profile.nombre}</strong></p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -33,7 +54,8 @@ export default function SelectCampaign() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-background p-4">
+      {headerBar}
       <div className="w-full max-w-2xl space-y-6">
         <div className="text-center space-y-2">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-xl">

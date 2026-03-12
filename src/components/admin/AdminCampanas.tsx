@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 export default function AdminCampanas() {
@@ -28,12 +29,28 @@ export default function AdminCampanas() {
   const { data: allCasesResult } = useAllCases({
     estado_id: filterEstado && filterEstado !== "all" ? Number(filterEstado) : undefined,
   });
-  // useAllCases retorna { data, count, page, pageSize }
   const allCases = allCasesResult?.data ?? [];
   const updateCase = useAdminUpdateCase();
   const insertHistorial = useInsertHistorial();
 
-  const agents = profiles?.filter((p: any) => (p.user_roles as any)?.name === "agent") || [];
+  // Incluir agentes Y supervisores en la tabla de asignación
+  const assignableUsers = (profiles || []).filter((p: any) => {
+    const roleName = (p.user_roles as any)?.name;
+    const roleAssignments = p.role_assignments || [];
+    const hasAgentOrSupervisor =
+      roleName === "agent" ||
+      roleName === "supervisor" ||
+      roleAssignments.some((r: any) => r.role_name === "agent" || r.role_name === "supervisor");
+    return hasAgentOrSupervisor;
+  });
+
+  const getRoleLabel = (p: any) => {
+    const roleName = (p.user_roles as any)?.name;
+    if (roleName === "supervisor") return "supervisor";
+    const assignments = p.role_assignments || [];
+    if (assignments.some((r: any) => r.role_name === "supervisor")) return "supervisor";
+    return "agent";
+  };
 
   const isAssigned = (userId: string, campanaId: string) => {
     return perfilCampanas?.some(pc => pc.user_id === userId && pc.campana_id === campanaId) || false;
@@ -78,32 +95,38 @@ export default function AdminCampanas() {
 
   return (
     <div className="space-y-6">
-      {/* Section 1: Agent-Campaign Assignment */}
+      {/* Section 1: Agent & Supervisor - Campaign Assignment */}
       <Card className="border-0 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Asignación de Agentes a Campañas</CardTitle>
+          <CardTitle className="text-base">Asignación de Agentes y Supervisores a Campañas</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Agente</TableHead>
+                <TableHead>Usuario</TableHead>
+                <TableHead>Rol</TableHead>
                 {campanas?.map(c => (
                   <TableHead key={c.id} className="text-center">{c.nombre}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {agents.map((agent: any) => (
-                <TableRow key={agent.user_id}>
-                  <TableCell className="font-medium">{agent.nombre}</TableCell>
+              {assignableUsers.map((u: any) => (
+                <TableRow key={u.user_id}>
+                  <TableCell className="font-medium">{u.nombre}</TableCell>
+                  <TableCell>
+                    <Badge variant={getRoleLabel(u) === "supervisor" ? "default" : "secondary"} className="text-xs">
+                      {getRoleLabel(u) === "supervisor" ? "Supervisor" : "Agente"}
+                    </Badge>
+                  </TableCell>
                   {campanas?.map(c => {
-                    const assigned = isAssigned(agent.user_id, c.id);
+                    const assigned = isAssigned(u.user_id, c.id);
                     return (
                       <TableCell key={c.id} className="text-center">
                         <Checkbox
                           checked={assigned}
-                          onCheckedChange={() => handleToggle(agent.user_id, c.id, assigned)}
+                          onCheckedChange={() => handleToggle(u.user_id, c.id, assigned)}
                           disabled={assign.isPending || unassign.isPending}
                         />
                       </TableCell>
@@ -111,10 +134,10 @@ export default function AdminCampanas() {
                   })}
                 </TableRow>
               ))}
-              {agents.length === 0 && (
+              {assignableUsers.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={(campanas?.length || 0) + 1} className="text-center py-8 text-muted-foreground">
-                    No hay agentes registrados
+                  <TableCell colSpan={(campanas?.length || 0) + 2} className="text-center py-8 text-muted-foreground">
+                    No hay agentes ni supervisores registrados
                   </TableCell>
                 </TableRow>
               )}
