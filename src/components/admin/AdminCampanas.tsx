@@ -13,6 +13,26 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
+// Devuelve true si el perfil tiene alguno de los roles indicados
+function hasAnyRole(p: any, roleNames: string[]): boolean {
+  // Rol principal en profiles.user_roles.name
+  const primaryRole = (p.user_roles as any)?.name;
+  if (primaryRole && roleNames.includes(primaryRole)) return true;
+
+  // Roles del nuevo sistema en user_role_assignments (role_name o name)
+  const assignments: any[] = p.role_assignments || [];
+  return assignments.some(
+    (r: any) =>
+      (r.role_name && roleNames.includes(r.role_name)) ||
+      (r.name && roleNames.includes(r.name))
+  );
+}
+
+function getPrimaryRoleLabel(p: any): "supervisor" | "agent" {
+  if (hasAnyRole(p, ["supervisor"])) return "supervisor";
+  return "agent";
+}
+
 export default function AdminCampanas() {
   const { user } = useAuth();
   const { data: profiles } = useAllProfiles();
@@ -21,7 +41,6 @@ export default function AdminCampanas() {
   const assign = useAssignCampana();
   const unassign = useUnassignCampana();
 
-  // Case reassignment
   const { data: estados } = useEstados();
   const { data: agentes } = useAgentes();
   const [filterCampana, setFilterCampana] = useState<string>("");
@@ -33,28 +52,13 @@ export default function AdminCampanas() {
   const updateCase = useAdminUpdateCase();
   const insertHistorial = useInsertHistorial();
 
-  // Incluir agentes Y supervisores en la tabla de asignación
-  const assignableUsers = (profiles || []).filter((p: any) => {
-    const roleName = (p.user_roles as any)?.name;
-    const roleAssignments = p.role_assignments || [];
-    const hasAgentOrSupervisor =
-      roleName === "agent" ||
-      roleName === "supervisor" ||
-      roleAssignments.some((r: any) => r.role_name === "agent" || r.role_name === "supervisor");
-    return hasAgentOrSupervisor;
-  });
+  // Usuarios con rol agent o supervisor (excluye admin y gerente)
+  const assignableUsers = (profiles || []).filter((p: any) =>
+    hasAnyRole(p, ["agent", "supervisor"])
+  );
 
-  const getRoleLabel = (p: any) => {
-    const roleName = (p.user_roles as any)?.name;
-    if (roleName === "supervisor") return "supervisor";
-    const assignments = p.role_assignments || [];
-    if (assignments.some((r: any) => r.role_name === "supervisor")) return "supervisor";
-    return "agent";
-  };
-
-  const isAssigned = (userId: string, campanaId: string) => {
-    return perfilCampanas?.some(pc => pc.user_id === userId && pc.campana_id === campanaId) || false;
-  };
+  const isAssigned = (userId: string, campanaId: string) =>
+    perfilCampanas?.some(pc => pc.user_id === userId && pc.campana_id === campanaId) || false;
 
   const handleToggle = async (userId: string, campanaId: string, currentlyAssigned: boolean) => {
     try {
@@ -95,10 +99,10 @@ export default function AdminCampanas() {
 
   return (
     <div className="space-y-6">
-      {/* Section 1: Agent & Supervisor - Campaign Assignment */}
+      {/* Section 1: Asignación a Campañas */}
       <Card className="border-0 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Asignación de Agentes y Supervisores a Campañas</CardTitle>
+          <CardTitle className="text-base">Asignación a Campañas</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -112,28 +116,34 @@ export default function AdminCampanas() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {assignableUsers.map((u: any) => (
-                <TableRow key={u.user_id}>
-                  <TableCell className="font-medium">{u.nombre}</TableCell>
-                  <TableCell>
-                    <Badge variant={getRoleLabel(u) === "supervisor" ? "default" : "secondary"} className="text-xs">
-                      {getRoleLabel(u) === "supervisor" ? "Supervisor" : "Agente"}
-                    </Badge>
-                  </TableCell>
-                  {campanas?.map(c => {
-                    const assigned = isAssigned(u.user_id, c.id);
-                    return (
-                      <TableCell key={c.id} className="text-center">
-                        <Checkbox
-                          checked={assigned}
-                          onCheckedChange={() => handleToggle(u.user_id, c.id, assigned)}
-                          disabled={assign.isPending || unassign.isPending}
-                        />
-                      </TableCell>
-                    );
-                  })}
-                </TableRow>
-              ))}
+              {assignableUsers.map((u: any) => {
+                const roleLabel = getPrimaryRoleLabel(u);
+                return (
+                  <TableRow key={u.user_id}>
+                    <TableCell className="font-medium">{u.nombre}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={roleLabel === "supervisor" ? "default" : "secondary"}
+                        className="text-xs"
+                      >
+                        {roleLabel === "supervisor" ? "Supervisor" : "Agente"}
+                      </Badge>
+                    </TableCell>
+                    {campanas?.map(c => {
+                      const assigned = isAssigned(u.user_id, c.id);
+                      return (
+                        <TableCell key={c.id} className="text-center">
+                          <Checkbox
+                            checked={assigned}
+                            onCheckedChange={() => handleToggle(u.user_id, c.id, assigned)}
+                            disabled={assign.isPending || unassign.isPending}
+                          />
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                );
+              })}
               {assignableUsers.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={(campanas?.length || 0) + 2} className="text-center py-8 text-muted-foreground">
