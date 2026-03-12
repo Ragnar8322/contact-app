@@ -29,10 +29,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas";
-import * as XLSX from "xlsx";
-
+// jsPDF, html2canvas y xlsx se cargan dinámicamente al exportar (ver handleExportPdf / handleExportExcel)
 import { getEstadoStyle } from "@/lib/estadoColors";
 
 const formatCOPValue = (n: number) =>
@@ -96,6 +93,13 @@ export default function Analytics() {
     setExportingPdf(true);
 
     try {
+      // Carga diferida: jsPDF y html2canvas solo se descargan al exportar
+      const [{ jsPDF }, html2canvasModule] = await Promise.all([
+        import("jspdf"),
+        import("html2canvas"),
+      ]);
+      const html2canvas = html2canvasModule.default;
+
       const pdf = new jsPDF("p", "mm", "a4");
       const pageWidth = pdf.internal.pageSize.getWidth();
       const margin = 15;
@@ -164,7 +168,7 @@ export default function Analytics() {
         yPos += 7;
       });
 
-      const canvas = await html2canvas(chartsRef.current, {
+      const canvas = await html2canvas(chartsRef.current!, {
         scale: 1.5,
         useCORS: true,
         logging: false,
@@ -265,6 +269,9 @@ export default function Analytics() {
     setExportingExcel(true);
 
     try {
+      // Carga diferida: xlsx solo se descarga al exportar
+      const XLSX = await import("xlsx");
+
       const wb = XLSX.utils.book_new();
 
       const resumenRows = [
