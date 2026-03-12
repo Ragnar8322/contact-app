@@ -16,54 +16,66 @@ export interface FilterOption {
   label: string;
 }
 
+const defaultFilters = (): AnalyticsFilters => ({
+  dateFrom: startOfMonth(new Date()),
+  dateTo: endOfMonth(new Date()),
+  campanaId: null,
+  agenteId: null,
+  estadoId: null,
+});
+
 export function useAnalyticsFilters() {
-  // Applied filters (used for queries)
-  const [appliedFilters, setAppliedFilters] = useState<AnalyticsFilters>({
-    dateFrom: startOfMonth(new Date()),
-    dateTo: endOfMonth(new Date()),
-    campanaId: null,
-    agenteId: null,
-    estadoId: null,
-  });
+  const [appliedFilters, setAppliedFilters] = useState<AnalyticsFilters>(defaultFilters);
+  const [pendingFilters, setPendingFilters] = useState<AnalyticsFilters>(defaultFilters);
 
-  // Pending filters (user selections before applying)
-  const [pendingFilters, setPendingFilters] = useState<AnalyticsFilters>({
-    dateFrom: startOfMonth(new Date()),
-    dateTo: endOfMonth(new Date()),
-    campanaId: null,
-    agenteId: null,
-    estadoId: null,
-  });
-
-  // Fetch campañas
+  // Todas las campañas (sin filtrar por activa para que el histórico sea accesible)
   const { data: campanas } = useQuery({
     queryKey: ["analytics-campanas"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("campanas")
-        .select("id, nombre")
-        .eq("activa", true)
+        .select("id, nombre, activa")
         .order("nombre");
       if (error) throw error;
       return data;
     },
+    staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch agentes
+  // BUG FIX #7: agentes desde profiles con rol "agent" (fuente de verdad actualizada)
   const { data: agentes } = useQuery({
-    queryKey: ["analytics-agentes"],
+    queryKey: ["analytics-agentes-profiles"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("cat_agentes")
+      // Obtener el ID del rol agent
+      const { data: roleRow, error: roleErr } = await supabase
+        .from("user_roles")
+        .select("id")
+        .eq("name", "agent")
+        .single();
+      if (roleErr || !roleRow) return [];
+
+      // Obtener user_ids con ese rol
+      const { data: assignments, error: assignErr } = await supabase
+        .from("user_role_assignments")
+        .select("user_id")
+        .eq("role_id", roleRow.id);
+      if (assignErr) throw assignErr;
+      const userIds = (assignments ?? []).map((a: any) => a.user_id);
+      if (userIds.length === 0) return [];
+
+      // Obtener nombres actualizados desde profiles
+      const { data: profiles, error: profErr } = await supabase
+        .from("profiles")
         .select("user_id, nombre")
-        .eq("activo", true)
+        .in("user_id", userIds)
         .order("nombre");
-      if (error) throw error;
-      return data;
+      if (profErr) throw profErr;
+      return profiles ?? [];
     },
+    staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch estados
+  // Todos los estados
   const { data: estados } = useQuery({
     queryKey: ["analytics-estados"],
     queryFn: async () => {
@@ -74,87 +86,68 @@ export function useAnalyticsFilters() {
       if (error) throw error;
       return data;
     },
+    staleTime: 5 * 60 * 1000,
   });
 
-  const campanaOptions: FilterOption[] = useMemo(() => {
-    return campanas?.map((c) => ({ value: c.id, label: c.nombre })) || [];
-  }, [campanas]);
+  const campanaOptions: FilterOption[] = useMemo(() =>
+    (campanas ?? []).map((c: any) => ({ value: c.id, label: c.activa ? c.nombre : `${c.nombre} (inactiva)` })),
+  [campanas]);
 
-  const agenteOptions: FilterOption[] = useMemo(() => {
-    return agentes?.map((a) => ({ value: a.user_id, label: a.nombre })) || [];
-  }, [agentes]);
+  const agenteOptions: FilterOption[] = useMemo(() =>
+    (agentes ?? []).map((a: any) => ({ value: a.user_id, label: a.nombre })),
+  [agentes]);
 
-  const estadoOptions: FilterOption[] = useMemo(() => {
-    return estados?.map((e) => ({ value: String(e.id), label: e.nombre })) || [];
-  }, [estados]);
+  const estadoOptions: FilterOption[] = useMemo(() =>
+    (estados ?? []).map((e: any) => ({ value: String(e.id), label: e.nombre })),
+  [estados]);
 
-  // Count active non-default filters
+  // Contar filtros activos distintos al default
   const activeFilterCount = useMemo(() => {
+    const def = defaultFilters();
     let count = 0;
-    const defaultFrom = startOfMonth(new Date());
-    const defaultTo = endOfMonth(new Date());
-
     if (
-      appliedFilters.dateFrom.toDateString() !== defaultFrom.toDateString() ||
-      appliedFilters.dateTo.toDateString() !== defaultTo.toDateString()
-    ) {
-      count++;
-    }
+      appliedFilters.dateFrom.toDateString() !== def.dateFrom.toDateString() ||
+      appliedFilters.dateTo.toDateString() !== def.dateTo.toDateString()
+    ) count++;
     if (appliedFilters.campanaId) count++;
     if (appliedFilters.agenteId) count++;
     if (appliedFilters.estadoId) count++;
-
     return count;
   }, [appliedFilters]);
 
   const updatePendingFilter = <K extends keyof AnalyticsFilters>(
     key: K,
     value: AnalyticsFilters[K]
-  ) => {
-    setPendingFilters((prev) => ({ ...prev, [key]: value }));
-  };
+  ) => setPendingFilters((prev) => ({ ...prev, [key]: value }));
 
-  const applyFilters = () => {
-    setAppliedFilters({ ...pendingFilters });
-  };
+  const applyFilters = () => setAppliedFilters({ ...pendingFilters });
 
   const clearFilters = () => {
-    const defaults: AnalyticsFilters = {
-      dateFrom: startOfMonth(new Date()),
-      dateTo: endOfMonth(new Date()),
-      campanaId: null,
-      agenteId: null,
-      estadoId: null,
-    };
-    setPendingFilters(defaults);
-    setAppliedFilters(defaults);
+    const def = defaultFilters();
+    setPendingFilters(def);
+    setAppliedFilters(def);
   };
 
-  // Get filter summary for exports
   const getFilterSummary = (): string => {
     const parts: string[] = [];
-
     if (appliedFilters.campanaId) {
-      const campana = campanas?.find((c) => c.id === appliedFilters.campanaId);
-      parts.push(`Campaña: ${campana?.nombre || "Seleccionada"}`);
+      const c = campanas?.find((c: any) => c.id === appliedFilters.campanaId);
+      parts.push(`Campaña: ${c?.nombre ?? "Seleccionada"}`);
     } else {
       parts.push("Campaña: Todas");
     }
-
     if (appliedFilters.agenteId) {
-      const agente = agentes?.find((a) => a.user_id === appliedFilters.agenteId);
-      parts.push(`Agente: ${agente?.nombre || "Seleccionado"}`);
+      const a = agentes?.find((a: any) => a.user_id === appliedFilters.agenteId);
+      parts.push(`Agente: ${a?.nombre ?? "Seleccionado"}`);
     } else {
       parts.push("Agente: Todos");
     }
-
     if (appliedFilters.estadoId) {
-      const estado = estados?.find((e) => e.id === appliedFilters.estadoId);
-      parts.push(`Estado: ${estado?.nombre || "Seleccionado"}`);
+      const e = estados?.find((e: any) => e.id === appliedFilters.estadoId);
+      parts.push(`Estado: ${e?.nombre ?? "Seleccionado"}`);
     } else {
       parts.push("Estado: Todos");
     }
-
     return parts.join(" | ");
   };
 
