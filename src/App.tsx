@@ -48,9 +48,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <AppLayout>{children}</AppLayout>;
 }
 
+// Espera profileLoading para no redirigir mientras los roles aún se están cargando
 function RoleRoute({ children, roles }: { children: React.ReactNode; roles: RoleName[] }) {
-  const { hasRole, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
+  const { hasRole, loading, profileLoading } = useAuth();
+  if (loading || profileLoading) return <LoadingScreen />;
   if (!hasRole(roles)) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
@@ -103,7 +104,7 @@ const App = () => (
                       </RoleRoute>
                     </ProtectedRoute>
                   } />
-                    <Route path="/analitica" element={
+                  <Route path="/analitica" element={
                     <ProtectedRoute>
                       <RoleRoute roles={["admin", "gerente", "supervisor"]}>
                         <Analytics />

@@ -25,6 +25,7 @@ interface AuthContextType {
   hasRole: (roles: RoleName[]) => boolean;
   mustChangePassword: boolean;
   loading: boolean;
+  profileLoading: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -37,11 +38,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [roles, setRoles] = useState<RoleName[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(true);
   const isFetchingRef = useRef(false);
 
   const fetchProfile = useCallback(async (userId: string) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
+    setProfileLoading(true);
     try {
       const [profileResult, rolesResult] = await Promise.all([
         supabase
@@ -85,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } finally {
       isFetchingRef.current = false;
+      setProfileLoading(false);
     }
   }, []);
 
@@ -102,11 +106,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
           if (session?.user) {
             fetchProfile(session.user.id);
+          } else {
+            setProfileLoading(false);
           }
         }
         if (event === "SIGNED_OUT") {
           setProfile(null);
           setRoles([]);
+          setProfileLoading(false);
         }
       }
     );
@@ -125,26 +132,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAgente = roles.includes("agent");
   const isSupervisor = roles.includes("supervisor");
   const isGerente = roles.includes("gerente");
-  
+
   const hasRole = (checkRoles: RoleName[]) => checkRoles.some(r => roles.includes(r));
-  
+
   const mustChangePassword = profile?.must_change_password === true;
 
   return (
-    <AuthContext.Provider value={{ 
-      session, 
-      user, 
-      profile, 
+    <AuthContext.Provider value={{
+      session,
+      user,
+      profile,
       roles,
-      isAdmin, 
-      isAgente, 
-      isSupervisor, 
-      isGerente, 
-      hasRole, 
-      mustChangePassword, 
-      loading, 
-      signOut, 
-      refreshProfile 
+      isAdmin,
+      isAgente,
+      isSupervisor,
+      isGerente,
+      hasRole,
+      mustChangePassword,
+      loading,
+      profileLoading,
+      signOut,
+      refreshProfile
     }}>
       {children}
     </AuthContext.Provider>
