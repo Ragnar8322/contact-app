@@ -75,10 +75,17 @@ export function useInviteUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (values: { email: string; nombre: string; telefono?: string; role_id: number; role_ids?: number[] }) => {
-      const { data, error } = await supabase.functions.invoke("invite-user", { body: values });
+      // Obtener sesión activa y pasar token explícitamente para evitar el error "Failed to send"
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sesión expirada. Por favor recarga la página e inicia sesión nuevamente.");
+
+      const { data, error } = await supabase.functions.invoke("invite-user", {
+        body: values,
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      
+
       // Role assignments are already saved by the edge function
       return data;
     },
@@ -99,23 +106,37 @@ export function useRoles() {
 }
 
 // ── All Cases (admin) ──
-export function useAllCases(filters?: { estado_id?: number; agente_id?: string; from?: string; to?: string }) {
+export function useAllCases(filters?: {
+  estado_id?: number;
+  agente_id?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const page = filters?.page ?? 0;
+  const pageSize = filters?.pageSize ?? 50;
+
   return useQuery({
     queryKey: ["admin-cases", filters],
     queryFn: async () => {
       let q = supabase
         .from("casos")
-        .select("*, clientes(nombre_contacto, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)")
-        .order("fecha_caso", { ascending: false });
+        .select(
+          "*, clientes(nombre_contacto, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)",
+          { count: "exact" }
+        )
+        .order("fecha_caso", { ascending: false })
+        .range(page * pageSize, Math.min((page + 1) * pageSize - 1, 49999)); // máx 50.000 registros
+
       if (filters?.estado_id) q = q.eq("estado_id", filters.estado_id);
       if (filters?.agente_id) q = q.eq("agente_id", filters.agente_id);
       if (filters?.from) q = q.gte("fecha_caso", filters.from);
       if (filters?.to) q = q.lte("fecha_caso", filters.to);
-      // TODO: Add full pagination. Current limit: 500 cases.
-      q = q.limit(500);
-      const { data, error } = await q;
+
+      const { data, error, count } = await q;
       if (error) throw error;
-      return data;
+      return { data, count, page, pageSize };
     },
   });
 }
