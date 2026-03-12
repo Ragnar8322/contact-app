@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { getHighestRole } from "@/lib/roleUtils";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { profile, roles, isAdmin, hasRole, signOut } = useAuth();
+  const { profile, roles, isAdmin, hasRole, signOut, profileLoading } = useAuth();
   const highestRole = getHighestRole(roles);
   const { campanaActiva, campanas, setCampanaActiva } = useCampana();
   const location = useLocation();
@@ -17,23 +17,24 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   const canSwitch = campanas.length > 1 || isAdmin;
 
-  // Build nav items based on role
+  // Esperar a que los roles estén cargados antes de construir el menú
   const navItems: { to: string; icon: any; label: string }[] = [];
 
-  // Dashboard: supervisor, admin, gerente see full; agent sees limited but still has access
-  navItems.push({ to: "/", icon: LayoutDashboard, label: "Dashboard" });
+  if (!profileLoading) {
+    navItems.push({ to: "/", icon: LayoutDashboard, label: "Dashboard" });
+    navItems.push({ to: "/clientes", icon: Users, label: "Clientes" });
 
-  // Clientes: everyone
-  navItems.push({ to: "/clientes", icon: Users, label: "Clientes" });
+    if (hasRole(["agent", "supervisor", "admin"])) {
+      navItems.push({ to: "/casos", icon: FolderOpen, label: "Casos" });
+    }
 
-  // Casos: agent, supervisor, admin (not gerente — gerente is read-only via dashboard)
-  if (hasRole(["agent", "supervisor", "admin"])) {
-    navItems.push({ to: "/casos", icon: FolderOpen, label: "Casos" });
-  }
-
-  // Analítica: admin, gerente, supervisor
-  if (hasRole(["admin", "gerente", "supervisor"])) {
-    navItems.push({ to: "/analitica", icon: BarChart2, label: "Analítica" });
+    if (hasRole(["admin", "gerente", "supervisor"])) {
+      navItems.push({ to: "/analitica", icon: BarChart2, label: "Analítica" });
+    }
+  } else {
+    // Mientras cargan roles, mostrar siempre Dashboard y Clientes
+    navItems.push({ to: "/", icon: LayoutDashboard, label: "Dashboard" });
+    navItems.push({ to: "/clientes", icon: Users, label: "Clientes" });
   }
 
   return (
@@ -105,7 +106,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               {label}
             </Link>
           ))}
-          {isAdmin && (
+          {!profileLoading && isAdmin && (
             <Link
               to="/ajustes"
               onClick={() => setMobileOpen(false)}
