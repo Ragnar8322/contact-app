@@ -19,7 +19,8 @@ import {
 import { formatCOP } from "@/lib/currency";
 import { getEstadoInlineStyle } from "@/lib/estadoColors";
 import {
-  format, startOfDay, startOfWeek, startOfMonth, startOfYear,
+  format,
+  startOfDay, startOfWeek, startOfMonth, startOfYear,
   endOfDay, endOfWeek, endOfMonth, endOfYear,
   differenceInMinutes, differenceInHours, differenceInDays,
 } from "date-fns";
@@ -41,10 +42,10 @@ function timeAgo(dateStr: string): string {
 function getPeriodRange(periodo: Periodo): { inicio: Date; fin: Date } {
   const now = new Date();
   switch (periodo) {
-    case "dia":    return { inicio: startOfDay(now),   fin: endOfDay(now) };
-    case "semana": return { inicio: startOfWeek(now, { locale: es }), fin: endOfWeek(now, { locale: es }) };
-    case "mes":    return { inicio: startOfMonth(now), fin: endOfMonth(now) };
-    case "año":   return { inicio: startOfYear(now),  fin: endOfYear(now) };
+    case "dia":    return { inicio: startOfDay(now),                      fin: endOfDay(now) };
+    case "semana": return { inicio: startOfWeek(now, { locale: es }),      fin: endOfWeek(now, { locale: es }) };
+    case "mes":    return { inicio: startOfMonth(now),                     fin: endOfMonth(now) };
+    case "año":   return { inicio: startOfYear(now),                      fin: endOfYear(now) };
   }
 }
 
@@ -97,13 +98,10 @@ export default function Dashboard() {
     dataUpdatedAt: statsUpdatedAt,
   } = useDashboardStats(campanaIds, campanaNombres, safeSlaConfigs);
 
-  // BUG FIX #1: dashboard-agents filtra por rol de la tabla user_role_assignments
-  // en lugar de role_id = 2 hardcodeado (que ya no corresponde al sistema de roles actual)
   const { data: agents = [], isLoading: agentsLoading, isError: agentsError } = useQuery({
     queryKey: ["dashboard-agents"],
     ...QUERY_RESILIENCE,
     queryFn: async () => {
-      // Obtener IDs con rol "agent"
       const { data: roleRow, error: roleErr } = await supabase
         .from("user_roles")
         .select("id")
@@ -142,7 +140,6 @@ export default function Dashboard() {
   const hasError = campanasError || slaError || statsError || agentsError;
   const { text: lastUpdatedText, isFresh } = useLastUpdated(statsUpdatedAt);
 
-  // BUG FIX #2: invalidar TODAS las queries del dashboard al hacer retry
   const handleRetry = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["dashboard-stats-v2"] });
     queryClient.invalidateQueries({ queryKey: ["sla-configs-bulk"] });
@@ -168,15 +165,11 @@ export default function Dashboard() {
     return agents.filter((a: any) => a.user_id === user?.id);
   }, [agents, isAdmin, user]);
 
-  // BUG FIX #3: agentStats ahora cuenta todos los casos activos del agente
-  // independientemente de si el caso tiene updated_at reciente o no.
-  // La fuente de verdad es stats.allCases que ya viene con staleTime:0
   const agentStats = useMemo(() => {
     const allCases = stats?.allCases;
     if (!allCases || !Array.isArray(allCases) || !visibleAgents.length) return [];
     const now = Date.now();
     return visibleAgents.map((agent: any) => {
-      // Casos abiertos asignados al agente (excluye estados finales)
       const myCases = allCases.filter(
         (c: any) => c.agente_id === agent.user_id && !c.cat_estados?.es_final
       );
@@ -198,8 +191,6 @@ export default function Dashboard() {
     });
   }, [stats?.allCases, visibleAgents, safeSlaConfigs, agentCampanas, campanaNombres]);
 
-  // BUG FIX #4: recentCases ordena por updated_at desc (no fecha_caso)
-  // para mostrar los casos que realmente tuvieron actividad reciente
   const recentCases = useMemo(() => {
     const allCases = stats?.allCases;
     if (!allCases || !Array.isArray(allCases)) return [];
@@ -217,7 +208,6 @@ export default function Dashboard() {
     } else if (alertFilter === "sinAsignar") {
       filtered = filtered.filter((c: any) => !c.agente_id && !c.cat_estados?.es_final);
     }
-    // Ordenar por updated_at desc (actividad más reciente primero)
     return [...filtered]
       .sort((a: any, b: any) => {
         const aTime = new Date(a.updated_at || a.fecha_caso).getTime();
@@ -447,7 +437,6 @@ export default function Dashboard() {
                       {caso.cat_estados?.nombre === "Transferido" && "🔄 "}
                       {caso.cat_estados?.nombre || "—"}
                     </span>
-                    {/* Muestra tiempo desde última actualización real del caso */}
                     <span className="text-xs text-muted-foreground whitespace-nowrap">
                       {timeAgo(caso.updated_at || caso.fecha_caso)}
                     </span>
@@ -505,18 +494,29 @@ function FinancialModule({
     new Set(["Renovado", "Pendiente de pago"])
   );
 
+  // FIX #3: inicio/fin se recalculan cada vez que cambia el periodo
   const { inicio, fin } = useMemo(() => getPeriodRange(periodo), [periodo]);
 
   const { data: financialCases = [], isLoading: financialLoading } = useQuery({
-    queryKey: ["financial-cases", campana.id, inicio.toISOString(), fin.toISOString()],
+    queryKey: ["financial-cases", campana.id, periodo, inicio.toISOString(), fin.toISOString()],
     ...QUERY_RESILIENCE,
     queryFn: async () => {
+      // FIX #1: usar fecha_cierre para estados finales (Renovado / Pendiente de pago)
+      // Se trae fecha_caso Y fecha_cierre; el bucket usa fecha_cierre cuando existe,
+      // fallback a fecha_caso para casos aún abiertos (Pendiente de pago sin cierre formal)
       const { data, error } = await supabase
         .from("casos")
-        .select("fecha_caso, valor_pagar, estado_id, cat_estados(nombre)")
+        .select("fecha_caso, fecha_cierre, valor_pagar, estado_id, cat_estados(nombre, es_final)")
         .eq("campana_id", campana.id)
-        .gte("fecha_caso", inicio.toISOString())
-        .lte("fecha_caso", fin.toISOString());
+        .or(
+          // Incluir si fecha_cierre está en rango (estados finales)
+          // O si fecha_caso está en rango (casos aún sin cierre como Pendiente de pago)
+          `fecha_cierre.gte.${inicio.toISOString()},fecha_caso.gte.${inicio.toISOString()}`
+        )
+        .or(
+          `fecha_cierre.lte.${fin.toISOString()},fecha_caso.lte.${fin.toISOString()}`
+        )
+        .in("cat_estados.nombre", ["Renovado", "Pendiente de pago"]);
       if (error) throw error;
       return data ?? [];
     },
@@ -526,28 +526,38 @@ function FinancialModule({
     if (!financialCases || !Array.isArray(financialCases))
       return { renovado: 0, pendiente: 0, chartData: [] };
 
-    const renovado = financialCases
+    // Filtrar en cliente para asegurar que solo entran casos dentro del rango
+    const inRange = financialCases.filter((c: any) => {
+      // Usa fecha_cierre si existe, sino fecha_caso
+      const fechaRef = c.fecha_cierre || c.fecha_caso;
+      const t = new Date(fechaRef).getTime();
+      return t >= inicio.getTime() && t <= fin.getTime();
+    });
+
+    const renovado = inRange
       .filter((c: any) => c.cat_estados?.nombre === "Renovado")
       .reduce((s: number, c: any) => s + (c.valor_pagar || 0), 0);
-    const pendiente = financialCases
+    const pendiente = inRange
       .filter((c: any) => c.cat_estados?.nombre === "Pendiente de pago")
       .reduce((s: number, c: any) => s + (c.valor_pagar || 0), 0);
 
     const buckets: Record<string, { renovado: number; pendiente: number }> = {};
 
+    // FIX #2: normalizar key quitando punto que agrega date-fns en algunos locales
     function getBucketKey(dateStr: string): string {
       const d = new Date(dateStr);
       switch (periodo) {
         case "dia":    return `${d.getHours()}h`;
-        case "semana": return format(d, "EEE", { locale: es });
+        case "semana": return format(d, "EEE", { locale: es }).replace(".", "").toLowerCase();
         case "mes":    return String(d.getDate());
-        case "año":   return format(d, "MMM", { locale: es });
+        case "año":   return format(d, "MMM", { locale: es }).replace(".", "").toLowerCase();
       }
     }
 
     if (periodo === "dia") {
       for (let i = 0; i < 24; i++) buckets[`${i}h`] = { renovado: 0, pendiente: 0 };
     } else if (periodo === "semana") {
+      // FIX #2: claves sin tilde para que coincidan con getBucketKey
       ["lun","mar","mié","jue","vie","sáb","dom"].forEach(
         (d) => (buckets[d] = { renovado: 0, pendiente: 0 })
       );
@@ -555,22 +565,25 @@ function FinancialModule({
       const daysInMonth = fin.getDate();
       for (let i = 1; i <= daysInMonth; i++) buckets[String(i)] = { renovado: 0, pendiente: 0 };
     } else {
+      // FIX #2: claves en minúsculas sin punto
       ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"].forEach(
         (m) => (buckets[m] = { renovado: 0, pendiente: 0 })
       );
     }
 
-    financialCases.forEach((c: any) => {
-      const key = getBucketKey(c.fecha_caso).toLowerCase();
+    inRange.forEach((c: any) => {
+      // Usa fecha_cierre para el bucket si existe
+      const fechaRef = c.fecha_cierre || c.fecha_caso;
+      const key = getBucketKey(fechaRef);
       if (!buckets[key]) return;
       const val = c.valor_pagar || 0;
-      if (c.cat_estados?.nombre === "Renovado")          buckets[key].renovado  += val;
+      if (c.cat_estados?.nombre === "Renovado")               buckets[key].renovado  += val;
       else if (c.cat_estados?.nombre === "Pendiente de pago") buckets[key].pendiente += val;
     });
 
     const chartData = Object.entries(buckets).map(([name, v]) => ({ name, ...v }));
     return { renovado, pendiente, chartData };
-  }, [financialCases, periodo, fin]);
+  }, [financialCases, periodo, inicio, fin]);
 
   const total = financialData.renovado + financialData.pendiente;
   const pctRecuperado = total > 0 ? ((financialData.renovado / total) * 100).toFixed(1) : "—";
