@@ -6,6 +6,7 @@ import AdminCases from "@/components/admin/AdminCases";
 import AdminClients from "@/components/admin/AdminClients";
 import AdminCatalogs from "@/components/admin/AdminCatalogs";
 import AdminCampanas from "@/components/admin/AdminCampanas";
+import AdminActivityLog from "@/components/admin/AdminActivityLog";
 
 export default function Settings() {
   const { isAdmin, loading } = useAuth();
@@ -17,16 +18,17 @@ export default function Settings() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Administración</h1>
-        <p className="text-muted-foreground">Gestión de usuarios, casos, clientes, catálogos y campañas</p>
+        <p className="text-muted-foreground">Gestión de usuarios, casos, clientes, catálogos, campañas y auditoría</p>
       </div>
 
       <Tabs defaultValue="profiles" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="profiles">Perfiles</TabsTrigger>
           <TabsTrigger value="cases">Casos</TabsTrigger>
           <TabsTrigger value="clients">Clientes</TabsTrigger>
           <TabsTrigger value="catalogs">Catálogos</TabsTrigger>
           <TabsTrigger value="campanas">Campañas</TabsTrigger>
+          <TabsTrigger value="auditoria">Auditoría</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profiles"><AdminProfiles /></TabsContent>
@@ -34,6 +36,7 @@ export default function Settings() {
         <TabsContent value="clients"><AdminClients /></TabsContent>
         <TabsContent value="catalogs"><AdminCatalogs /></TabsContent>
         <TabsContent value="campanas"><AdminCampanas /></TabsContent>
+        <TabsContent value="auditoria"><AdminActivityLog /></TabsContent>
       </Tabs>
     </div>
   );
