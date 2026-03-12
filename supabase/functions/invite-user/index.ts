@@ -47,12 +47,13 @@ Deno.serve(async (req) => {
 
     console.log("DEBUG caller_id:", caller.id, "| profile:", JSON.stringify(callerProfile), "| fetchError:", profileFetchError?.message);
 
-    const callerRoleName = (callerProfile?.user_roles as any)?.name;
+    // Comparar en minúsculas para evitar fallos por capitalización (Admin vs admin)
+    const callerRoleName = ((callerProfile?.user_roles as any)?.name ?? "").toLowerCase();
 
     // Solo admin y supervisor pueden crear usuarios
     if (!["admin", "supervisor"].includes(callerRoleName)) {
       return new Response(JSON.stringify({
-        error: `Sin permisos. Tu rol es: ${callerRoleName ?? "sin perfil"}`
+        error: `Sin permisos. Tu rol es: ${callerRoleName || "sin perfil"}`
       }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -148,7 +149,8 @@ Deno.serve(async (req) => {
       }
 
       // 9. cat_agentes solo para agentes (role_id = 2)
-      if (roleCheck.name === "agent") {
+      // Comparar en minúsculas también aquí
+      if (roleCheck.name.toLowerCase() === "agent") {
         await adminClient
           .from("cat_agentes")
           .upsert({ user_id: newUser.user.id, nombre: nombre || email, activo: true });
