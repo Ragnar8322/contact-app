@@ -69,7 +69,7 @@ export default function Analytics() {
   });
 
   // Role-based access check (after all hooks)
-  if (!hasRole(["admin", "gerente"])) return <Navigate to="/" replace />;
+  if (!hasRole(["admin", "gerente", "supervisor"])) return <Navigate to="/" replace />;
 
   const ROWS_PER_PAGE = 20;
   const totalPages = Math.ceil((data?.rendimientoAgentes.length || 0) / ROWS_PER_PAGE);
@@ -100,7 +100,6 @@ export default function Analytics() {
       const pageWidth = pdf.internal.pageSize.getWidth();
       const margin = 15;
 
-      // Header
       pdf.setFillColor(37, 99, 235);
       pdf.rect(0, 0, pageWidth, 25, "F");
       pdf.setTextColor(255, 255, 255);
@@ -108,7 +107,6 @@ export default function Analytics() {
       pdf.setFont("helvetica", "bold");
       pdf.text("Contact APP — Reporte de Analítica", margin, 16);
 
-      // Date range and filter summary
       pdf.setTextColor(0, 0, 0);
       pdf.setFontSize(11);
       pdf.setFont("helvetica", "normal");
@@ -118,12 +116,10 @@ export default function Analytics() {
         35
       );
 
-      // Filter summary
       pdf.setFontSize(9);
       pdf.setTextColor(80, 80, 80);
       pdf.text(`Filtros aplicados: ${getFilterSummary()}`, margin, 42);
 
-      // KPI Summary Table
       pdf.setTextColor(0, 0, 0);
       pdf.setFontSize(14);
       pdf.setFont("helvetica", "bold");
@@ -146,7 +142,6 @@ export default function Analytics() {
         yPos += 7;
       });
 
-      // Financial Summary
       yPos += 5;
       pdf.setFontSize(14);
       pdf.setFont("helvetica", "bold");
@@ -169,7 +164,6 @@ export default function Analytics() {
         yPos += 7;
       });
 
-      // Charts as images
       const canvas = await html2canvas(chartsRef.current, {
         scale: 1.5,
         useCORS: true,
@@ -188,7 +182,6 @@ export default function Analytics() {
       }
       pdf.addImage(imgData, "PNG", margin, yPos, imgWidth, Math.min(imgHeight, 120));
 
-      // Performance Table
       pdf.addPage();
       pdf.setFontSize(14);
       pdf.setFont("helvetica", "bold");
@@ -217,7 +210,6 @@ export default function Analytics() {
       data.rendimientoAgentes.forEach((agent) => {
         if (yPos > 275) {
           pdf.addPage();
-          // Re-draw header on new page
           pdf.setFillColor(37, 99, 235);
           pdf.rect(margin, 15, pageWidth - margin * 2, 8, "F");
           pdf.setTextColor(255, 255, 255);
@@ -245,7 +237,6 @@ export default function Analytics() {
         yPos += 6;
       });
 
-      // Footer
       const pageCount = pdf.getNumberOfPages();
       for (let i = 1; i <= pageCount; i++) {
         pdf.setPage(i);
@@ -276,7 +267,6 @@ export default function Analytics() {
     try {
       const wb = XLSX.utils.book_new();
 
-      // Sheet 1: Resumen
       const resumenRows = [
         ["Reporte de Analítica"],
         [`Período: ${format(appliedFilters.dateFrom, "dd/MM/yyyy")} - ${format(appliedFilters.dateTo, "dd/MM/yyyy")}`],
@@ -297,7 +287,6 @@ export default function Analytics() {
       wsResumen["!cols"] = [{ wch: 28 }, { wch: 22 }];
       XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
 
-      // Sheet 2: Rendimiento Agentes
       const agentesRows = [
         ["Agente", "Casos Asignados", "Gestiones", "Renovados", "Tasa Renovación"],
         ...data.rendimientoAgentes.map((a) => [
@@ -312,7 +301,6 @@ export default function Analytics() {
       wsAgentes["!cols"] = [{ wch: 30 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 16 }];
       XLSX.utils.book_append_sheet(wb, wsAgentes, "Rendimiento Agentes");
 
-      // Sheet 3: Casos por Estado
       const estadosRows = [
         ["Estado", "Cantidad", "Porcentaje"],
         ...data.casosPorEstado.map((e) => [
@@ -325,7 +313,6 @@ export default function Analytics() {
       wsEstados["!cols"] = [{ wch: 22 }, { wch: 12 }, { wch: 12 }];
       XLSX.utils.book_append_sheet(wb, wsEstados, "Casos por Estado");
 
-      // Sheet 4: Gestiones por Día
       const gestionesRows = [
         ["Fecha", "Cantidad"],
         ...data.gestionesPorDia.map((g) => [
@@ -337,7 +324,6 @@ export default function Analytics() {
       wsGestiones["!cols"] = [{ wch: 15 }, { wch: 12 }];
       XLSX.utils.book_append_sheet(wb, wsGestiones, "Gestiones por Día");
 
-      // Sheet 5: Clientes
       const clientesRows = [
         ["Tipo Cliente", "Cantidad", "Porcentaje"],
         ...data.distribucionClientes.map((c) => [
@@ -364,7 +350,6 @@ export default function Analytics() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -377,42 +362,16 @@ export default function Analytics() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => refetch()}
-            disabled={isRefetching}
-          >
-            {isRefetching ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
+          <Button variant="outline" onClick={() => refetch()} disabled={isRefetching}>
+            {isRefetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             <span className="ml-1 hidden sm:inline">Actualizar</span>
           </Button>
-
-          <Button
-            onClick={handleExportPdf}
-            disabled={exportingPdf || !hasData}
-            className="bg-primary hover:bg-primary/90"
-          >
-            {exportingPdf ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <FileText className="h-4 w-4" />
-            )}
+          <Button onClick={handleExportPdf} disabled={exportingPdf || !hasData} className="bg-primary hover:bg-primary/90">
+            {exportingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
             <span className="ml-1">Exportar PDF</span>
           </Button>
-
-          <Button
-            onClick={handleExportExcel}
-            disabled={exportingExcel || !hasData}
-            className="bg-primary hover:bg-primary/90"
-          >
-            {exportingExcel ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <FileSpreadsheet className="h-4 w-4" />
-            )}
+          <Button onClick={handleExportExcel} disabled={exportingExcel || !hasData} className="bg-primary hover:bg-primary/90">
+            {exportingExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
             <span className="ml-1">Exportar Excel</span>
           </Button>
         </div>
@@ -422,7 +381,6 @@ export default function Analytics() {
       <Card>
         <CardContent className="py-4">
           <div className="flex flex-wrap items-center gap-3">
-            {/* Date From */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" className="w-[130px] justify-start text-left text-sm">
@@ -430,19 +388,12 @@ export default function Analytics() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={pendingFilters.dateFrom}
-                  onSelect={(d) => d && updatePendingFilter("dateFrom", d)}
-                  initialFocus
-                  className="pointer-events-auto"
-                />
+                <Calendar mode="single" selected={pendingFilters.dateFrom} onSelect={(d) => d && updatePendingFilter("dateFrom", d)} initialFocus className="pointer-events-auto" />
               </PopoverContent>
             </Popover>
 
             <span className="text-muted-foreground text-sm">a</span>
 
-            {/* Date To */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" className="w-[130px] justify-start text-left text-sm">
@@ -450,88 +401,43 @@ export default function Analytics() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={pendingFilters.dateTo}
-                  onSelect={(d) => d && updatePendingFilter("dateTo", d)}
-                  initialFocus
-                  className="pointer-events-auto"
-                />
+                <Calendar mode="single" selected={pendingFilters.dateTo} onSelect={(d) => d && updatePendingFilter("dateTo", d)} initialFocus className="pointer-events-auto" />
               </PopoverContent>
             </Popover>
 
-            {/* Campaña Filter */}
-            <Select
-              value={pendingFilters.campanaId || "all"}
-              onValueChange={(v) => updatePendingFilter("campanaId", v === "all" ? null : v)}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Todas las campañas" />
-              </SelectTrigger>
+            <Select value={pendingFilters.campanaId || "all"} onValueChange={(v) => updatePendingFilter("campanaId", v === "all" ? null : v)}>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Todas las campañas" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas las campañas</SelectItem>
-                {campanaOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
+                {campanaOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
               </SelectContent>
             </Select>
 
-            {/* Agente Filter */}
-            <Select
-              value={pendingFilters.agenteId || "all"}
-              onValueChange={(v) => updatePendingFilter("agenteId", v === "all" ? null : v)}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Todos los agentes" />
-              </SelectTrigger>
+            <Select value={pendingFilters.agenteId || "all"} onValueChange={(v) => updatePendingFilter("agenteId", v === "all" ? null : v)}>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Todos los agentes" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los agentes</SelectItem>
-                {agenteOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
+                {agenteOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
               </SelectContent>
             </Select>
 
-            {/* Estado Filter */}
-            <Select
-              value={pendingFilters.estadoId ? String(pendingFilters.estadoId) : "all"}
-              onValueChange={(v) =>
-                updatePendingFilter("estadoId", v === "all" ? null : Number(v))
-              }
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Todos los estados" />
-              </SelectTrigger>
+            <Select value={pendingFilters.estadoId ? String(pendingFilters.estadoId) : "all"} onValueChange={(v) => updatePendingFilter("estadoId", v === "all" ? null : Number(v))}>
+              <SelectTrigger className="w-[160px]"><SelectValue placeholder="Todos los estados" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los estados</SelectItem>
-                {estadoOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
+                {estadoOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
               </SelectContent>
             </Select>
 
-            {/* Action Buttons */}
             <Button onClick={handleApplyFilters} className="bg-primary hover:bg-primary/90">
-              <Filter className="h-4 w-4 mr-1" />
-              Aplicar
+              <Filter className="h-4 w-4 mr-1" />Aplicar
             </Button>
-
             <Button variant="ghost" onClick={handleClearFilters}>
-              <X className="h-4 w-4 mr-1" />
-              Limpiar filtros
+              <X className="h-4 w-4 mr-1" />Limpiar filtros
             </Button>
-
-            {/* Active Filter Badge */}
             {activeFilterCount > 0 && (
               <Badge variant="secondary" className="ml-2">
-                {activeFilterCount} filtro{activeFilterCount > 1 ? "s" : ""} activo
-                {activeFilterCount > 1 ? "s" : ""}
+                {activeFilterCount} filtro{activeFilterCount > 1 ? "s" : ""} activo{activeFilterCount > 1 ? "s" : ""}
               </Badge>
             )}
           </div>
@@ -550,174 +456,46 @@ export default function Analytics() {
         </Card>
       ) : (
         <>
-          {/* KPI Cards Row 1 */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total Casos
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(data!.totalCasos)}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Casos Renovados
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">
-                  {formatNumber(data!.casosRenovados)}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Tasa de Renovación
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">
-                  {formatPercentage(data!.tasaRenovacion)}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Gestiones Registradas
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(data!.gestionesRegistradas)}</div>
-              </CardContent>
-            </Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total Casos</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(data!.totalCasos)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Casos Renovados</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">{formatNumber(data!.casosRenovados)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Tasa de Renovación</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-blue-600">{formatPercentage(data!.tasaRenovacion)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Gestiones Registradas</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(data!.gestionesRegistradas)}</div></CardContent></Card>
           </div>
 
-          {/* KPI Cards Row 2 — Financial */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  💰 Total Facturado
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">
-                  {formatCOPValue(data!.totalFacturado)}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  ⏳ Pendiente de Cobro
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-amber-600">
-                  {formatCOPValue(data!.pendienteCobro)}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  📊 Valor Promedio
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCOPValue(data!.valorPromedio)}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  🎯 % Recaudo
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">
-                  {formatPercentage(data!.porcentajeRecaudo)}
-                </div>
-              </CardContent>
-            </Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">💰 Total Facturado</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">{formatCOPValue(data!.totalFacturado)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">⏳ Pendiente de Cobro</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-amber-600">{formatCOPValue(data!.pendienteCobro)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">📊 Valor Promedio</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatCOPValue(data!.valorPromedio)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">🎯 % Recaudo</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-blue-600">{formatPercentage(data!.porcentajeRecaudo)}</div></CardContent></Card>
           </div>
 
-          {/* Charts Grid */}
           <div ref={chartsRef} className="grid gap-4 md:grid-cols-2">
-            {/* Chart 1: Casos por Estado */}
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Casos por Estado</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-base">Casos por Estado</CardTitle></CardHeader>
               <CardContent>
                 <div className="h-[250px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie
-                        data={data!.casosPorEstado}
-                        dataKey="count"
-                        nameKey="estado"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        innerRadius={40}
-                        label={({ estado, percentage }) => `${estado}: ${percentage.toFixed(0)}%`}
-                        labelLine={false}
-                      >
-                        {data!.casosPorEstado.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={getEstadoStyle(entry.estado).hex}
-                          />
-                        ))}
+                      <Pie data={data!.casosPorEstado} dataKey="count" nameKey="estado" cx="50%" cy="50%" outerRadius={80} innerRadius={40} label={({ estado, percentage }) => `${estado}: ${percentage.toFixed(0)}%`} labelLine={false}>
+                        {data!.casosPorEstado.map((entry, index) => <Cell key={`cell-${index}`} fill={getEstadoStyle(entry.estado).hex} />)}
                       </Pie>
-                      <Tooltip
-                        formatter={(value: number, name: string) => [
-                          `${value} (${((value / data!.totalCasos) * 100).toFixed(1)}%)`,
-                          name,
-                        ]}
-                      />
+                      <Tooltip formatter={(value: number, name: string) => [`${value} (${((value / data!.totalCasos) * 100).toFixed(1)}%)`, name]} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Chart 2: Gestiones por Agente */}
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Gestiones por Agente (Top 10)</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-base">Gestiones por Agente (Top 10)</CardTitle></CardHeader>
               <CardContent>
                 <div className="h-[250px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={data!.gestionesPorAgente}
-                      layout="vertical"
-                      margin={{ left: 80, right: 20, top: 5, bottom: 5 }}
-                    >
+                    <BarChart data={data!.gestionesPorAgente} layout="vertical" margin={{ left: 80, right: 20, top: 5, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                       <XAxis type="number" />
-                      <YAxis
-                        type="category"
-                        dataKey="agente"
-                        tick={{ fontSize: 11 }}
-                        width={75}
-                      />
+                      <YAxis type="category" dataKey="agente" tick={{ fontSize: 11 }} width={75} />
                       <Tooltip />
                       <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
                     </BarChart>
@@ -726,75 +504,33 @@ export default function Analytics() {
               </CardContent>
             </Card>
 
-            {/* Chart 3: Evolución Diaria */}
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Evolución Diaria de Gestiones</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-base">Evolución Diaria de Gestiones</CardTitle></CardHeader>
               <CardContent>
                 <div className="h-[250px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={data!.gestionesPorDia}
-                      margin={{ left: 0, right: 20, top: 5, bottom: 5 }}
-                    >
+                    <LineChart data={data!.gestionesPorDia} margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="fecha"
-                        tickFormatter={(v) => safeFormat(v, "dd/MM")}
-                        tick={{ fontSize: 10 }}
-                      />
+                      <XAxis dataKey="fecha" tickFormatter={(v) => safeFormat(v, "dd/MM")} tick={{ fontSize: 10 }} />
                       <YAxis />
-                      <Tooltip
-                        labelFormatter={(v) => safeFormat(v, "dd/MM/yyyy")}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="count"
-                        stroke="hsl(var(--primary))"
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                        activeDot={{ r: 5 }}
-                      />
+                      <Tooltip labelFormatter={(v) => safeFormat(v, "dd/MM/yyyy")} />
+                      <Line type="monotone" dataKey="count" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Chart 4: Distribución de Clientes */}
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Distribución de Clientes</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-base">Distribución de Clientes</CardTitle></CardHeader>
               <CardContent>
                 <div className="h-[250px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie
-                        data={data!.distribucionClientes}
-                        dataKey="count"
-                        nameKey="tipo"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        innerRadius={40}
-                        label={({ tipo, percentage }) => `${tipo}: ${percentage.toFixed(0)}%`}
-                        labelLine={false}
-                      >
-                        {data!.distribucionClientes.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"][index % 7]}
-                          />
-                        ))}
+                      <Pie data={data!.distribucionClientes} dataKey="count" nameKey="tipo" cx="50%" cy="50%" outerRadius={80} innerRadius={40} label={({ tipo, percentage }) => `${tipo}: ${percentage.toFixed(0)}%`} labelLine={false}>
+                        {data!.distribucionClientes.map((entry, index) => <Cell key={`cell-${index}`} fill={["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"][index % 7]} />)}
                       </Pie>
-                      <Tooltip
-                        formatter={(value: number, name: string) => [
-                          `${value} (${data!.distribucionClientes.find((c) => c.tipo === name)?.percentage.toFixed(1)}%)`,
-                          name,
-                        ]}
-                      />
+                      <Tooltip formatter={(value: number, name: string) => [`${value} (${data!.distribucionClientes.find((c) => c.tipo === name)?.percentage.toFixed(1)}%)`, name]} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -802,11 +538,8 @@ export default function Analytics() {
             </Card>
           </div>
 
-          {/* Performance Table */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Rendimiento por Agente</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Rendimiento por Agente</CardTitle></CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
@@ -826,15 +559,7 @@ export default function Analytics() {
                       <TableCell className="text-right">{formatNumber(agent.gestiones)}</TableCell>
                       <TableCell className="text-right">{formatNumber(agent.renovados)}</TableCell>
                       <TableCell className="text-right">
-                        <span
-                          className={cn(
-                            agent.tasaRenovacion >= 50
-                              ? "text-green-600"
-                              : agent.tasaRenovacion >= 25
-                              ? "text-amber-600"
-                              : "text-red-600"
-                          )}
-                        >
+                        <span className={cn(agent.tasaRenovacion >= 50 ? "text-green-600" : agent.tasaRenovacion >= 25 ? "text-amber-600" : "text-red-600")}>
                           {formatPercentage(agent.tasaRenovacion)}
                         </span>
                       </TableCell>
@@ -842,31 +567,14 @@ export default function Analytics() {
                   ))}
                 </TableBody>
               </Table>
-
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4">
                   <p className="text-sm text-muted-foreground">
-                    Mostrando {currentPage * ROWS_PER_PAGE + 1} -{" "}
-                    {Math.min((currentPage + 1) * ROWS_PER_PAGE, data!.rendimientoAgentes.length)} de{" "}
-                    {data!.rendimientoAgentes.length}
+                    Mostrando {currentPage * ROWS_PER_PAGE + 1} - {Math.min((currentPage + 1) * ROWS_PER_PAGE, data!.rendimientoAgentes.length)} de {data!.rendimientoAgentes.length}
                   </p>
                   <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-                      disabled={currentPage === 0}
-                    >
-                      Anterior
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
-                      disabled={currentPage >= totalPages - 1}
-                    >
-                      Siguiente
-                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} disabled={currentPage === 0}>Anterior</Button>
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))} disabled={currentPage >= totalPages - 1}>Siguiente</Button>
                   </div>
                 </div>
               )}
