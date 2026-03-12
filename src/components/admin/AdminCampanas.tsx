@@ -11,15 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Lock } from "lucide-react";
 import { toast } from "sonner";
+import { getEstadoInlineStyle } from "@/lib/estadoColors";
 
 // Devuelve true si el perfil tiene alguno de los roles indicados
 function hasAnyRole(p: any, roleNames: string[]): boolean {
-  // Rol principal en profiles.user_roles.name
   const primaryRole = (p.user_roles as any)?.name;
   if (primaryRole && roleNames.includes(primaryRole)) return true;
-
-  // Roles del nuevo sistema en user_role_assignments (role_name o name)
   const assignments: any[] = p.role_assignments || [];
   return assignments.some(
     (r: any) =>
@@ -52,7 +51,6 @@ export default function AdminCampanas() {
   const updateCase = useAdminUpdateCase();
   const insertHistorial = useInsertHistorial();
 
-  // Usuarios con rol agent o supervisor (excluye admin y gerente)
   const assignableUsers = (profiles || []).filter((p: any) =>
     hasAnyRole(p, ["agent", "supervisor"])
   );
@@ -227,7 +225,13 @@ export default function AdminCampanas() {
                     </Select>
                   </TableCell>
                   <TableCell>
-                    <span className="inline-block rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">
+                    {/* Paleta de colores consistente con la vista de Casos */}
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      style={getEstadoInlineStyle(caso.cat_estados?.nombre)}
+                    >
+                      {caso.cat_estados?.es_final && <Lock className="h-3 w-3" />}
+                      {caso.cat_estados?.nombre === "Transferido" && "🔄 "}
                       {caso.cat_estados?.nombre}
                     </span>
                   </TableCell>
