@@ -6,13 +6,11 @@
 
 const ALLOWED_ORIGINS: Record<string, string[]> = {
   production: [
-    "https://contact-app.vercel.app",
-    // Agregar el dominio real de Vercel si es diferente, ej:
-    // "https://contactcenter-casos.vercel.app",
+    "https://contact-app-nine-zeta.vercel.app",
   ],
   preview: [
-    // Dominios de preview de Vercel (ej: contact-app-git-*.vercel.app)
-    // Agregar los dominios de preview si se usan PRs en Vercel
+    // Dominios de preview de Vercel (PRs)
+    // Ejemplo: "https://contact-app-git-feature-ragnar8322s-projects.vercel.app"
   ],
   development: [
     "http://localhost:5173",
