@@ -39,40 +39,49 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // IDs derivados de estados
   const activeEstadoIds = estados
     ?.filter((e: any) => !e.es_final && e.nombre !== "Transferido")
     .map((e: any) => e.id) ?? [];
 
-  const registradoEstadoId = estados?.find((e: any) => e.nombre === "Registrado")?.id;
+  const registradoEstadoId = estados?.find((e: any) => e.nombre === "Registrado")?.id ?? null;
 
+  // Disparar carga solo cuando el modal está abierto Y estados ya cargó
   useEffect(() => {
-    if (!open || !campanaActiva?.id || activeEstadoIds.length === 0) return;
+    if (!open || !campanaActiva?.id || !estados || estados.length === 0) return;
     loadData();
   }, [open, campanaActiva?.id, mode, estados]);
 
   async function loadData() {
-    if (!campanaActiva?.id) return;
+    if (!campanaActiva?.id || !estados || estados.length === 0) return;
     setLoading(true);
     try {
-      // Cargar solo usuarios con rol 'agent'
-      const { data: roleAssignments, error: roleErr } = await supabase
+      // ── 1. Obtener el role_id del rol 'agent' ──────────────────────────────
+      const { data: roleRow, error: roleErr } = await supabase
+        .from("user_roles")
+        .select("id")
+        .eq("name", "agent")
+        .single();
+
+      if (roleErr || !roleRow) throw new Error("No se encontró el rol 'agent'.");
+
+      // ── 2. Obtener los user_id asignados a ese rol ─────────────────────────
+      const { data: assignments, error: assignErr } = await supabase
         .from("user_role_assignments")
-        .select("user_id, user_roles(name)");
+        .select("user_id")
+        .eq("role_id", roleRow.id);
 
-      if (roleErr) throw roleErr;
+      if (assignErr) throw assignErr;
 
-      const agentUserIds = (roleAssignments ?? [])
-        .filter((r: any) => r.user_roles?.name === "agent")
-        .map((r: any) => r.user_id);
+      const agentUserIds = (assignments ?? []).map((r: any) => r.user_id);
 
       if (agentUserIds.length === 0) {
         setAgentsWithCounts([]);
         setCasesToAssignCount(0);
-        setLoading(false);
         return;
       }
 
-      // Obtener nombres desde profiles
+      // ── 3. Obtener nombres desde profiles ─────────────────────────────────
       const { data: profiles, error: profErr } = await supabase
         .from("profiles")
         .select("user_id, nombre")
@@ -80,7 +89,7 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
 
       if (profErr) throw profErr;
 
-      // Contar casos activos por agente
+      // ── 4. Contar casos activos por agente ────────────────────────────────
       const counts: AgentWithCount[] = await Promise.all(
         (profiles ?? []).map(async (agent: any) => {
           const { count } = await supabase
@@ -89,11 +98,16 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
             .eq("campana_id", campanaActiva.id)
             .eq("agente_id", agent.user_id)
             .in("estado_id", activeEstadoIds);
-          return { user_id: agent.user_id, nombre: agent.nombre, currentCount: count ?? 0, projected: 0 };
+          return {
+            user_id: agent.user_id,
+            nombre: agent.nombre,
+            currentCount: count ?? 0,
+            projected: 0,
+          };
         })
       );
 
-      // Casos a asignar según modo
+      // ── 5. Contar casos a asignar según modo ─────────────────────────────
       let casesQuery = supabase
         .from("casos")
         .select("id", { count: "exact", head: true })
@@ -102,7 +116,6 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
       if (mode === "registrado") {
         if (!registradoEstadoId) {
           toast.error("No se encontró el estado 'Registrado'.");
-          setLoading(false);
           return;
         }
         casesQuery = casesQuery.eq("estado_id", registradoEstadoId);
@@ -114,7 +127,7 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
       const toAssign = casesCount ?? 0;
       setCasesToAssignCount(toAssign);
 
-      // Calcular distribución proyectada
+      // ── 6. Calcular distribución proyectada ──────────────────────────────
       if (counts.length > 0 && toAssign > 0) {
         if (mode === "todos_activos") {
           const totalActive = counts.reduce((s, a) => s + a.currentCount, 0);
@@ -139,6 +152,8 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
       }
 
       setAgentsWithCounts(counts);
+    } catch (err: any) {
+      toast.error("Error al cargar datos: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -236,7 +251,6 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Modo */}
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground uppercase tracking-wide">¿Qué casos asignar?</Label>
             <Select value={mode} onValueChange={(v) => setMode(v as AssignMode)}>
@@ -256,7 +270,6 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
             </div>
           ) : (
             <>
-              {/* Resumen */}
               <div className="rounded-lg border bg-muted/40 px-4 py-3 flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Casos a asignar</span>
                 <Badge variant={casesToAssignCount > 0 ? "default" : "secondary"} className="text-sm font-bold px-3">
@@ -264,7 +277,6 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
                 </Badge>
               </div>
 
-              {/* Dropdown agentes */}
               {agentsWithCounts.length > 0 && (
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground uppercase tracking-wide">Ver distribución por agente</Label>
@@ -290,7 +302,6 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
                     </SelectContent>
                   </Select>
 
-                  {/* Preview */}
                   {selectedAgent ? (
                     <div className="rounded-lg border bg-card p-3 space-y-2">
                       <p className="text-sm font-medium">{selectedAgent.nombre}</p>
