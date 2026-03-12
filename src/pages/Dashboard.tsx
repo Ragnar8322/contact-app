@@ -23,13 +23,44 @@ import {
   endOfDay, endOfWeek, endOfMonth, endOfYear,
   differenceInMinutes, differenceInHours, differenceInDays,
 } from "date-fns";
-import { es } from "date-fns/locale";
 
 type Periodo = "dia" | "semana" | "mes" | "año";
 
-// Claves fijas sin tildes ni puntos — sin dependencia de date-fns locale
+// Claves fijas sin tildes ni puntos
 const WEEK_KEYS  = ["lun", "mar", "mie", "jue", "vie", "sab", "dom"];
 const MONTH_KEYS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+// FIX 1: getPeriodRange devuelve timestamps numéricos estables (no objetos Date nuevos en cada render)
+// FIX 2: startOfWeek usa weekStartsOn:1 (lunes) en lugar de locale:es que podía variar
+function getPeriodRange(periodo: Periodo): { inicio: number; fin: number; diasEnMes: number } {
+  const now = new Date();
+  switch (periodo) {
+    case "dia":
+      return {
+        inicio: startOfDay(now).getTime(),
+        fin: endOfDay(now).getTime(),
+        diasEnMes: 0,
+      };
+    case "semana":
+      return {
+        inicio: startOfWeek(now, { weekStartsOn: 1 }).getTime(),
+        fin: endOfWeek(now, { weekStartsOn: 1 }).getTime(),
+        diasEnMes: 0,
+      };
+    case "mes":
+      return {
+        inicio: startOfMonth(now).getTime(),
+        fin: endOfMonth(now).getTime(),
+        diasEnMes: endOfMonth(now).getDate(),
+      };
+    case "año":
+      return {
+        inicio: startOfYear(now).getTime(),
+        fin: endOfYear(now).getTime(),
+        diasEnMes: 0,
+      };
+  }
+}
 
 function timeAgo(dateStr: string): string {
   const now = new Date();
@@ -40,16 +71,6 @@ function timeAgo(dateStr: string): string {
   if (hrs < 24) return `${hrs} h`;
   const days = differenceInDays(now, d);
   return `${days} d`;
-}
-
-function getPeriodRange(periodo: Periodo): { inicio: Date; fin: Date } {
-  const now = new Date();
-  switch (periodo) {
-    case "dia":    return { inicio: startOfDay(now),                 fin: endOfDay(now) };
-    case "semana": return { inicio: startOfWeek(now, { locale: es }), fin: endOfWeek(now, { locale: es }) };
-    case "mes":    return { inicio: startOfMonth(now),               fin: endOfMonth(now) };
-    case "año":   return { inicio: startOfYear(now),                fin: endOfYear(now) };
-  }
 }
 
 /* ─── Last Updated Hook ─── */
@@ -447,12 +468,15 @@ function KpiMini({ label, value, icon, badge }: {
 }
 
 /* ─── Financial Module ───
- * Cambios definitivos:
- * 1. Query simple: trae TODOS los casos de la campaña sin filtros de fecha en servidor.
- *    El filtrado por período se hace 100% en cliente, evitando bugs con .or() de Supabase.
- * 2. getBucketKey usa getDay()/getMonth() con arrays WEEK_KEYS/MONTH_KEYS (sin tildes/puntos).
- *    Elimina la dependencia de format() + locale que generaba keys como "mié." o "sáb.".
- * 3. getFechaRef: Renovado usa fecha_cierre (cuando existe), Pendiente usa fecha_caso.
+ * FIXES aplicados:
+ * 1. getPeriodRange retorna timestamps numéricos → el useMemo de financialData
+ *    recibe valores primitivos estables, no objetos Date nuevos en cada render.
+ * 2. startOfWeek usa weekStartsOn:1 (lunes fijo) en lugar de locale:es
+ *    que podía generar semanas incorrectas dependiendo del entorno.
+ * 3. getFechaRef para "Pendiente de pago" usa updated_at || fecha_caso
+ *    para capturar actividad reciente, no solo la fecha de creación del caso.
+ * 4. Los KPI cards de Renovado/Pendiente respetan los toggles activeStates.
+ * 5. Tooltip del gráfico muestra el label de período legible.
  */
 function FinancialModule({
   campana,
@@ -466,16 +490,17 @@ function FinancialModule({
     new Set(["Renovado", "Pendiente de pago"])
   );
 
-  const { inicio, fin } = useMemo(() => getPeriodRange(periodo), [periodo]);
+  // FIX 1: memoizar como números primitivos para evitar re-renders infinitos
+  const { inicio, fin, diasEnMes } = useMemo(() => getPeriodRange(periodo), [periodo]);
 
-  // Query simple — sin filtros de fecha en servidor, todo se filtra en cliente
+  // Query trae TODOS los casos de la campaña; el filtrado es 100% en cliente
   const { data: financialCases = [], isLoading: financialLoading } = useQuery({
     queryKey: ["financial-cases", campana.id],
     ...QUERY_RESILIENCE,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("casos")
-        .select("id, fecha_caso, fecha_cierre, valor_pagar, cat_estados(nombre)")
+        .select("id, fecha_caso, fecha_cierre, updated_at, valor_pagar, cat_estados(nombre)")
         .eq("campana_id", campana.id);
       if (error) throw error;
       return data ?? [];
@@ -485,28 +510,29 @@ function FinancialModule({
   const financialData = useMemo(() => {
     if (!financialCases.length) return { renovado: 0, pendiente: 0, chartData: [] };
 
-    // Fecha de referencia según estado:
-    // Renovado    → fecha_cierre (fecha real del cierre); fallback a fecha_caso
-    // Pendiente   → fecha_caso (aún no cerrado formalmente)
-    const getFechaRef = (c: any): string =>
-      c.cat_estados?.nombre === "Renovado"
-        ? (c.fecha_cierre || c.fecha_caso)
-        : (c.fecha_caso || c.fecha_cierre);
+    // FIX 3: getFechaRef
+    // Renovado    → fecha_cierre (fecha real del cierre); fallback a updated_at → fecha_caso
+    // Pendiente   → updated_at || fecha_caso (captura actividad reciente, no solo creación)
+    const getFechaRef = (c: any): string => {
+      if (c.cat_estados?.nombre === "Renovado") {
+        return c.fecha_cierre || c.updated_at || c.fecha_caso;
+      }
+      return c.updated_at || c.fecha_caso;
+    };
 
-    // Solo casos relevantes dentro del período activo
+    // Filtrar por período y por estados activos en los toggles
     const inRange = financialCases.filter((c: any) => {
       const nombre = c.cat_estados?.nombre;
       if (nombre !== "Renovado" && nombre !== "Pendiente de pago") return false;
       const t = new Date(getFechaRef(c)).getTime();
-      return t >= inicio.getTime() && t <= fin.getTime();
+      return t >= inicio && t <= fin;
     });
 
-    // Construir buckets usando índices numéricos — sin strings localizados
     function getBucketKey(dateStr: string): string {
       const d = new Date(dateStr);
       switch (periodo) {
         case "dia":    return `${d.getHours()}h`;
-        // getDay(): 0=dom, 1=lun...6=sab → (day+6)%7 mueve lunes al índice 0
+        // FIX 2: (getDay()+6)%7 con weekStartsOn:1 → lunes=0 ... domingo=6
         case "semana": return WEEK_KEYS[(d.getDay() + 6) % 7];
         case "mes":    return String(d.getDate());
         case "año":   return MONTH_KEYS[d.getMonth()];
@@ -520,13 +546,13 @@ function FinancialModule({
     } else if (periodo === "semana") {
       WEEK_KEYS.forEach((k) => (buckets[k] = { renovado: 0, pendiente: 0 }));
     } else if (periodo === "mes") {
-      for (let i = 1; i <= fin.getDate(); i++) buckets[String(i)] = { renovado: 0, pendiente: 0 };
+      for (let i = 1; i <= diasEnMes; i++) buckets[String(i)] = { renovado: 0, pendiente: 0 };
     } else {
       MONTH_KEYS.forEach((k) => (buckets[k] = { renovado: 0, pendiente: 0 }));
     }
 
-    let renovado = 0;
-    let pendiente = 0;
+    let renovadoTotal = 0;
+    let pendienteTotal = 0;
 
     inRange.forEach((c: any) => {
       const key = getBucketKey(getFechaRef(c));
@@ -534,22 +560,29 @@ function FinancialModule({
       if (!buckets[key]) return;
       if (c.cat_estados?.nombre === "Renovado") {
         buckets[key].renovado += val;
-        renovado += val;
+        renovadoTotal += val;
       } else {
         buckets[key].pendiente += val;
-        pendiente += val;
+        pendienteTotal += val;
       }
     });
 
     return {
-      renovado,
-      pendiente,
+      renovado: renovadoTotal,
+      pendiente: pendienteTotal,
       chartData: Object.entries(buckets).map(([name, v]) => ({ name, ...v })),
     };
-  }, [financialCases, periodo, inicio, fin]);
+  }, [financialCases, periodo, inicio, fin, diasEnMes]);
 
-  const total = financialData.renovado + financialData.pendiente;
-  const pctRecuperado = total > 0 ? ((financialData.renovado / total) * 100).toFixed(1) : "—";
+  // FIX 4: los KPI cards respetan activeStates
+  const renovadoVisible  = activeStates.has("Renovado")          ? financialData.renovado  : 0;
+  const pendienteVisible = activeStates.has("Pendiente de pago") ? financialData.pendiente : 0;
+  const total = renovadoVisible + pendienteVisible;
+  const pctRecuperado = total > 0
+    ? ((renovadoVisible / total) * 100).toFixed(1)
+    : financialData.renovado > 0 && !activeStates.has("Pendiente de pago")
+      ? "100.0"
+      : "—";
 
   const toggleState = (state: string) => {
     setActiveStates((prev) => {
@@ -557,6 +590,13 @@ function FinancialModule({
       if (next.has(state)) next.delete(state); else next.add(state);
       return next;
     });
+  };
+
+  const periodoLabel: Record<Periodo, string> = {
+    dia: "hoy",
+    semana: "esta semana",
+    mes: "este mes",
+    año: "este año",
   };
 
   const periodos: { key: Periodo; label: string }[] = [
@@ -621,16 +661,17 @@ function FinancialModule({
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="rounded-lg bg-accent/10 p-3 text-center">
+              {/* FIX 4: mostrar valor solo si el toggle está activo */}
+              <div className={`rounded-lg p-3 text-center transition-opacity ${activeStates.has("Renovado") ? "bg-accent/10" : "bg-muted/30 opacity-50"}`}>
                 <p className="text-[11px] text-muted-foreground">💰 Valor Renovado</p>
                 <p className="text-lg font-bold text-accent">
-                  {financialData.renovado ? formatCOP(financialData.renovado) : "—"}
+                  {renovadoVisible ? formatCOP(renovadoVisible) : "—"}
                 </p>
               </div>
-              <div className="rounded-lg bg-warning/10 p-3 text-center">
+              <div className={`rounded-lg p-3 text-center transition-opacity ${activeStates.has("Pendiente de pago") ? "bg-warning/10" : "bg-muted/30 opacity-50"}`}>
                 <p className="text-[11px] text-muted-foreground">⏳ Valor Pendiente</p>
                 <p className="text-lg font-bold" style={{ color: "hsl(var(--warning))" }}>
-                  {financialData.pendiente ? formatCOP(financialData.pendiente) : "—"}
+                  {pendienteVisible ? formatCOP(pendienteVisible) : "—"}
                 </p>
               </div>
               <div className="rounded-lg bg-muted/50 p-3 text-center">
@@ -640,7 +681,7 @@ function FinancialModule({
               {showPctRecuperado && (
                 <div className="rounded-lg bg-muted/50 p-3 text-center">
                   <p className="text-[11px] text-muted-foreground">📈 % Recuperado</p>
-                  <p className="text-lg font-bold">{pctRecuperado}%</p>
+                  <p className="text-lg font-bold">{pctRecuperado}{pctRecuperado !== "—" ? "%" : ""}</p>
                 </div>
               )}
             </div>
@@ -652,7 +693,7 @@ function FinancialModule({
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => formatCOP(v)} />
                 <Tooltip
                   formatter={(value: number, name: string) => [formatCOP(value), name]}
-                  labelFormatter={(label) => `Período: ${label}`}
+                  labelFormatter={(label) => `${label} — ${periodoLabel[periodo]}`}
                 />
                 <Legend />
                 {activeStates.has("Renovado") && (
