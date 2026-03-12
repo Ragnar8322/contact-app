@@ -26,39 +26,37 @@ import {
 
 type Periodo = "dia" | "semana" | "mes" | "año";
 
-// Claves fijas sin tildes ni puntos
 const WEEK_KEYS  = ["lun", "mar", "mie", "jue", "vie", "sab", "dom"];
 const MONTH_KEYS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
-// FIX 1: getPeriodRange devuelve timestamps numéricos estables (no objetos Date nuevos en cada render)
-// FIX 2: startOfWeek usa weekStartsOn:1 (lunes) en lugar de locale:es que podía variar
+// FIX A: Comparación de estados insensible a mayúsculas/minúsculas
+// La BD puede tener "Pendiente de Pago" o "Pendiente de pago" según cómo fue creado
+function isRenovado(nombre: string | null | undefined): boolean {
+  return (nombre ?? "").toLowerCase() === "renovado";
+}
+function isPendiente(nombre: string | null | undefined): boolean {
+  return (nombre ?? "").toLowerCase().includes("pendiente");
+}
+
 function getPeriodRange(periodo: Periodo): { inicio: number; fin: number; diasEnMes: number } {
   const now = new Date();
   switch (periodo) {
     case "dia":
-      return {
-        inicio: startOfDay(now).getTime(),
-        fin: endOfDay(now).getTime(),
-        diasEnMes: 0,
-      };
+      return { inicio: startOfDay(now).getTime(), fin: endOfDay(now).getTime(), diasEnMes: 0 };
     case "semana":
       return {
         inicio: startOfWeek(now, { weekStartsOn: 1 }).getTime(),
-        fin: endOfWeek(now, { weekStartsOn: 1 }).getTime(),
+        fin:    endOfWeek(now,   { weekStartsOn: 1 }).getTime(),
         diasEnMes: 0,
       };
     case "mes":
       return {
         inicio: startOfMonth(now).getTime(),
-        fin: endOfMonth(now).getTime(),
+        fin:    endOfMonth(now).getTime(),
         diasEnMes: endOfMonth(now).getDate(),
       };
     case "año":
-      return {
-        inicio: startOfYear(now).getTime(),
-        fin: endOfYear(now).getTime(),
-        diasEnMes: 0,
-      };
+      return { inicio: startOfYear(now).getTime(), fin: endOfYear(now).getTime(), diasEnMes: 0 };
   }
 }
 
@@ -73,7 +71,6 @@ function timeAgo(dateStr: string): string {
   return `${days} d`;
 }
 
-/* ─── Last Updated Hook ─── */
 function useLastUpdated(dataUpdatedAt: number) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -447,7 +444,6 @@ export default function Dashboard() {
   );
 }
 
-/* ─── KPI Mini Card ─── */
 function KpiMini({ label, value, icon, badge }: {
   label: string; value: number; icon: React.ReactNode; badge?: "destructive" | "warning";
 }) {
@@ -468,15 +464,13 @@ function KpiMini({ label, value, icon, badge }: {
 }
 
 /* ─── Financial Module ───
- * FIXES aplicados:
- * 1. getPeriodRange retorna timestamps numéricos → el useMemo de financialData
- *    recibe valores primitivos estables, no objetos Date nuevos en cada render.
- * 2. startOfWeek usa weekStartsOn:1 (lunes fijo) en lugar de locale:es
- *    que podía generar semanas incorrectas dependiendo del entorno.
- * 3. getFechaRef para "Pendiente de pago" usa updated_at || fecha_caso
- *    para capturar actividad reciente, no solo la fecha de creación del caso.
- * 4. Los KPI cards de Renovado/Pendiente respetan los toggles activeStates.
- * 5. Tooltip del gráfico muestra el label de período legible.
+ * FIXES aplicados en esta versión:
+ * A. isRenovado / isPendiente con toLowerCase() → resuelve mismatch
+ *    "Pendiente de Pago" vs "Pendiente de pago" en la BD.
+ * B. getFechaRef usa siempre fecha_caso (igual que useAnalyticsData)
+ *    → los períodos Mes/Semana/Día/Año coinciden con Analítica.
+ * C. La query ya no pide fecha_cierre (columna no relevante para el filtro).
+ * D. Los KPI cards respetan los toggles activeStates.
  */
 function FinancialModule({
   campana,
@@ -487,20 +481,19 @@ function FinancialModule({
 }) {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [activeStates, setActiveStates] = useState<Set<string>>(
-    new Set(["Renovado", "Pendiente de pago"])
+    new Set(["renovado", "pendiente"])
   );
 
-  // FIX 1: memoizar como números primitivos para evitar re-renders infinitos
   const { inicio, fin, diasEnMes } = useMemo(() => getPeriodRange(periodo), [periodo]);
 
-  // Query trae TODOS los casos de la campaña; el filtrado es 100% en cliente
+  // FIX C: ya no pedimos fecha_cierre; FIX B: solo necesitamos fecha_caso
   const { data: financialCases = [], isLoading: financialLoading } = useQuery({
     queryKey: ["financial-cases", campana.id],
     ...QUERY_RESILIENCE,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("casos")
-        .select("id, fecha_caso, fecha_cierre, updated_at, valor_pagar, cat_estados(nombre)")
+        .select("id, fecha_caso, valor_pagar, cat_estados(nombre)")
         .eq("campana_id", campana.id);
       if (error) throw error;
       return data ?? [];
@@ -510,20 +503,13 @@ function FinancialModule({
   const financialData = useMemo(() => {
     if (!financialCases.length) return { renovado: 0, pendiente: 0, chartData: [] };
 
-    // FIX 3: getFechaRef
-    // Renovado    → fecha_cierre (fecha real del cierre); fallback a updated_at → fecha_caso
-    // Pendiente   → updated_at || fecha_caso (captura actividad reciente, no solo creación)
-    const getFechaRef = (c: any): string => {
-      if (c.cat_estados?.nombre === "Renovado") {
-        return c.fecha_cierre || c.updated_at || c.fecha_caso;
-      }
-      return c.updated_at || c.fecha_caso;
-    };
+    // FIX B: fecha de referencia = fecha_caso siempre (igual que Analítica)
+    const getFechaRef = (c: any): string => c.fecha_caso;
 
-    // Filtrar por período y por estados activos en los toggles
+    // FIX A: filtrar con helpers insensibles a mayúsculas
     const inRange = financialCases.filter((c: any) => {
       const nombre = c.cat_estados?.nombre;
-      if (nombre !== "Renovado" && nombre !== "Pendiente de pago") return false;
+      if (!isRenovado(nombre) && !isPendiente(nombre)) return false;
       const t = new Date(getFechaRef(c)).getTime();
       return t >= inicio && t <= fin;
     });
@@ -532,7 +518,6 @@ function FinancialModule({
       const d = new Date(dateStr);
       switch (periodo) {
         case "dia":    return `${d.getHours()}h`;
-        // FIX 2: (getDay()+6)%7 con weekStartsOn:1 → lunes=0 ... domingo=6
         case "semana": return WEEK_KEYS[(d.getDay() + 6) % 7];
         case "mes":    return String(d.getDate());
         case "año":   return MONTH_KEYS[d.getMonth()];
@@ -540,7 +525,6 @@ function FinancialModule({
     }
 
     const buckets: Record<string, { renovado: number; pendiente: number }> = {};
-
     if (periodo === "dia") {
       for (let i = 0; i < 24; i++) buckets[`${i}h`] = { renovado: 0, pendiente: 0 };
     } else if (periodo === "semana") {
@@ -558,10 +542,11 @@ function FinancialModule({
       const key = getBucketKey(getFechaRef(c));
       const val = Number(c.valor_pagar || 0);
       if (!buckets[key]) return;
-      if (c.cat_estados?.nombre === "Renovado") {
+      // FIX A: usar helpers en lugar de comparación directa de string
+      if (isRenovado(c.cat_estados?.nombre)) {
         buckets[key].renovado += val;
         renovadoTotal += val;
-      } else {
+      } else if (isPendiente(c.cat_estados?.nombre)) {
         buckets[key].pendiente += val;
         pendienteTotal += val;
       }
@@ -574,36 +559,36 @@ function FinancialModule({
     };
   }, [financialCases, periodo, inicio, fin, diasEnMes]);
 
-  // FIX 4: los KPI cards respetan activeStates
-  const renovadoVisible  = activeStates.has("Renovado")          ? financialData.renovado  : 0;
-  const pendienteVisible = activeStates.has("Pendiente de pago") ? financialData.pendiente : 0;
+  // FIX D: KPI cards respetan activeStates
+  const showRenovado  = activeStates.has("renovado");
+  const showPendiente = activeStates.has("pendiente");
+  const renovadoVisible  = showRenovado  ? financialData.renovado  : 0;
+  const pendienteVisible = showPendiente ? financialData.pendiente : 0;
   const total = renovadoVisible + pendienteVisible;
-  const pctRecuperado = total > 0
-    ? ((renovadoVisible / total) * 100).toFixed(1)
-    : financialData.renovado > 0 && !activeStates.has("Pendiente de pago")
-      ? "100.0"
-      : "—";
+  const pctRecuperado =
+    total > 0
+      ? ((renovadoVisible / total) * 100).toFixed(1)
+      : showRenovado && financialData.renovado > 0
+        ? "100.0"
+        : "—";
 
-  const toggleState = (state: string) => {
+  const toggleState = (key: string) => {
     setActiveStates((prev) => {
       const next = new Set(prev);
-      if (next.has(state)) next.delete(state); else next.add(state);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   };
 
   const periodoLabel: Record<Periodo, string> = {
-    dia: "hoy",
-    semana: "esta semana",
-    mes: "este mes",
-    año: "este año",
+    dia: "hoy", semana: "esta semana", mes: "este mes", año: "este año",
   };
 
   const periodos: { key: Periodo; label: string }[] = [
-    { key: "dia",    label: "Día" },
+    { key: "dia", label: "Día" },
     { key: "semana", label: "Semana" },
-    { key: "mes",    label: "Mes" },
-    { key: "año",   label: "Año" },
+    { key: "mes", label: "Mes" },
+    { key: "año", label: "Año" },
   ];
 
   return (
@@ -621,7 +606,9 @@ function FinancialModule({
                   key={p.key}
                   onClick={() => setPeriodo(p.key)}
                   className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                    periodo === p.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    periodo === p.key
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {p.label}
@@ -630,19 +617,21 @@ function FinancialModule({
             </div>
             <div className="flex gap-1">
               <button
-                onClick={() => toggleState("Renovado")}
+                onClick={() => toggleState("renovado")}
                 className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                  activeStates.has("Renovado") ? "bg-accent/15 border-accent text-accent" : "border-border text-muted-foreground"
+                  showRenovado
+                    ? "bg-accent/15 border-accent text-accent"
+                    : "border-border text-muted-foreground"
                 }`}
               >
                 🟢 Renovado
               </button>
               <button
-                onClick={() => toggleState("Pendiente de pago")}
+                onClick={() => toggleState("pendiente")}
                 className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                  activeStates.has("Pendiente de pago") ? "bg-warning/15 border-warning" : "border-border text-muted-foreground"
+                  showPendiente ? "bg-warning/15 border-warning" : "border-border text-muted-foreground"
                 }`}
-                style={activeStates.has("Pendiente de pago") ? { color: "hsl(var(--warning))" } : {}}
+                style={showPendiente ? { color: "hsl(var(--warning))" } : {}}
               >
                 🟡 Pendiente
               </button>
@@ -654,21 +643,24 @@ function FinancialModule({
         {financialLoading ? (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[1,2,3,4].map(i => <Skeleton key={i} className="h-20 rounded-lg" />)}
+              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
             </div>
             <Skeleton className="h-72 w-full rounded-lg" />
           </>
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {/* FIX 4: mostrar valor solo si el toggle está activo */}
-              <div className={`rounded-lg p-3 text-center transition-opacity ${activeStates.has("Renovado") ? "bg-accent/10" : "bg-muted/30 opacity-50"}`}>
+              <div className={`rounded-lg p-3 text-center transition-opacity ${
+                showRenovado ? "bg-accent/10" : "bg-muted/30 opacity-50"
+              }`}>
                 <p className="text-[11px] text-muted-foreground">💰 Valor Renovado</p>
                 <p className="text-lg font-bold text-accent">
                   {renovadoVisible ? formatCOP(renovadoVisible) : "—"}
                 </p>
               </div>
-              <div className={`rounded-lg p-3 text-center transition-opacity ${activeStates.has("Pendiente de pago") ? "bg-warning/10" : "bg-muted/30 opacity-50"}`}>
+              <div className={`rounded-lg p-3 text-center transition-opacity ${
+                showPendiente ? "bg-warning/10" : "bg-muted/30 opacity-50"
+              }`}>
                 <p className="text-[11px] text-muted-foreground">⏳ Valor Pendiente</p>
                 <p className="text-lg font-bold" style={{ color: "hsl(var(--warning))" }}>
                   {pendienteVisible ? formatCOP(pendienteVisible) : "—"}
@@ -681,7 +673,9 @@ function FinancialModule({
               {showPctRecuperado && (
                 <div className="rounded-lg bg-muted/50 p-3 text-center">
                   <p className="text-[11px] text-muted-foreground">📈 % Recuperado</p>
-                  <p className="text-lg font-bold">{pctRecuperado}{pctRecuperado !== "—" ? "%" : ""}</p>
+                  <p className="text-lg font-bold">
+                    {pctRecuperado}{pctRecuperado !== "—" ? "%" : ""}
+                  </p>
                 </div>
               )}
             </div>
@@ -696,10 +690,10 @@ function FinancialModule({
                   labelFormatter={(label) => `${label} — ${periodoLabel[periodo]}`}
                 />
                 <Legend />
-                {activeStates.has("Renovado") && (
+                {showRenovado && (
                   <Bar dataKey="renovado" name="Renovado" fill="hsl(130, 50%, 45%)" radius={[4, 4, 0, 0]} />
                 )}
-                {activeStates.has("Pendiente de pago") && (
+                {showPendiente && (
                   <Bar dataKey="pendiente" name="Pendiente de pago" fill="hsl(38, 92%, 50%)" radius={[4, 4, 0, 0]} />
                 )}
               </BarChart>
