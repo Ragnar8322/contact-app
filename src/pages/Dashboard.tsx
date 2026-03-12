@@ -19,7 +19,6 @@ import {
 import { formatCOP } from "@/lib/currency";
 import { getEstadoInlineStyle } from "@/lib/estadoColors";
 import {
-  format,
   startOfDay, startOfWeek, startOfMonth, startOfYear,
   endOfDay, endOfWeek, endOfMonth, endOfYear,
   differenceInMinutes, differenceInHours, differenceInDays,
@@ -27,6 +26,10 @@ import {
 import { es } from "date-fns/locale";
 
 type Periodo = "dia" | "semana" | "mes" | "año";
+
+// Claves fijas sin tildes ni puntos — sin dependencia de date-fns locale
+const WEEK_KEYS  = ["lun", "mar", "mie", "jue", "vie", "sab", "dom"];
+const MONTH_KEYS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
 function timeAgo(dateStr: string): string {
   const now = new Date();
@@ -42,10 +45,10 @@ function timeAgo(dateStr: string): string {
 function getPeriodRange(periodo: Periodo): { inicio: Date; fin: Date } {
   const now = new Date();
   switch (periodo) {
-    case "dia":    return { inicio: startOfDay(now),                      fin: endOfDay(now) };
-    case "semana": return { inicio: startOfWeek(now, { locale: es }),      fin: endOfWeek(now, { locale: es }) };
-    case "mes":    return { inicio: startOfMonth(now),                     fin: endOfMonth(now) };
-    case "año":   return { inicio: startOfYear(now),                      fin: endOfYear(now) };
+    case "dia":    return { inicio: startOfDay(now),                 fin: endOfDay(now) };
+    case "semana": return { inicio: startOfWeek(now, { locale: es }), fin: endOfWeek(now, { locale: es }) };
+    case "mes":    return { inicio: startOfMonth(now),               fin: endOfMonth(now) };
+    case "año":   return { inicio: startOfYear(now),                fin: endOfYear(now) };
   }
 }
 
@@ -108,7 +111,6 @@ export default function Dashboard() {
         .eq("name", "agent")
         .single();
       if (roleErr || !roleRow) return [];
-
       const { data: assignments, error: assignErr } = await supabase
         .from("user_role_assignments")
         .select("user_id")
@@ -116,7 +118,6 @@ export default function Dashboard() {
       if (assignErr) throw assignErr;
       const userIds = (assignments ?? []).map((a: any) => a.user_id);
       if (userIds.length === 0) return [];
-
       const { data: profiles, error: profErr } = await supabase
         .from("profiles")
         .select("user_id, nombre")
@@ -175,8 +176,7 @@ export default function Dashboard() {
       );
       let vencidos = 0;
       myCases.forEach((c: any) => {
-        const cid = c.campana_id;
-        const cfg = safeSlaConfigs[cid] || { horas_riesgo: 2, horas_vencido: 6 };
+        const cfg = safeSlaConfigs[c.campana_id] || { horas_riesgo: 2, horas_vencido: 6 };
         const hrs = (now - new Date(c.fecha_caso).getTime()) / 3600000;
         if (hrs >= cfg.horas_vencido) vencidos++;
       });
@@ -261,7 +261,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* ─── Header + Last Updated ─── */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
@@ -273,7 +272,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ─── Error Banner ─── */}
       {hasError && (
         <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -289,23 +287,16 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ─── Alert Banner ─── */}
       {showAlerts && (
         <div className={`rounded-xl p-4 flex flex-wrap items-center gap-4 ${
-          totalVencidos > 0
-            ? "bg-destructive/10 border border-destructive/30"
-            : "bg-warning/10 border border-warning/30"
+          totalVencidos > 0 ? "bg-destructive/10 border border-destructive/30" : "bg-warning/10 border border-warning/30"
         }`}>
           {totalVencidos > 0 && (
             <div className="flex items-center gap-2">
               <ShieldAlert className="h-5 w-5 text-destructive" />
               <span className="text-sm font-medium text-destructive">{totalVencidos} casos vencidos SLA</span>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
-                onClick={() => setAlertFilter(alertFilter === "vencidos" ? null : "vencidos")}
-              >
+              <Button size="sm" variant="outline" className="h-7 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
+                onClick={() => setAlertFilter(alertFilter === "vencidos" ? null : "vencidos")}>
                 {alertFilter === "vencidos" ? "Quitar filtro" : "Ver ahora"}
               </Button>
             </div>
@@ -313,16 +304,10 @@ export default function Dashboard() {
           {totalSinAsignar > 0 && (
             <div className="flex items-center gap-2">
               <UserX className="h-5 w-5 text-warning" />
-              <span className="text-sm font-medium" style={{ color: "hsl(var(--warning))" }}>
-                {totalSinAsignar} casos sin asignar
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs border-warning/40 hover:bg-warning/10"
+              <span className="text-sm font-medium" style={{ color: "hsl(var(--warning))" }}>{totalSinAsignar} casos sin asignar</span>
+              <Button size="sm" variant="outline" className="h-7 text-xs border-warning/40 hover:bg-warning/10"
                 style={{ color: "hsl(var(--warning))" }}
-                onClick={() => setAlertFilter(alertFilter === "sinAsignar" ? null : "sinAsignar")}
-              >
+                onClick={() => setAlertFilter(alertFilter === "sinAsignar" ? null : "sinAsignar")}>
                 {alertFilter === "sinAsignar" ? "Quitar filtro" : "Ver ahora"}
               </Button>
             </div>
@@ -330,7 +315,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ─── KPIs por Campaña ─── */}
       <div className={`grid gap-6 ${visibleCampanas.length > 1 ? "lg:grid-cols-2" : "grid-cols-1"}`}>
         {(stats?.byCampaign ?? []).map((cs) => (
           <Card key={cs.campanaId} className="border-0 shadow-sm">
@@ -353,23 +337,18 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* ─── Módulo Financiero ─── */}
       {renovacionCampana && !isAgente && (
         <FinancialModule campana={renovacionCampana} showPctRecuperado={hasRole(["admin", "gerente"])} />
       )}
 
-      {/* ─── Agentes + Casos Recientes ─── */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Agentes Activos */}
         <Card className="border-0 shadow-sm">
           <CardHeader>
             <CardTitle className="text-base">Agentes Activos</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {agentsLoading ? (
-              <div className="p-4 space-y-3">
-                {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-10 w-full rounded" />)}
-              </div>
+              <div className="p-4 space-y-3">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-10 w-full rounded" />)}</div>
             ) : (
               <div className="overflow-auto">
                 <table className="w-full text-sm">
@@ -388,16 +367,14 @@ export default function Dashboard() {
                         <td className="px-4 py-2.5 text-muted-foreground text-xs">{a.campanaNames || "—"}</td>
                         <td className="px-4 py-2.5 text-center">{a.casosActivos}</td>
                         <td className="px-4 py-2.5 text-center">
-                          {a.casosVencidos > 0 ? (
-                            <Badge variant="destructive" className="text-xs">{a.casosVencidos}</Badge>
-                          ) : "0"}
+                          {a.casosVencidos > 0
+                            ? <Badge variant="destructive" className="text-xs">{a.casosVencidos}</Badge>
+                            : "0"}
                         </td>
                       </tr>
                     ))}
                     {agentStats.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="py-8 text-center text-muted-foreground text-sm">Sin agentes</td>
-                      </tr>
+                      <tr><td colSpan={4} className="py-8 text-center text-muted-foreground text-sm">Sin agentes</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -406,17 +383,12 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Casos Recientes */}
         <Card className="border-0 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">
               Casos Recientes
               {alertFilter && (
-                <Badge
-                  variant="outline"
-                  className="ml-2 text-xs cursor-pointer"
-                  onClick={() => setAlertFilter(null)}
-                >
+                <Badge variant="outline" className="ml-2 text-xs cursor-pointer" onClick={() => setAlertFilter(null)}>
                   Filtro: {alertFilter === "vencidos" ? "Vencidos" : "Sin asignar"} ✕
                 </Badge>
               )}
@@ -455,13 +427,8 @@ export default function Dashboard() {
 }
 
 /* ─── KPI Mini Card ─── */
-function KpiMini({
-  label, value, icon, badge,
-}: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  badge?: "destructive" | "warning";
+function KpiMini({ label, value, icon, badge }: {
+  label: string; value: number; icon: React.ReactNode; badge?: "destructive" | "warning";
 }) {
   return (
     <div className="rounded-lg bg-muted/50 p-3 text-center">
@@ -469,11 +436,9 @@ function KpiMini({
       <p className="text-lg font-bold">
         {value}
         {badge && value > 0 && (
-          <span
-            className={`ml-1 inline-block h-2 w-2 rounded-full ${
-              badge === "destructive" ? "bg-destructive" : "bg-warning"
-            }`}
-          />
+          <span className={`ml-1 inline-block h-2 w-2 rounded-full ${
+            badge === "destructive" ? "bg-destructive" : "bg-warning"
+          }`} />
         )}
       </p>
       <p className="text-[11px] text-muted-foreground leading-tight">{label}</p>
@@ -481,7 +446,14 @@ function KpiMini({
   );
 }
 
-/* ─── Financial Module ─── */
+/* ─── Financial Module ───
+ * Cambios definitivos:
+ * 1. Query simple: trae TODOS los casos de la campaña sin filtros de fecha en servidor.
+ *    El filtrado por período se hace 100% en cliente, evitando bugs con .or() de Supabase.
+ * 2. getBucketKey usa getDay()/getMonth() con arrays WEEK_KEYS/MONTH_KEYS (sin tildes/puntos).
+ *    Elimina la dependencia de format() + locale que generaba keys como "mié." o "sáb.".
+ * 3. getFechaRef: Renovado usa fecha_cierre (cuando existe), Pendiente usa fecha_caso.
+ */
 function FinancialModule({
   campana,
   showPctRecuperado = true,
@@ -494,95 +466,86 @@ function FinancialModule({
     new Set(["Renovado", "Pendiente de pago"])
   );
 
-  // FIX #3: inicio/fin se recalculan cada vez que cambia el periodo
   const { inicio, fin } = useMemo(() => getPeriodRange(periodo), [periodo]);
 
+  // Query simple — sin filtros de fecha en servidor, todo se filtra en cliente
   const { data: financialCases = [], isLoading: financialLoading } = useQuery({
-    queryKey: ["financial-cases", campana.id, periodo, inicio.toISOString(), fin.toISOString()],
+    queryKey: ["financial-cases", campana.id],
     ...QUERY_RESILIENCE,
     queryFn: async () => {
-      // FIX #1: usar fecha_cierre para estados finales (Renovado / Pendiente de pago)
-      // Se trae fecha_caso Y fecha_cierre; el bucket usa fecha_cierre cuando existe,
-      // fallback a fecha_caso para casos aún abiertos (Pendiente de pago sin cierre formal)
       const { data, error } = await supabase
         .from("casos")
-        .select("fecha_caso, fecha_cierre, valor_pagar, estado_id, cat_estados(nombre, es_final)")
-        .eq("campana_id", campana.id)
-        .or(
-          // Incluir si fecha_cierre está en rango (estados finales)
-          // O si fecha_caso está en rango (casos aún sin cierre como Pendiente de pago)
-          `fecha_cierre.gte.${inicio.toISOString()},fecha_caso.gte.${inicio.toISOString()}`
-        )
-        .or(
-          `fecha_cierre.lte.${fin.toISOString()},fecha_caso.lte.${fin.toISOString()}`
-        )
-        .in("cat_estados.nombre", ["Renovado", "Pendiente de pago"]);
+        .select("id, fecha_caso, fecha_cierre, valor_pagar, cat_estados(nombre)")
+        .eq("campana_id", campana.id);
       if (error) throw error;
       return data ?? [];
     },
   });
 
   const financialData = useMemo(() => {
-    if (!financialCases || !Array.isArray(financialCases))
-      return { renovado: 0, pendiente: 0, chartData: [] };
+    if (!financialCases.length) return { renovado: 0, pendiente: 0, chartData: [] };
 
-    // Filtrar en cliente para asegurar que solo entran casos dentro del rango
+    // Fecha de referencia según estado:
+    // Renovado    → fecha_cierre (fecha real del cierre); fallback a fecha_caso
+    // Pendiente   → fecha_caso (aún no cerrado formalmente)
+    const getFechaRef = (c: any): string =>
+      c.cat_estados?.nombre === "Renovado"
+        ? (c.fecha_cierre || c.fecha_caso)
+        : (c.fecha_caso || c.fecha_cierre);
+
+    // Solo casos relevantes dentro del período activo
     const inRange = financialCases.filter((c: any) => {
-      // Usa fecha_cierre si existe, sino fecha_caso
-      const fechaRef = c.fecha_cierre || c.fecha_caso;
-      const t = new Date(fechaRef).getTime();
+      const nombre = c.cat_estados?.nombre;
+      if (nombre !== "Renovado" && nombre !== "Pendiente de pago") return false;
+      const t = new Date(getFechaRef(c)).getTime();
       return t >= inicio.getTime() && t <= fin.getTime();
     });
 
-    const renovado = inRange
-      .filter((c: any) => c.cat_estados?.nombre === "Renovado")
-      .reduce((s: number, c: any) => s + (c.valor_pagar || 0), 0);
-    const pendiente = inRange
-      .filter((c: any) => c.cat_estados?.nombre === "Pendiente de pago")
-      .reduce((s: number, c: any) => s + (c.valor_pagar || 0), 0);
-
-    const buckets: Record<string, { renovado: number; pendiente: number }> = {};
-
-    // FIX #2: normalizar key quitando punto que agrega date-fns en algunos locales
+    // Construir buckets usando índices numéricos — sin strings localizados
     function getBucketKey(dateStr: string): string {
       const d = new Date(dateStr);
       switch (periodo) {
         case "dia":    return `${d.getHours()}h`;
-        case "semana": return format(d, "EEE", { locale: es }).replace(".", "").toLowerCase();
+        // getDay(): 0=dom, 1=lun...6=sab → (day+6)%7 mueve lunes al índice 0
+        case "semana": return WEEK_KEYS[(d.getDay() + 6) % 7];
         case "mes":    return String(d.getDate());
-        case "año":   return format(d, "MMM", { locale: es }).replace(".", "").toLowerCase();
+        case "año":   return MONTH_KEYS[d.getMonth()];
       }
     }
+
+    const buckets: Record<string, { renovado: number; pendiente: number }> = {};
 
     if (periodo === "dia") {
       for (let i = 0; i < 24; i++) buckets[`${i}h`] = { renovado: 0, pendiente: 0 };
     } else if (periodo === "semana") {
-      // FIX #2: claves sin tilde para que coincidan con getBucketKey
-      ["lun","mar","mié","jue","vie","sáb","dom"].forEach(
-        (d) => (buckets[d] = { renovado: 0, pendiente: 0 })
-      );
+      WEEK_KEYS.forEach((k) => (buckets[k] = { renovado: 0, pendiente: 0 }));
     } else if (periodo === "mes") {
-      const daysInMonth = fin.getDate();
-      for (let i = 1; i <= daysInMonth; i++) buckets[String(i)] = { renovado: 0, pendiente: 0 };
+      for (let i = 1; i <= fin.getDate(); i++) buckets[String(i)] = { renovado: 0, pendiente: 0 };
     } else {
-      // FIX #2: claves en minúsculas sin punto
-      ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"].forEach(
-        (m) => (buckets[m] = { renovado: 0, pendiente: 0 })
-      );
+      MONTH_KEYS.forEach((k) => (buckets[k] = { renovado: 0, pendiente: 0 }));
     }
 
+    let renovado = 0;
+    let pendiente = 0;
+
     inRange.forEach((c: any) => {
-      // Usa fecha_cierre para el bucket si existe
-      const fechaRef = c.fecha_cierre || c.fecha_caso;
-      const key = getBucketKey(fechaRef);
+      const key = getBucketKey(getFechaRef(c));
+      const val = Number(c.valor_pagar || 0);
       if (!buckets[key]) return;
-      const val = c.valor_pagar || 0;
-      if (c.cat_estados?.nombre === "Renovado")               buckets[key].renovado  += val;
-      else if (c.cat_estados?.nombre === "Pendiente de pago") buckets[key].pendiente += val;
+      if (c.cat_estados?.nombre === "Renovado") {
+        buckets[key].renovado += val;
+        renovado += val;
+      } else {
+        buckets[key].pendiente += val;
+        pendiente += val;
+      }
     });
 
-    const chartData = Object.entries(buckets).map(([name, v]) => ({ name, ...v }));
-    return { renovado, pendiente, chartData };
+    return {
+      renovado,
+      pendiente,
+      chartData: Object.entries(buckets).map(([name, v]) => ({ name, ...v })),
+    };
   }, [financialCases, periodo, inicio, fin]);
 
   const total = financialData.renovado + financialData.pendiente;
@@ -591,8 +554,7 @@ function FinancialModule({
   const toggleState = (state: string) => {
     setActiveStates((prev) => {
       const next = new Set(prev);
-      if (next.has(state)) next.delete(state);
-      else next.add(state);
+      if (next.has(state)) next.delete(state); else next.add(state);
       return next;
     });
   };
@@ -619,9 +581,7 @@ function FinancialModule({
                   key={p.key}
                   onClick={() => setPeriodo(p.key)}
                   className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                    periodo === p.key
-                      ? "bg-card text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                    periodo === p.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {p.label}
@@ -632,9 +592,7 @@ function FinancialModule({
               <button
                 onClick={() => toggleState("Renovado")}
                 className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                  activeStates.has("Renovado")
-                    ? "bg-accent/15 border-accent text-accent"
-                    : "border-border text-muted-foreground"
+                  activeStates.has("Renovado") ? "bg-accent/15 border-accent text-accent" : "border-border text-muted-foreground"
                 }`}
               >
                 🟢 Renovado
@@ -642,9 +600,7 @@ function FinancialModule({
               <button
                 onClick={() => toggleState("Pendiente de pago")}
                 className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                  activeStates.has("Pendiente de pago")
-                    ? "bg-warning/15 border-warning"
-                    : "border-border text-muted-foreground"
+                  activeStates.has("Pendiente de pago") ? "bg-warning/15 border-warning" : "border-border text-muted-foreground"
                 }`}
                 style={activeStates.has("Pendiente de pago") ? { color: "hsl(var(--warning))" } : {}}
               >
