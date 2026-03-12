@@ -29,8 +29,33 @@ type Periodo = "dia" | "semana" | "mes" | "año";
 const WEEK_KEYS  = ["lun", "mar", "mie", "jue", "vie", "sab", "dom"];
 const MONTH_KEYS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
-// FIX A: Comparación de estados insensible a mayúsculas/minúsculas
-// La BD puede tener "Pendiente de Pago" o "Pendiente de pago" según cómo fue creado
+/**
+ * TIMEZONE FIX — el problema central:
+ *
+ * fecha_caso en la BD es tipo `date` de PostgreSQL: llega como string "YYYY-MM-DD".
+ * new Date("2026-03-12") → JavaScript lo trata como UTC medianoche → 2026-03-12T00:00:00Z
+ * En Colombia (UTC-5) eso equivale a 2026-03-11T19:00:00 local → el caso aparece
+ * como del día ANTERIOR, quedando fuera del rango startOfDay(hoy)..endOfDay(hoy).
+ *
+ * Solución: parseLocalDate() construye la fecha como hora local usando
+ * new Date(year, month, day) — que siempre es medianoche local, sin offset UTC.
+ *
+ * Para timestamps completos (updated_at, created_at con zona horaria incluida),
+ * new Date(str) funciona correctamente porque ya incluye la info de zona.
+ */
+function parseLocalDate(str: string): Date {
+  // Detecta si es solo fecha "YYYY-MM-DD" (10 chars) o timestamp completo
+  if (!str) return new Date(NaN);
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(str);
+  if (dateOnly) {
+    const [y, m, d] = str.split("-").map(Number);
+    return new Date(y, m - 1, d); // medianoche LOCAL — sin offset UTC
+  }
+  // Timestamp completo (ISO con T y zona) → new Date() lo maneja bien
+  return new Date(str);
+}
+
+/** Compara estado de forma insensible a mayúsculas */
 function isRenovado(nombre: string | null | undefined): boolean {
   return (nombre ?? "").toLowerCase() === "renovado";
 }
@@ -195,7 +220,7 @@ export default function Dashboard() {
       let vencidos = 0;
       myCases.forEach((c: any) => {
         const cfg = safeSlaConfigs[c.campana_id] || { horas_riesgo: 2, horas_vencido: 6 };
-        const hrs = (now - new Date(c.fecha_caso).getTime()) / 3600000;
+        const hrs = (now - parseLocalDate(c.fecha_caso).getTime()) / 3600000;
         if (hrs >= cfg.horas_vencido) vencidos++;
       });
       const agentCampanaIds = (agentCampanas ?? [])
@@ -221,7 +246,7 @@ export default function Dashboard() {
       filtered = filtered.filter((c: any) => {
         if (c.cat_estados?.es_final) return false;
         const cfg = safeSlaConfigs[c.campana_id] || { horas_riesgo: 2, horas_vencido: 6 };
-        return (now - new Date(c.fecha_caso).getTime()) / 3600000 >= cfg.horas_vencido;
+        return (now - parseLocalDate(c.fecha_caso).getTime()) / 3600000 >= cfg.horas_vencido;
       });
     } else if (alertFilter === "sinAsignar") {
       filtered = filtered.filter((c: any) => !c.agente_id && !c.cat_estados?.es_final);
@@ -464,13 +489,22 @@ function KpiMini({ label, value, icon, badge }: {
 }
 
 /* ─── Financial Module ───
- * FIXES aplicados en esta versión:
- * A. isRenovado / isPendiente con toLowerCase() → resuelve mismatch
- *    "Pendiente de Pago" vs "Pendiente de pago" en la BD.
- * B. getFechaRef usa siempre fecha_caso (igual que useAnalyticsData)
- *    → los períodos Mes/Semana/Día/Año coinciden con Analítica.
- * C. La query ya no pide fecha_cierre (columna no relevante para el filtro).
- * D. Los KPI cards respetan los toggles activeStates.
+ *
+ * FIXES históricos:
+ * A. isRenovado/isPendiente con toLowerCase() → resuelve mismatch de mayúsculas en BD.
+ * B. getFechaRef usa siempre fecha_caso (misma fuente que useAnalyticsData).
+ * C. Query sin fecha_cierre.
+ * D. KPI cards respetan toggles activeStates.
+ *
+ * FIX ACTUAL (zona horaria):
+ * E. parseLocalDate() resuelve el problema central:
+ *    fecha_caso = "2026-03-12" (string date-only sin hora ni zona)
+ *    → new Date("2026-03-12") = UTC medianoche = Colombia 19:00 del día ANTERIOR
+ *    → el caso queda fuera del rango startOfDay(hoy)/endOfDay(hoy)
+ *    → resultado: $0 en vista Día y Semana, valores incorrectos en Mes/Año
+ *
+ *    parseLocalDate("2026-03-12") usa new Date(2026, 2, 12) = medianoche LOCAL
+ *    → los rangos coinciden correctamente sin importar el offset UTC-5.
  */
 function FinancialModule({
   campana,
@@ -486,7 +520,6 @@ function FinancialModule({
 
   const { inicio, fin, diasEnMes } = useMemo(() => getPeriodRange(periodo), [periodo]);
 
-  // FIX C: ya no pedimos fecha_cierre; FIX B: solo necesitamos fecha_caso
   const { data: financialCases = [], isLoading: financialLoading } = useQuery({
     queryKey: ["financial-cases", campana.id],
     ...QUERY_RESILIENCE,
@@ -503,19 +536,18 @@ function FinancialModule({
   const financialData = useMemo(() => {
     if (!financialCases.length) return { renovado: 0, pendiente: 0, chartData: [] };
 
-    // FIX B: fecha de referencia = fecha_caso siempre (igual que Analítica)
-    const getFechaRef = (c: any): string => c.fecha_caso;
-
-    // FIX A: filtrar con helpers insensibles a mayúsculas
+    // FIX E: usar parseLocalDate en lugar de new Date() para evitar offset UTC
     const inRange = financialCases.filter((c: any) => {
       const nombre = c.cat_estados?.nombre;
       if (!isRenovado(nombre) && !isPendiente(nombre)) return false;
-      const t = new Date(getFechaRef(c)).getTime();
+      const t = parseLocalDate(c.fecha_caso).getTime();
       return t >= inicio && t <= fin;
     });
 
-    function getBucketKey(dateStr: string): string {
-      const d = new Date(dateStr);
+    // FIX E: getBucketKey también usa parseLocalDate para que getHours()/getDate()/etc.
+    // retornen valores en hora local, no en UTC
+    function getBucketKey(fechaCaso: string): string {
+      const d = parseLocalDate(fechaCaso);
       switch (periodo) {
         case "dia":    return `${d.getHours()}h`;
         case "semana": return WEEK_KEYS[(d.getDay() + 6) % 7];
@@ -539,10 +571,9 @@ function FinancialModule({
     let pendienteTotal = 0;
 
     inRange.forEach((c: any) => {
-      const key = getBucketKey(getFechaRef(c));
+      const key = getBucketKey(c.fecha_caso);
       const val = Number(c.valor_pagar || 0);
       if (!buckets[key]) return;
-      // FIX A: usar helpers en lugar de comparación directa de string
       if (isRenovado(c.cat_estados?.nombre)) {
         buckets[key].renovado += val;
         renovadoTotal += val;
@@ -559,7 +590,6 @@ function FinancialModule({
     };
   }, [financialCases, periodo, inicio, fin, diasEnMes]);
 
-  // FIX D: KPI cards respetan activeStates
   const showRenovado  = activeStates.has("renovado");
   const showPendiente = activeStates.has("pendiente");
   const renovadoVisible  = showRenovado  ? financialData.renovado  : 0;
