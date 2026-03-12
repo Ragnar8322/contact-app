@@ -25,9 +25,11 @@ export default function AdminCampanas() {
   const { data: agentes } = useAgentes();
   const [filterCampana, setFilterCampana] = useState<string>("");
   const [filterEstado, setFilterEstado] = useState<string>("");
-  const { data: allCases } = useAllCases({
+  const { data: allCasesResult } = useAllCases({
     estado_id: filterEstado && filterEstado !== "all" ? Number(filterEstado) : undefined,
   });
+  // useAllCases retorna { data, count, page, pageSize }
+  const allCases = allCasesResult?.data ?? [];
   const updateCase = useAdminUpdateCase();
   const insertHistorial = useInsertHistorial();
 
@@ -51,7 +53,7 @@ export default function AdminCampanas() {
     }
   };
 
-  const filteredCases = (allCases || []).filter((c: any) => {
+  const filteredCases = allCases.filter((c: any) => {
     if (filterCampana && filterCampana !== "all" && c.campana_id !== filterCampana) return false;
     return true;
   });
