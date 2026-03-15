@@ -27,6 +27,18 @@ import { logActivity } from "@/hooks/useActivityLog";
 const formatCOPValue = (n: number) =>
   `$ ${n.toLocaleString("es-CO", { maximumFractionDigits: 0 })}`;
 
+// ─── KV Renovación 2026 — Paleta oficial ───────────────────────────────────
+const KV = {
+  azul:     [13,  50,  102] as [number,number,number],  // #0D3266 Azul Institucional
+  gradIA:   [109, 138, 239] as [number,number,number],  // #6D8AEF Gradiente IA
+  cian:     [0,   200, 255] as [number,number,number],  // #00C8FF Cian
+  magenta:  [255, 0,   200] as [number,number,number],  // #FF00C8 Acento
+  blanco:   [255, 255, 255] as [number,number,number],
+  gris:     [80,  80,  80]  as [number,number,number],
+  grisClaro:[240, 242, 248] as [number,number,number],
+  negro:    [20,  20,  20]  as [number,number,number],
+};
+
 export default function Analytics() {
   const { hasRole } = useAuth();
   const chartsRef = useRef<HTMLDivElement>(null);
@@ -58,12 +70,13 @@ export default function Analytics() {
     (currentPage + 1) * ROWS_PER_PAGE
   );
 
-  const formatNumber = (n: number) => n.toLocaleString("es-CO");
+  const formatNumber     = (n: number) => n.toLocaleString("es-CO");
   const formatPercentage = (n: number) => `${n.toFixed(1)}%`;
 
   const handleApplyFilters = () => { applyFilters(); setCurrentPage(0); };
   const handleClearFilters = () => { clearFilters(); setCurrentPage(0); };
 
+  // ─── PDF EJECUTIVO — KV Renovación 2026 ──────────────────────────────────
   const handleExportPdf = async () => {
     if (!data || !chartsRef.current) return;
     setExportingPdf(true);
@@ -74,106 +87,340 @@ export default function Analytics() {
       ]);
       const html2canvas = html2canvasModule.default;
       const pdf = new jsPDF("p", "mm", "a4");
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const margin = 15;
+      const W  = pdf.internal.pageSize.getWidth();   // 210
+      const H  = pdf.internal.pageSize.getHeight();  // 297
+      const M  = 14; // margen lateral
+      const CW = W - M * 2; // ancho contenido
 
-      pdf.setFillColor(37, 99, 235);
-      pdf.rect(0, 0, pageWidth, 25, "F");
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(18);
+      // ── Helpers de estilo ──
+      const setColor = (rgb: [number,number,number]) => pdf.setTextColor(rgb[0], rgb[1], rgb[2]);
+      const setFill  = (rgb: [number,number,number]) => pdf.setFillColor(rgb[0], rgb[1], rgb[2]);
+      const setDraw  = (rgb: [number,number,number]) => pdf.setDrawColor(rgb[0], rgb[1], rgb[2]);
+
+      const periodoStr = `${format(appliedFilters.dateFrom, "dd/MM/yyyy")} — ${format(appliedFilters.dateTo, "dd/MM/yyyy")}`;
+      const genStr     = format(new Date(), "dd/MM/yyyy HH:mm");
+
+      // ════════════════════════════════════════════
+      // PÁGINA 1 — PORTADA EJECUTIVA
+      // ════════════════════════════════════════════
+
+      // Fondo completo azul institucional
+      setFill(KV.azul);
+      pdf.rect(0, 0, W, H, "F");
+
+      // Banda de acento degradado-IA (simulado con rect superpuesto translúcido)
+      setFill(KV.gradIA);
+      pdf.rect(0, 0, W, 8, "F");
+
+      // Línea cian inferior de la banda
+      setFill(KV.cian);
+      pdf.rect(0, 7, W, 1.5, "F");
+
+      // Bloque de logos / nombre institución arriba
+      setColor(KV.cian);
+      pdf.setFontSize(9);
       pdf.setFont("helvetica", "bold");
-      pdf.text("Contact APP — Reporte de Analítica", margin, 16);
-      pdf.setTextColor(0, 0, 0);
+      pdf.text("CÁMARA DE COMERCIO DE BARRANQUILLA", M, 20);
+
+      setColor(KV.blanco);
+      pdf.setFontSize(8);
+      pdf.setFont("helvetica", "normal");
+      pdf.text("Contact Center · Sistema de Gestión", M, 26);
+
+      // Línea separadora cian
+      setDraw(KV.cian);
+      pdf.setLineWidth(0.5);
+      pdf.line(M, 30, W - M, 30);
+
+      // Título principal centrado
+      setColor(KV.blanco);
+      pdf.setFontSize(28);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("INFORME EJECUTIVO", W / 2, 90, { align: "center" });
+
+      // Subtítulo campaña
+      setColor(KV.cian);
+      pdf.setFontSize(16);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Renovación Web 2026", W / 2, 102, { align: "center" });
+
+      // Línea magenta decorativa centrada
+      setFill(KV.magenta);
+      pdf.rect(W / 2 - 20, 107, 40, 1.5, "F");
+
+      // Período
+      setColor(KV.blanco);
       pdf.setFontSize(11);
       pdf.setFont("helvetica", "normal");
-      pdf.text(`Período: ${format(appliedFilters.dateFrom, "dd/MM/yyyy")} - ${format(appliedFilters.dateTo, "dd/MM/yyyy")}`, margin, 35);
-      pdf.setFontSize(9);
-      pdf.setTextColor(80, 80, 80);
-      pdf.text(`Filtros aplicados: ${getFilterSummary()}`, margin, 42);
-      pdf.setTextColor(0, 0, 0);
-      pdf.setFontSize(14);
+      pdf.text("Período analizado", W / 2, 120, { align: "center" });
+      setColor(KV.cian);
+      pdf.setFontSize(13);
       pdf.setFont("helvetica", "bold");
-      pdf.text("Resumen de KPIs", margin, 55);
+      pdf.text(periodoStr, W / 2, 129, { align: "center" });
 
-      const kpiData = [
-        ["Total Casos", formatNumber(data.totalCasos)],
-        ["Casos Renovados", formatNumber(data.casosRenovados)],
-        ["Tasa de Renovación", formatPercentage(data.tasaRenovacion)],
-        ["Gestiones Registradas", formatNumber(data.gestionesRegistradas)],
+      // Recuadros KPI portada (4 métricas clave)
+      const kpisPortada = [
+        { label: "Total Casos",      value: formatNumber(data.totalCasos) },
+        { label: "Renovados",        value: formatNumber(data.casosRenovados) },
+        { label: "Tasa Renovación",  value: formatPercentage(data.tasaRenovacion) },
+        { label: "Total Facturado",  value: formatCOPValue(data.totalFacturado) },
       ];
-      let yPos = 62;
-      pdf.setFontSize(10);
-      kpiData.forEach(([label, value]) => {
-        pdf.setFont("helvetica", "normal"); pdf.text(label, margin, yPos);
-        pdf.setFont("helvetica", "bold");   pdf.text(value, margin + 60, yPos);
-        yPos += 7;
+      const cardW = (CW - 6) / 4;
+      const cardY = 148;
+      kpisPortada.forEach((kpi, i) => {
+        const cx = M + i * (cardW + 2);
+        // Fondo semi-transparente (azul más claro)
+        setFill([20, 65, 130]);
+        pdf.roundedRect(cx, cardY, cardW, 28, 2, 2, "F");
+        // Borde cian
+        setDraw(KV.cian);
+        pdf.setLineWidth(0.4);
+        pdf.roundedRect(cx, cardY, cardW, 28, 2, 2, "S");
+        // Valor
+        setColor(KV.cian);
+        pdf.setFontSize(i === 3 ? 8 : 14);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(kpi.value, cx + cardW / 2, cardY + 13, { align: "center", maxWidth: cardW - 4 });
+        // Label
+        setColor(KV.blanco);
+        pdf.setFontSize(7);
+        pdf.setFont("helvetica", "normal");
+        pdf.text(kpi.label, cx + cardW / 2, cardY + 22, { align: "center" });
       });
 
-      yPos += 5;
-      pdf.setFontSize(14); pdf.setFont("helvetica", "bold");
-      pdf.text("Resumen Financiero", margin, yPos); yPos += 7;
-      const financialData = [
-        ["Total Facturado", formatCOPValue(data.totalFacturado)],
-        ["Pendiente de Cobro", formatCOPValue(data.pendienteCobro)],
-        ["Valor Promedio", formatCOPValue(data.valorPromedio)],
-        ["% Recaudo", formatPercentage(data.porcentajeRecaudo)],
-      ];
-      pdf.setFontSize(10);
-      financialData.forEach(([label, value]) => {
-        pdf.setFont("helvetica", "normal"); pdf.text(label, margin, yPos);
-        pdf.setFont("helvetica", "bold");   pdf.text(value, margin + 60, yPos);
-        yPos += 7;
-      });
+      // Filtros aplicados
+      setColor([160, 180, 220]);
+      pdf.setFontSize(7.5);
+      pdf.setFont("helvetica", "italic");
+      pdf.text(`Filtros: ${getFilterSummary()}`, M, 188, { maxWidth: CW });
 
-      const canvas = await html2canvas(chartsRef.current!, { scale: 1.5, useCORS: true, logging: false, imageTimeout: 15000, windowWidth: 1200 });
-      const imgData   = canvas.toDataURL("image/png");
-      const imgWidth  = pageWidth - margin * 2;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      yPos += 10;
-      if (yPos + imgHeight > 280) { pdf.addPage(); yPos = margin; }
-      pdf.addImage(imgData, "PNG", margin, yPos, imgWidth, Math.min(imgHeight, 120));
+      // Franja inferior magenta + texto
+      setFill(KV.magenta);
+      pdf.rect(0, H - 18, W, 18, "F");
+      setColor(KV.blanco);
+      pdf.setFontSize(7.5);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("IA Aplicada · Renovación · Crecimiento", W / 2, H - 8, { align: "center" });
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`Generado: ${genStr}`, M, H - 4);
+      pdf.text("Confidencial — Uso Interno", W - M, H - 4, { align: "right" });
 
+      // ════════════════════════════════════════════
+      // PÁGINA 2 — RESUMEN EJECUTIVO DE KPIs
+      // ════════════════════════════════════════════
       pdf.addPage();
-      pdf.setFontSize(14); pdf.setFont("helvetica", "bold");
-      pdf.text("Rendimiento por Agente", margin, 20);
-      const tableHeaders = ["Agente", "Casos", "Gestiones", "Renovados", "Tasa"];
-      const colWidths    = [50, 25, 30, 30, 25];
-      yPos = 30;
-      pdf.setFillColor(37, 99, 235);
-      pdf.rect(margin, yPos - 5, pageWidth - margin * 2, 8, "F");
-      pdf.setTextColor(255, 255, 255); pdf.setFontSize(9); pdf.setFont("helvetica", "bold");
-      let xPos = margin + 2;
-      tableHeaders.forEach((h, i) => { pdf.text(h, xPos, yPos); xPos += colWidths[i]; });
-      pdf.setTextColor(0, 0, 0); pdf.setFont("helvetica", "normal");
-      yPos += 8;
-      data.rendimientoAgentes.forEach((agent) => {
-        if (yPos > 275) {
-          pdf.addPage();
-          pdf.setFillColor(37, 99, 235); pdf.rect(margin, 15, pageWidth - margin * 2, 8, "F");
-          pdf.setTextColor(255, 255, 255); pdf.setFontSize(9); pdf.setFont("helvetica", "bold");
-          xPos = margin + 2;
-          tableHeaders.forEach((h, i) => { pdf.text(h, xPos, 21); xPos += colWidths[i]; });
-          pdf.setTextColor(0, 0, 0); pdf.setFont("helvetica", "normal"); yPos = 30;
-        }
-        xPos = margin + 2;
-        pdf.text(agent.agente.substring(0, 20), xPos, yPos); xPos += colWidths[0];
-        pdf.text(formatNumber(agent.casosAsignados), xPos, yPos);  xPos += colWidths[1];
-        pdf.text(formatNumber(agent.gestiones),      xPos, yPos);  xPos += colWidths[2];
-        pdf.text(formatNumber(agent.renovados),      xPos, yPos);  xPos += colWidths[3];
-        pdf.text(formatPercentage(agent.tasaRenovacion), xPos, yPos);
-        yPos += 6;
+
+      // Header de página interior
+      const drawPageHeader = (title: string, pageLabel: string) => {
+        setFill(KV.azul);
+        pdf.rect(0, 0, W, 14, "F");
+        setFill(KV.cian);
+        pdf.rect(0, 13, W, 1.2, "F");
+        setColor(KV.blanco);
+        pdf.setFontSize(9);
+        pdf.setFont("helvetica", "bold");
+        pdf.text("CÁMARA DE COMERCIO · Renovación Web 2026", M, 9);
+        pdf.setFont("helvetica", "normal");
+        pdf.text(pageLabel, W - M, 9, { align: "right" });
+        // Título sección
+        setColor(KV.azul);
+        pdf.setFontSize(15);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(title, M, 26);
+        setFill(KV.magenta);
+        pdf.rect(M, 28, 30, 1, "F");
+      };
+
+      const drawPageFooter = (pageNum: number, total: number) => {
+        setFill(KV.azul);
+        pdf.rect(0, H - 10, W, 10, "F");
+        setColor(KV.cian);
+        pdf.setFontSize(7);
+        pdf.setFont("helvetica", "normal");
+        pdf.text(`Cámara de Comercio de Barranquilla · Contact Center`, M, H - 3.5);
+        setColor(KV.blanco);
+        pdf.text(`Página ${pageNum} de ${total}`, W - M, H - 3.5, { align: "right" });
+      };
+
+      drawPageHeader("Resumen Ejecutivo de KPIs", `Período: ${periodoStr}`);
+
+      // Tabla KPIs operativos
+      let y = 38;
+      const kpiRows = [
+        { seccion: "GESTIÓN OPERATIVA", items: [
+          { label: "Total de Casos en Período",       value: formatNumber(data.totalCasos),          tag: "" },
+          { label: "Casos con Estado Renovado",        value: formatNumber(data.casosRenovados),       tag: "positivo" },
+          { label: "Tasa de Renovación",               value: formatPercentage(data.tasaRenovacion),  tag: data.tasaRenovacion >= 50 ? "positivo" : "alerta" },
+          { label: "Gestiones Registradas (historial)",value: formatNumber(data.gestionesRegistradas), tag: "" },
+        ]},
+        { seccion: "RESUMEN FINANCIERO", items: [
+          { label: "Total Facturado (Renovados)",   value: formatCOPValue(data.totalFacturado),  tag: "positivo" },
+          { label: "Pendiente de Cobro",            value: formatCOPValue(data.pendienteCobro),  tag: "alerta" },
+          { label: "Valor Promedio por Caso",       value: formatCOPValue(data.valorPromedio),   tag: "" },
+          { label: "% de Recaudo sobre Total",      value: formatPercentage(data.porcentajeRecaudo), tag: data.porcentajeRecaudo >= 50 ? "positivo" : "alerta" },
+        ]},
+      ];
+
+      kpiRows.forEach((seccion) => {
+        // Encabezado de sección
+        setFill(KV.grisClaro);
+        pdf.rect(M, y, CW, 7, "F");
+        setColor(KV.azul);
+        pdf.setFontSize(8);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(seccion.seccion, M + 3, y + 5);
+        y += 9;
+
+        seccion.items.forEach((item, idx) => {
+          // Fila alternada
+          if (idx % 2 === 0) {
+            setFill([248, 250, 255]);
+            pdf.rect(M, y - 1, CW, 9, "F");
+          }
+          setColor(KV.negro);
+          pdf.setFontSize(9.5);
+          pdf.setFont("helvetica", "normal");
+          pdf.text(item.label, M + 3, y + 5.5);
+
+          // Color de valor según tag
+          if (item.tag === "positivo") setColor([22, 140, 60]);
+          else if (item.tag === "alerta") setColor([200, 100, 0]);
+          else setColor(KV.azul);
+
+          pdf.setFont("helvetica", "bold");
+          pdf.text(item.value, W - M - 3, y + 5.5, { align: "right" });
+
+          // Línea separadora suave
+          setDraw([220, 225, 235]);
+          pdf.setLineWidth(0.2);
+          pdf.line(M, y + 8, W - M, y + 8);
+          y += 9;
+        });
+        y += 4;
       });
 
-      const pageCount = pdf.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(128, 128, 128);
-        pdf.text(`Generado: ${format(new Date(), "dd/MM/yyyy HH:mm")} | Confidencial`, margin, 290);
-        pdf.text(`Página ${i} de ${pageCount}`, pageWidth - margin - 20, 290);
+      // Nota interpretativa
+      y += 4;
+      setFill([230, 240, 255]);
+      pdf.roundedRect(M, y, CW, 20, 2, 2, "F");
+      setDraw(KV.gradIA);
+      pdf.setLineWidth(0.4);
+      pdf.roundedRect(M, y, CW, 20, 2, 2, "S");
+      setFill(KV.gradIA);
+      pdf.rect(M, y, 3, 20, "F");
+      setColor(KV.azul);
+      pdf.setFontSize(8.5);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Nota del período", M + 6, y + 7);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      const nota = `Informe generado automáticamente por el sistema Contact Center de la Cámara de Comercio de Barranquilla. Datos correspondientes al período ${periodoStr}. Para consultas adicionales dirigirse al área de Contact Center.`;
+      const notaLines = pdf.splitTextToSize(nota, CW - 10);
+      setColor(KV.gris);
+      pdf.text(notaLines, M + 6, y + 14);
+
+      // ════════════════════════════════════════════
+      // PÁGINA 3 — GRÁFICAS
+      // ════════════════════════════════════════════
+      pdf.addPage();
+      drawPageHeader("Análisis Visual — Gráficas", `Período: ${periodoStr}`);
+
+      const canvas = await html2canvas(chartsRef.current!, {
+        scale: 1.8,
+        useCORS: true,
+        logging: false,
+        imageTimeout: 15000,
+        windowWidth: 1200,
+        backgroundColor: "#ffffff",
+      });
+      const imgData  = canvas.toDataURL("image/png");
+      const imgW     = CW;
+      const imgH     = (canvas.height * imgW) / canvas.width;
+      const maxImgH  = H - 50; // espacio disponible después del header
+      const finalH   = Math.min(imgH, maxImgH);
+      pdf.addImage(imgData, "PNG", M, 35, imgW, finalH);
+
+      // Si la imagen es más alta, agregar página adicional
+      if (imgH > maxImgH) {
+        pdf.addPage();
+        drawPageHeader("Análisis Visual (cont.)", `Período: ${periodoStr}`);
+        const ratioY  = maxImgH / imgH;
+        const srcY    = Math.floor(canvas.height * ratioY);
+        const remH    = finalH * (1 - ratioY);
+        pdf.addImage(imgData, "PNG", M, 35, imgW, remH,
+          undefined, "FAST", 0, -(finalH * ratioY));
       }
 
-      pdf.save(`Reporte_Analitica_${format(new Date(), "yyyyMMdd")}.pdf`);
-      toast.success("Reporte PDF generado exitosamente");
-      // Registrar en auditoría
+      // ════════════════════════════════════════════
+      // PÁGINA 4+ — TABLA RENDIMIENTO POR AGENTE
+      // ════════════════════════════════════════════
+      pdf.addPage();
+      drawPageHeader("Rendimiento por Agente", `Período: ${periodoStr}`);
+
+      const tHeaders = ["Agente", "Casos", "Gestiones", "Renovados", "Tasa %"];
+      const tWidths  = [62, 24, 28, 28, 24];
+      let ty = 36;
+
+      const drawTableHeader = (startY: number) => {
+        setFill(KV.azul);
+        pdf.rect(M, startY, CW, 9, "F");
+        setColor(KV.blanco);
+        pdf.setFontSize(8.5);
+        pdf.setFont("helvetica", "bold");
+        let tx = M + 2;
+        tHeaders.forEach((h, i) => {
+          pdf.text(h, i === 0 ? tx : tx + tWidths[i] - 2, startY + 6.2, { align: i === 0 ? "left" : "right" });
+          tx += tWidths[i];
+        });
+        return startY + 10;
+      };
+
+      ty = drawTableHeader(ty);
+
+      data.rendimientoAgentes.forEach((agent, idx) => {
+        if (ty > H - 20) {
+          pdf.addPage();
+          drawPageHeader("Rendimiento por Agente (cont.)", `Período: ${periodoStr}`);
+          ty = drawTableHeader(36);
+        }
+        // Fila alternada
+        if (idx % 2 === 0) {
+          setFill(KV.grisClaro);
+          pdf.rect(M, ty - 1, CW, 8, "F");
+        }
+        setColor(KV.negro);
+        pdf.setFontSize(8.5);
+        pdf.setFont("helvetica", "normal");
+        let tx = M + 2;
+        pdf.text(agent.agente.substring(0, 26), tx, ty + 5);
+        tx += tWidths[0];
+        pdf.text(formatNumber(agent.casosAsignados), tx + tWidths[1] - 2, ty + 5, { align: "right" }); tx += tWidths[1];
+        pdf.text(formatNumber(agent.gestiones),      tx + tWidths[2] - 2, ty + 5, { align: "right" }); tx += tWidths[2];
+        pdf.text(formatNumber(agent.renovados),      tx + tWidths[3] - 2, ty + 5, { align: "right" }); tx += tWidths[3];
+        // Tasa con color
+        const tasa = agent.tasaRenovacion;
+        setColor(tasa >= 50 ? [22,140,60] : tasa >= 25 ? [180,100,0] : [180,30,30]);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(formatPercentage(tasa), tx + tWidths[4] - 2, ty + 5, { align: "right" });
+        // Línea separadora
+        setDraw([220, 225, 235]);
+        pdf.setLineWidth(0.15);
+        pdf.line(M, ty + 7, W - M, ty + 7);
+        ty += 8;
+      });
+
+      // ════════════════════════════════════════════
+      // FOOTERS en todas las páginas
+      // ════════════════════════════════════════════
+      const totalPgs = pdf.getNumberOfPages();
+      for (let p = 1; p <= totalPgs; p++) {
+        pdf.setPage(p);
+        drawPageFooter(p, totalPgs);
+      }
+
+      // Guardar
+      pdf.save(`Informe_Ejecutivo_Renovacion_${format(new Date(), "yyyyMMdd_HHmm")}.pdf`);
+      toast.success("Informe ejecutivo PDF generado exitosamente");
       await logActivity("EXPORT", "reporte", undefined, { formato: "pdf", filtros: getFilterSummary() });
     } catch (error) {
       console.error("Error generating PDF:", error);
@@ -244,7 +491,6 @@ export default function Analytics() {
 
       XLSX.writeFile(wb, `Reporte_Analitica_${format(new Date(), "yyyyMMdd")}.xlsx`);
       toast.success("Reporte Excel generado exitosamente");
-      // Registrar en auditoría
       await logActivity("EXPORT", "reporte", undefined, { formato: "xlsx", filtros: getFilterSummary() });
     } catch (error) {
       console.error("Error generating Excel:", error);
