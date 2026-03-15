@@ -437,59 +437,165 @@ export default function Analytics() {
       const XLSX = await import("xlsx");
       const wb = XLSX.utils.book_new();
 
-      const resumenRows = [
-        ["Reporte de Analítica"],
-        [`Período: ${format(appliedFilters.dateFrom, "dd/MM/yyyy")} - ${format(appliedFilters.dateTo, "dd/MM/yyyy")}`],
-        [`Filtros: ${getFilterSummary()}`],
+      const periodoStr = `${format(appliedFilters.dateFrom, "dd/MM/yyyy")} - ${format(appliedFilters.dateTo, "dd/MM/yyyy")}`;
+      const filtrosStr = getFilterSummary();
+      const fechaGen   = format(new Date(), "dd/MM/yyyy HH:mm");
+
+      const metaHeader = (titulo: string) => [
+        ["Reporte", titulo],
+        ["Período", periodoStr],
+        ["Filtros aplicados", filtrosStr],
+        ["Fecha de generación", fechaGen],
         [],
+      ];
+
+      const PCT = (n: number) => `${n.toFixed(1)}%`;
+
+      // ── 1. RESUMEN ──────────────────────────────────────────────────────
+      const wsResumenRows = [
+        ...metaHeader("Resumen Ejecutivo"),
         ["Métrica", "Valor"],
         ["Total Casos", data.totalCasos],
         ["Casos Renovados", data.casosRenovados],
-        ["Tasa de Renovación", `${data.tasaRenovacion.toFixed(1)}%`],
+        ["Tasa de Renovación", PCT(data.tasaRenovacion)],
         ["Gestiones Registradas", data.gestionesRegistradas],
         [],
         ["RESUMEN FINANCIERO"],
-        ["Total Facturado", data.totalFacturado ?? 0],
-        ["Pendiente de Cobro", data.pendienteCobro ?? 0],
-        ["% Recaudo", `${(data.porcentajeRecaudo ?? 0).toFixed(1)}%`],
+        ["Total Facturado", data.totalFacturado],
+        ["Pendiente de Cobro", data.pendienteCobro],
+        ["% Recaudo", PCT(data.porcentajeRecaudo)],
+        ["Valor Promedio / Renovación", data.valorPromedio],
+        [],
+        ["DISTRIBUCIÓN POR TIPO DE CLIENTE"],
+        ["Tipo", "Cantidad", "% del total", "Valor Facturado"],
+        ...data.distribucionClientes.map((c) => [
+          c.tipo, c.count, PCT(c.percentage), c.valorFacturado,
+        ]),
       ];
-      const wsResumen = XLSX.utils.aoa_to_sheet(resumenRows);
-      wsResumen["!cols"] = [{ wch: 28 }, { wch: 22 }];
+      const wsResumen = XLSX.utils.aoa_to_sheet(wsResumenRows);
+      wsResumen["!cols"] = [{ wch: 32 }, { wch: 22 }, { wch: 14 }, { wch: 20 }];
       XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
 
-      const agentesRows = [
-        ["Agente", "Casos Asignados", "Gestiones", "Renovados", "Tasa Renovación"],
-        ...data.rendimientoAgentes.map((a) => [a.agente, a.casosAsignados, a.gestiones, a.renovados, `${a.tasaRenovacion.toFixed(1)}%`]),
+      // ── 2. TRÁMITES RENOVADOS ───────────────────────────────────────────
+      const wsTramitesRows = [
+        ...metaHeader("Trámites Renovados"),
+        [
+          "Fecha Renovación", "N° Matrícula / ID", "Razón Social / Nombre",
+          "Tipo", "Agente", "Campaña", "Valor Pagado", "Días hasta Renovación",
+        ],
+        ...data.tramitesRenovados.map((t) => [
+          t.fechaRenovacion, t.numeroMatricula, t.nombreRazonSocial,
+          t.tipo, t.agente, t.campana, t.valorPagado, t.diasHastaRenovacion,
+        ]),
       ];
-      const wsAgentes = XLSX.utils.aoa_to_sheet(agentesRows);
-      wsAgentes["!cols"] = [{ wch: 30 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 16 }];
+      const wsTramites = XLSX.utils.aoa_to_sheet(wsTramitesRows);
+      wsTramites["!cols"] = [
+        { wch: 16 }, { wch: 18 }, { wch: 36 }, { wch: 10 },
+        { wch: 28 }, { wch: 24 }, { wch: 16 }, { wch: 22 },
+      ];
+      XLSX.utils.book_append_sheet(wb, wsTramites, "Trámites Renovados");
+
+      // ── 3. PENDIENTES DE PAGO ───────────────────────────────────────────
+      const wsPendientesRows = [
+        ...metaHeader("Pendientes de Pago"),
+        [
+          "Fecha del Caso", "N° Matrícula / ID", "Razón Social / Nombre",
+          "Agente", "Campaña", "Valor", "Días en Pendiente",
+        ],
+        ...data.pendientesPago.map((p) => [
+          p.fechaCaso, p.numeroMatricula, p.nombreRazonSocial,
+          p.agente, p.campana, p.valor, p.diasEnPendiente,
+        ]),
+      ];
+      const wsPendientes = XLSX.utils.aoa_to_sheet(wsPendientesRows);
+      wsPendientes["!cols"] = [
+        { wch: 16 }, { wch: 18 }, { wch: 36 }, { wch: 28 },
+        { wch: 24 }, { wch: 16 }, { wch: 18 },
+      ];
+      XLSX.utils.book_append_sheet(wb, wsPendientes, "Pendientes de Pago");
+
+      // ── 4. RECAUDO POR FECHA ────────────────────────────────────────────
+      const wsRecaudoRows = [
+        ...metaHeader("Recaudo por Fecha"),
+        ["Fecha", "Renovados del día", "Valor Facturado", "Valor Pendiente", "% Recaudo del día"],
+        ...data.recaudoPorFecha.map((r) => [
+          r.fecha, r.renovadosDelDia, r.valorFacturado,
+          r.valorPendiente, PCT(r.porcentajeRecaudo),
+        ]),
+      ];
+      const wsRecaudo = XLSX.utils.aoa_to_sheet(wsRecaudoRows);
+      wsRecaudo["!cols"] = [{ wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, wsRecaudo, "Recaudo por Fecha");
+
+      // ── 5. RENDIMIENTO AGENTES (con columnas financieras) ───────────────
+      const wsAgentesRows = [
+        ...metaHeader("Rendimiento de Agentes"),
+        [
+          "Agente", "Casos Asignados", "Gestiones", "Renovados",
+          "Tasa Renovación", "Valor Facturado", "Valor Pendiente",
+          "% Recaudo", "Promedio / Renovación",
+        ],
+        ...data.rendimientoAgentes.map((a) => [
+          a.agente, a.casosAsignados, a.gestiones, a.renovados,
+          PCT(a.tasaRenovacion), a.valorFacturado, a.valorPendiente,
+          PCT(a.porcentajeRecaudo), a.promedioPorRenovacion,
+        ]),
+      ];
+      const wsAgentes = XLSX.utils.aoa_to_sheet(wsAgentesRows);
+      wsAgentes["!cols"] = [
+        { wch: 30 }, { wch: 16 }, { wch: 12 }, { wch: 12 },
+        { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 22 },
+      ];
       XLSX.utils.book_append_sheet(wb, wsAgentes, "Rendimiento Agentes");
 
-      const estadosRows = [
-        ["Estado", "Cantidad", "Porcentaje"],
-        ...data.casosPorEstado.map((e) => [e.estado, e.count, `${e.percentage.toFixed(1)}%`]),
+      // ── 6. GESTIONES POR DÍA (con valor diario) ─────────────────────────
+      const wsGestionesRows = [
+        ...metaHeader("Gestiones por Día"),
+        ["Fecha", "Gestiones", "Renovados del día", "Valor Facturado del día", "Valor Pendiente del día"],
+        ...data.gestionesPorDia.map((g) => [
+          g.fecha.substring(0, 10), g.count, g.renovadosDelDia,
+          g.valorFacturadoDia, g.valorPendienteDia,
+        ]),
       ];
-      const wsEstados = XLSX.utils.aoa_to_sheet(estadosRows);
-      wsEstados["!cols"] = [{ wch: 22 }, { wch: 12 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, wsEstados, "Casos por Estado");
-
-      const gestionesRows = [
-        ["Fecha", "Cantidad"],
-        ...data.gestionesPorDia.map((g) => [safeFormat(g.fecha, "dd/MM/yyyy"), g.count]),
-      ];
-      const wsGestiones = XLSX.utils.aoa_to_sheet(gestionesRows);
-      wsGestiones["!cols"] = [{ wch: 15 }, { wch: 12 }];
+      const wsGestiones = XLSX.utils.aoa_to_sheet(wsGestionesRows);
+      wsGestiones["!cols"] = [{ wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 22 }];
       XLSX.utils.book_append_sheet(wb, wsGestiones, "Gestiones por Día");
 
-      const clientesRows = [
-        ["Tipo Cliente", "Cantidad", "Porcentaje"],
-        ...data.distribucionClientes.map((c) => [c.tipo, c.count, `${c.percentage.toFixed(1)}%`]),
+      // ── 7. CASOS POR ESTADO ─────────────────────────────────────────────
+      const wsEstadosRows = [
+        ...metaHeader("Casos por Estado"),
+        ["Estado", "Cantidad", "Porcentaje"],
+        ...data.casosPorEstado.map((e) => [e.estado, e.count, PCT(e.percentage)]),
       ];
-      const wsClientes = XLSX.utils.aoa_to_sheet(clientesRows);
-      wsClientes["!cols"] = [{ wch: 18 }, { wch: 12 }, { wch: 12 }];
+      const wsEstados = XLSX.utils.aoa_to_sheet(wsEstadosRows);
+      wsEstados["!cols"] = [{ wch: 24 }, { wch: 12 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, wsEstados, "Casos por Estado");
+
+      // ── 8. POR CAMPAÑA ──────────────────────────────────────────────────
+      const wsCampanaRows = [
+        ...metaHeader("Resumen por Campaña"),
+        ["Campaña", "Casos", "Renovados", "Tasa Renovación", "Facturado", "Pendiente"],
+        ...data.resumenCampanas.map((c) => [
+          c.campana, c.casos, c.renovados, PCT(c.tasa), c.facturado, c.pendiente,
+        ]),
+      ];
+      const wsCampana = XLSX.utils.aoa_to_sheet(wsCampanaRows);
+      wsCampana["!cols"] = [{ wch: 28 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(wb, wsCampana, "Por Campaña");
+
+      // ── 9. CLIENTES ─────────────────────────────────────────────────────
+      const wsClientesRows = [
+        ...metaHeader("Distribución de Clientes"),
+        ["Tipo Cliente", "Cantidad", "Porcentaje", "Valor Facturado"],
+        ...data.distribucionClientes.map((c) => [
+          c.tipo, c.count, PCT(c.percentage), c.valorFacturado,
+        ]),
+      ];
+      const wsClientes = XLSX.utils.aoa_to_sheet(wsClientesRows);
+      wsClientes["!cols"] = [{ wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 20 }];
       XLSX.utils.book_append_sheet(wb, wsClientes, "Clientes");
 
-      XLSX.writeFile(wb, `Reporte_Analitica_${format(new Date(), "yyyyMMdd")}.xlsx`);
+      XLSX.writeFile(wb, `Reporte_Analitica_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`);
       toast.success("Reporte Excel generado exitosamente");
       await logActivity("EXPORT", "reporte", undefined, { formato: "xlsx", filtros: getFilterSummary() });
     } catch (error) {
