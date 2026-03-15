@@ -434,165 +434,366 @@ export default function Analytics() {
     if (!data) return;
     setExportingExcel(true);
     try {
-      const XLSX = await import("xlsx");
+      // xlsx-js-style es un fork de xlsx 0.18.5 que agrega estilos de celda.
+      // Tiene exactamente la misma API que xlsx, solo agrega la propiedad `.s` en cada celda.
+      const XLSX = await import("xlsx-js-style");
       const wb = XLSX.utils.book_new();
 
       const periodoStr = `${format(appliedFilters.dateFrom, "dd/MM/yyyy")} - ${format(appliedFilters.dateTo, "dd/MM/yyyy")}`;
       const filtrosStr = getFilterSummary();
       const fechaGen   = format(new Date(), "dd/MM/yyyy HH:mm");
 
-      const metaHeader = (titulo: string) => [
-        ["Reporte", titulo],
-        ["Período", periodoStr],
-        ["Filtros aplicados", filtrosStr],
-        ["Fecha de generación", fechaGen],
-        [],
-      ];
+      // ── Paleta KV Renovación 2026 ──────────────────────────────────────
+      const C = {
+        azul:      "0D3266",
+        gradIA:    "6D8AEF",
+        grisClaro: "F0F2F8",
+        blanco:    "FFFFFF",
+        negro:     "141414",
+        naranja:   "FF6B35",  // alerta pendiente
+      } as const;
+
+      // ── Estilos reutilizables ──────────────────────────────────────────
+      const sMetaLabel = {
+        font: { bold: true, color: { rgb: C.azul }, sz: 10 },
+        fill: { fgColor: { rgb: C.grisClaro }, patternType: "solid" as const },
+        alignment: { horizontal: "left" as const },
+      };
+      const sMetaValue = {
+        font: { color: { rgb: C.negro }, sz: 10 },
+        fill: { fgColor: { rgb: C.grisClaro }, patternType: "solid" as const },
+        alignment: { horizontal: "left" as const },
+      };
+      const sColHeader = {
+        font: { bold: true, color: { rgb: C.blanco }, sz: 10 },
+        fill: { fgColor: { rgb: C.azul }, patternType: "solid" as const },
+        alignment: { horizontal: "center" as const, wrapText: true },
+        border: {
+          bottom: { style: "thin" as const, color: { rgb: C.gradIA } },
+        },
+      };
+      const sDataNormal = {
+        font: { color: { rgb: C.negro }, sz: 10 },
+        alignment: { horizontal: "left" as const },
+      };
+      const sDataAlt = {
+        font: { color: { rgb: C.negro }, sz: 10 },
+        fill: { fgColor: { rgb: C.grisClaro }, patternType: "solid" as const },
+        alignment: { horizontal: "left" as const },
+      };
+      const sNum = (alt: boolean) => ({
+        ...( alt ? sDataAlt : sDataNormal),
+        numFmt: "#,##0",
+        alignment: { horizontal: "right" as const },
+      });
+      const sPct = (alt: boolean) => ({
+        ...( alt ? sDataAlt : sDataNormal),
+        alignment: { horizontal: "right" as const },
+      });
+      const sSectionTitle = {
+        font: { bold: true, color: { rgb: C.blanco }, sz: 11 },
+        fill: { fgColor: { rgb: C.gradIA }, patternType: "solid" as const },
+      };
 
       const PCT = (n: number) => `${n.toFixed(1)}%`;
 
+      // ── Helper: aplica estilos a una worksheet ya creada ────────────────
+      // META_ROWS = número de filas de encabezado antes de la cabecera de tabla
+      // HEADER_ROW = índice de fila (0-based) de la cabecera de columnas
+      // numCols = número de columnas
+      // numericCols = índices (0-based) de columnas con formato numérico COP
+      // pctCols = índices de columnas con porcentaje
+      const styleSheet = (
+        ws: any,
+        metaRows: number,
+        headerRowIdx: number,
+        numCols: number,
+        numericCols: number[] = [],
+        pctCols: number[] = []
+      ) => {
+        const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
+        const totalRows = range.e.r + 1;
+
+        for (let R = 0; R <= range.e.r; R++) {
+          for (let C2 = 0; C2 <= range.e.c; C2++) {
+            const addr = XLSX.utils.encode_cell({ r: R, c: C2 });
+            if (!ws[addr]) continue;
+
+            // Filas de metadatos (0..metaRows-2, saltando la fila vacía)
+            if (R < metaRows - 1) {
+              ws[addr].s = C2 === 0 ? sMetaLabel : sMetaValue;
+              continue;
+            }
+            // Fila de cabecera de columnas
+            if (R === headerRowIdx) {
+              ws[addr].s = sColHeader;
+              continue;
+            }
+            // Filas de datos
+            if (R > headerRowIdx) {
+              const dataRowIdx = R - headerRowIdx - 1;
+              const alt = dataRowIdx % 2 === 1;
+              if (numericCols.includes(C2)) {
+                ws[addr].s = sNum(alt);
+                if (typeof ws[addr].v === "number") ws[addr].t = "n";
+              } else if (pctCols.includes(C2)) {
+                ws[addr].s = sPct(alt);
+              } else {
+                ws[addr].s = alt ? sDataAlt : sDataNormal;
+              }
+            }
+          }
+        }
+
+        // Fila de altura cabecera
+        if (!ws["!rows"]) ws["!rows"] = [];
+        ws["!rows"][headerRowIdx] = { hpt: 32 };
+
+        // autoFilter en la fila de cabecera
+        const lastCol = XLSX.utils.encode_col(range.e.c);
+        const headerAddr = XLSX.utils.encode_row(headerRowIdx);
+        ws["!autofilter"] = {
+          ref: `A${headerRowIdx + 1}:${lastCol}${headerRowIdx + 1}`,
+        };
+
+        return ws;
+      };
+
+      // META_ROWS = 5 (4 filas de metadatos + 1 fila vacía)
+      const META = 5;
+      const HDR  = META; // índice 0-based de la fila de cabecera (fila 6 en Excel)
+
       // ── 1. RESUMEN ──────────────────────────────────────────────────────
+      // El Resumen es diferente: no tiene tabla filtrable, sino secciones
       const wsResumenRows = [
-        ...metaHeader("Resumen Ejecutivo"),
-        ["Métrica", "Valor"],
-        ["Total Casos", data.totalCasos],
-        ["Casos Renovados", data.casosRenovados],
-        ["Tasa de Renovación", PCT(data.tasaRenovacion)],
-        ["Gestiones Registradas", data.gestionesRegistradas],
+        [{ v: "Reporte", s: sMetaLabel },        { v: "Resumen Ejecutivo", s: sMetaValue }],
+        [{ v: "Período", s: sMetaLabel },         { v: periodoStr, s: sMetaValue }],
+        [{ v: "Filtros aplicados", s: sMetaLabel }, { v: filtrosStr, s: sMetaValue }],
+        [{ v: "Fecha de generación", s: sMetaLabel }, { v: fechaGen, s: sMetaValue }],
         [],
-        ["RESUMEN FINANCIERO"],
-        ["Total Facturado", data.totalFacturado],
-        ["Pendiente de Cobro", data.pendienteCobro],
-        ["% Recaudo", PCT(data.porcentajeRecaudo)],
-        ["Valor Promedio / Renovación", data.valorPromedio],
+        [{ v: "INDICADORES DE GESTIÓN", s: sSectionTitle }],
+        [{ v: "Total Casos", s: sDataNormal }, { v: data.totalCasos, s: sNum(false) }],
+        [{ v: "Casos Renovados", s: sDataAlt }, { v: data.casosRenovados, s: sNum(true) }],
+        [{ v: "Tasa de Renovación", s: sDataNormal }, { v: PCT(data.tasaRenovacion), s: sPct(false) }],
+        [{ v: "Gestiones Registradas", s: sDataAlt }, { v: data.gestionesRegistradas, s: sNum(true) }],
         [],
-        ["DISTRIBUCIÓN POR TIPO DE CLIENTE"],
-        ["Tipo", "Cantidad", "% del total", "Valor Facturado"],
-        ...data.distribucionClientes.map((c) => [
-          c.tipo, c.count, PCT(c.percentage), c.valorFacturado,
-        ]),
+        [{ v: "RESUMEN FINANCIERO", s: sSectionTitle }],
+        [{ v: "Total Facturado", s: sDataNormal }, { v: data.totalFacturado, s: sNum(false) }],
+        [{ v: "Pendiente de Cobro", s: sDataAlt },  { v: data.pendienteCobro, s: sNum(true) }],
+        [{ v: "% Recaudo", s: sDataNormal }, { v: PCT(data.porcentajeRecaudo), s: sPct(false) }],
+        [{ v: "Valor Promedio / Renovación", s: sDataAlt }, { v: data.valorPromedio, s: sNum(true) }],
+        [],
+        [{ v: "DISTRIBUCIÓN POR TIPO DE CLIENTE", s: sSectionTitle }],
+        [
+          { v: "Tipo", s: sColHeader }, { v: "Cantidad", s: sColHeader },
+          { v: "% del total", s: sColHeader }, { v: "Valor Facturado", s: sColHeader },
+        ],
+        ...data.distribucionClientes.map((c, i) => {
+          const alt = i % 2 === 1;
+          return [
+            { v: c.tipo, s: alt ? sDataAlt : sDataNormal },
+            { v: c.count, s: sNum(alt) },
+            { v: PCT(c.percentage), s: sPct(alt) },
+            { v: c.valorFacturado, s: sNum(alt) },
+          ];
+        }),
       ];
       const wsResumen = XLSX.utils.aoa_to_sheet(wsResumenRows);
       wsResumen["!cols"] = [{ wch: 32 }, { wch: 22 }, { wch: 14 }, { wch: 20 }];
       XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
 
       // ── 2. TRÁMITES RENOVADOS ───────────────────────────────────────────
-      const wsTramitesRows = [
-        ...metaHeader("Trámites Renovados"),
-        [
-          "Fecha Renovación", "N° Matrícula / ID", "Razón Social / Nombre",
-          "Tipo", "Agente", "Campaña", "Valor Pagado", "Días hasta Renovación",
-        ],
-        ...data.tramitesRenovados.map((t) => [
-          t.fechaRenovacion, t.numeroMatricula, t.nombreRazonSocial,
-          t.tipo, t.agente, t.campana, t.valorPagado, t.diasHastaRenovacion,
-        ]),
+      const tramHeaders = [
+        "Fecha Renovación", "N° Matrícula / ID", "Razón Social / Nombre",
+        "Tipo", "Agente", "Campaña", "Valor Pagado", "Días hasta Renovación",
       ];
-      const wsTramites = XLSX.utils.aoa_to_sheet(wsTramitesRows);
+      const tramData = data.tramitesRenovados.map((t) => [
+        t.fechaRenovacion, t.numeroMatricula, t.nombreRazonSocial,
+        t.tipo, t.agente, t.campana, t.valorPagado, t.diasHastaRenovacion,
+      ]);
+      const wsTramitesRows = [
+        ["Reporte", "Trámites Renovados"],
+        ["Período", periodoStr],
+        ["Filtros aplicados", filtrosStr],
+        ["Fecha de generación", fechaGen],
+        [],
+        tramHeaders,
+        ...tramData,
+      ];
+      let wsTramites = XLSX.utils.aoa_to_sheet(wsTramitesRows);
       wsTramites["!cols"] = [
         { wch: 16 }, { wch: 18 }, { wch: 36 }, { wch: 10 },
         { wch: 28 }, { wch: 24 }, { wch: 16 }, { wch: 22 },
       ];
+      wsTramites = styleSheet(wsTramites, META, HDR, tramHeaders.length, [6], []);
       XLSX.utils.book_append_sheet(wb, wsTramites, "Trámites Renovados");
 
       // ── 3. PENDIENTES DE PAGO ───────────────────────────────────────────
-      const wsPendientesRows = [
-        ...metaHeader("Pendientes de Pago"),
-        [
-          "Fecha del Caso", "N° Matrícula / ID", "Razón Social / Nombre",
-          "Agente", "Campaña", "Valor", "Días en Pendiente",
-        ],
-        ...data.pendientesPago.map((p) => [
-          p.fechaCaso, p.numeroMatricula, p.nombreRazonSocial,
-          p.agente, p.campana, p.valor, p.diasEnPendiente,
-        ]),
+      const pendHeaders = [
+        "Fecha del Caso", "N° Matrícula / ID", "Razón Social / Nombre",
+        "Agente", "Campaña", "Valor", "Días en Pendiente",
       ];
-      const wsPendientes = XLSX.utils.aoa_to_sheet(wsPendientesRows);
+      const pendData = data.pendientesPago.map((p) => [
+        p.fechaCaso, p.numeroMatricula, p.nombreRazonSocial,
+        p.agente, p.campana, p.valor, p.diasEnPendiente,
+      ]);
+      const wsPendientesRows = [
+        ["Reporte", "Pendientes de Pago"],
+        ["Período", periodoStr],
+        ["Filtros aplicados", filtrosStr],
+        ["Fecha de generación", fechaGen],
+        [],
+        pendHeaders,
+        ...pendData,
+      ];
+      let wsPendientes = XLSX.utils.aoa_to_sheet(wsPendientesRows);
       wsPendientes["!cols"] = [
         { wch: 16 }, { wch: 18 }, { wch: 36 }, { wch: 28 },
         { wch: 24 }, { wch: 16 }, { wch: 18 },
       ];
+      wsPendientes = styleSheet(wsPendientes, META, HDR, pendHeaders.length, [5], []);
+      // Destacar en naranja las celdas con más de 30 días en pendiente (col 6)
+      const pendRange = XLSX.utils.decode_range(wsPendientes["!ref"] ?? "A1");
+      for (let R = HDR + 1; R <= pendRange.e.r; R++) {
+        const daysCell = XLSX.utils.encode_cell({ r: R, c: 6 });
+        if (wsPendientes[daysCell] && typeof wsPendientes[daysCell].v === "number" && wsPendientes[daysCell].v > 30) {
+          const alt = (R - HDR - 1) % 2 === 1;
+          wsPendientes[daysCell].s = {
+            font: { bold: true, color: { rgb: C.naranja }, sz: 10 },
+            fill: alt ? { fgColor: { rgb: C.grisClaro }, patternType: "solid" as const } : undefined,
+            numFmt: "#,##0",
+            alignment: { horizontal: "right" as const },
+          };
+        }
+      }
       XLSX.utils.book_append_sheet(wb, wsPendientes, "Pendientes de Pago");
 
       // ── 4. RECAUDO POR FECHA ────────────────────────────────────────────
-      const wsRecaudoRows = [
-        ...metaHeader("Recaudo por Fecha"),
-        ["Fecha", "Renovados del día", "Valor Facturado", "Valor Pendiente", "% Recaudo del día"],
-        ...data.recaudoPorFecha.map((r) => [
-          r.fecha, r.renovadosDelDia, r.valorFacturado,
-          r.valorPendiente, PCT(r.porcentajeRecaudo),
-        ]),
+      const recHeaders = [
+        "Fecha", "Renovados del día", "Valor Facturado", "Valor Pendiente", "% Recaudo del día",
       ];
-      const wsRecaudo = XLSX.utils.aoa_to_sheet(wsRecaudoRows);
+      const recData = data.recaudoPorFecha.map((r) => [
+        r.fecha, r.renovadosDelDia, r.valorFacturado, r.valorPendiente, PCT(r.porcentajeRecaudo),
+      ]);
+      const wsRecaudoRows = [
+        ["Reporte", "Recaudo por Fecha"],
+        ["Período", periodoStr],
+        ["Filtros aplicados", filtrosStr],
+        ["Fecha de generación", fechaGen],
+        [],
+        recHeaders,
+        ...recData,
+      ];
+      let wsRecaudo = XLSX.utils.aoa_to_sheet(wsRecaudoRows);
       wsRecaudo["!cols"] = [{ wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }];
+      wsRecaudo = styleSheet(wsRecaudo, META, HDR, recHeaders.length, [2, 3], [4]);
       XLSX.utils.book_append_sheet(wb, wsRecaudo, "Recaudo por Fecha");
 
-      // ── 5. RENDIMIENTO AGENTES (con columnas financieras) ───────────────
-      const wsAgentesRows = [
-        ...metaHeader("Rendimiento de Agentes"),
-        [
-          "Agente", "Casos Asignados", "Gestiones", "Renovados",
-          "Tasa Renovación", "Valor Facturado", "Valor Pendiente",
-          "% Recaudo", "Promedio / Renovación",
-        ],
-        ...data.rendimientoAgentes.map((a) => [
-          a.agente, a.casosAsignados, a.gestiones, a.renovados,
-          PCT(a.tasaRenovacion), a.valorFacturado, a.valorPendiente,
-          PCT(a.porcentajeRecaudo), a.promedioPorRenovacion,
-        ]),
+      // ── 5. RENDIMIENTO AGENTES ──────────────────────────────────────────
+      const agHeaders = [
+        "Agente", "Casos Asignados", "Gestiones", "Renovados",
+        "Tasa Renovación", "Valor Facturado", "Valor Pendiente",
+        "% Recaudo", "Promedio / Renovación",
       ];
-      const wsAgentes = XLSX.utils.aoa_to_sheet(wsAgentesRows);
+      const agData = data.rendimientoAgentes.map((a) => [
+        a.agente, a.casosAsignados, a.gestiones, a.renovados,
+        PCT(a.tasaRenovacion), a.valorFacturado, a.valorPendiente,
+        PCT(a.porcentajeRecaudo), a.promedioPorRenovacion,
+      ]);
+      const wsAgentesRows = [
+        ["Reporte", "Rendimiento de Agentes"],
+        ["Período", periodoStr],
+        ["Filtros aplicados", filtrosStr],
+        ["Fecha de generación", fechaGen],
+        [],
+        agHeaders,
+        ...agData,
+      ];
+      let wsAgentes = XLSX.utils.aoa_to_sheet(wsAgentesRows);
       wsAgentes["!cols"] = [
         { wch: 30 }, { wch: 16 }, { wch: 12 }, { wch: 12 },
         { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 22 },
       ];
+      wsAgentes = styleSheet(wsAgentes, META, HDR, agHeaders.length, [1, 2, 3, 5, 6, 8], [4, 7]);
       XLSX.utils.book_append_sheet(wb, wsAgentes, "Rendimiento Agentes");
 
-      // ── 6. GESTIONES POR DÍA (con valor diario) ─────────────────────────
-      const wsGestionesRows = [
-        ...metaHeader("Gestiones por Día"),
-        ["Fecha", "Gestiones", "Renovados del día", "Valor Facturado del día", "Valor Pendiente del día"],
-        ...data.gestionesPorDia.map((g) => [
-          g.fecha.substring(0, 10), g.count, g.renovadosDelDia,
-          g.valorFacturadoDia, g.valorPendienteDia,
-        ]),
+      // ── 6. GESTIONES POR DÍA ────────────────────────────────────────────
+      const gHeaders = [
+        "Fecha", "Gestiones", "Renovados del día", "Valor Facturado del día", "Valor Pendiente del día",
       ];
-      const wsGestiones = XLSX.utils.aoa_to_sheet(wsGestionesRows);
+      const gData = data.gestionesPorDia.map((g) => [
+        g.fecha.substring(0, 10), g.count, g.renovadosDelDia,
+        g.valorFacturadoDia, g.valorPendienteDia,
+      ]);
+      const wsGestionesRows = [
+        ["Reporte", "Gestiones por Día"],
+        ["Período", periodoStr],
+        ["Filtros aplicados", filtrosStr],
+        ["Fecha de generación", fechaGen],
+        [],
+        gHeaders,
+        ...gData,
+      ];
+      let wsGestiones = XLSX.utils.aoa_to_sheet(wsGestionesRows);
       wsGestiones["!cols"] = [{ wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 22 }];
+      wsGestiones = styleSheet(wsGestiones, META, HDR, gHeaders.length, [1, 2, 3, 4], []);
       XLSX.utils.book_append_sheet(wb, wsGestiones, "Gestiones por Día");
 
       // ── 7. CASOS POR ESTADO ─────────────────────────────────────────────
+      const estHeaders = ["Estado", "Cantidad", "Porcentaje"];
+      const estData = data.casosPorEstado.map((e) => [e.estado, e.count, PCT(e.percentage)]);
       const wsEstadosRows = [
-        ...metaHeader("Casos por Estado"),
-        ["Estado", "Cantidad", "Porcentaje"],
-        ...data.casosPorEstado.map((e) => [e.estado, e.count, PCT(e.percentage)]),
+        ["Reporte", "Casos por Estado"],
+        ["Período", periodoStr],
+        ["Filtros aplicados", filtrosStr],
+        ["Fecha de generación", fechaGen],
+        [],
+        estHeaders,
+        ...estData,
       ];
-      const wsEstados = XLSX.utils.aoa_to_sheet(wsEstadosRows);
+      let wsEstados = XLSX.utils.aoa_to_sheet(wsEstadosRows);
       wsEstados["!cols"] = [{ wch: 24 }, { wch: 12 }, { wch: 12 }];
+      wsEstados = styleSheet(wsEstados, META, HDR, estHeaders.length, [1], [2]);
       XLSX.utils.book_append_sheet(wb, wsEstados, "Casos por Estado");
 
       // ── 8. POR CAMPAÑA ──────────────────────────────────────────────────
-      const wsCampanaRows = [
-        ...metaHeader("Resumen por Campaña"),
-        ["Campaña", "Casos", "Renovados", "Tasa Renovación", "Facturado", "Pendiente"],
-        ...data.resumenCampanas.map((c) => [
-          c.campana, c.casos, c.renovados, PCT(c.tasa), c.facturado, c.pendiente,
-        ]),
+      const campHeaders = [
+        "Campaña", "Casos", "Renovados", "Tasa Renovación", "Facturado", "Pendiente",
       ];
-      const wsCampana = XLSX.utils.aoa_to_sheet(wsCampanaRows);
+      const campData = data.resumenCampanas.map((c) => [
+        c.campana, c.casos, c.renovados, PCT(c.tasa), c.facturado, c.pendiente,
+      ]);
+      const wsCampanaRows = [
+        ["Reporte", "Resumen por Campaña"],
+        ["Período", periodoStr],
+        ["Filtros aplicados", filtrosStr],
+        ["Fecha de generación", fechaGen],
+        [],
+        campHeaders,
+        ...campData,
+      ];
+      let wsCampana = XLSX.utils.aoa_to_sheet(wsCampanaRows);
       wsCampana["!cols"] = [{ wch: 28 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 18 }];
+      wsCampana = styleSheet(wsCampana, META, HDR, campHeaders.length, [1, 2, 4, 5], [3]);
       XLSX.utils.book_append_sheet(wb, wsCampana, "Por Campaña");
 
       // ── 9. CLIENTES ─────────────────────────────────────────────────────
+      const cliHeaders = ["Tipo Cliente", "Cantidad", "Porcentaje", "Valor Facturado"];
+      const cliData = data.distribucionClientes.map((c) => [
+        c.tipo, c.count, PCT(c.percentage), c.valorFacturado,
+      ]);
       const wsClientesRows = [
-        ...metaHeader("Distribución de Clientes"),
-        ["Tipo Cliente", "Cantidad", "Porcentaje", "Valor Facturado"],
-        ...data.distribucionClientes.map((c) => [
-          c.tipo, c.count, PCT(c.percentage), c.valorFacturado,
-        ]),
+        ["Reporte", "Distribución de Clientes"],
+        ["Período", periodoStr],
+        ["Filtros aplicados", filtrosStr],
+        ["Fecha de generación", fechaGen],
+        [],
+        cliHeaders,
+        ...cliData,
       ];
-      const wsClientes = XLSX.utils.aoa_to_sheet(wsClientesRows);
+      let wsClientes = XLSX.utils.aoa_to_sheet(wsClientesRows);
       wsClientes["!cols"] = [{ wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 20 }];
+      wsClientes = styleSheet(wsClientes, META, HDR, cliHeaders.length, [1, 3], [2]);
       XLSX.utils.book_append_sheet(wb, wsClientes, "Clientes");
 
       XLSX.writeFile(wb, `Reporte_Analitica_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`);
