@@ -12,11 +12,14 @@ import ChangePassword from "@/pages/ChangePassword";
 import SelectCampaign from "@/pages/SelectCampaign";
 import NotFound from "@/pages/NotFound";
 
-const Dashboard = lazy(() => import("@/pages/Dashboard"));
-const Clients = lazy(() => import("@/pages/Clients"));
-const Cases = lazy(() => import("@/pages/Cases"));
-const Analytics = lazy(() => import("@/pages/Analytics"));
-const Settings = lazy(() => import("@/pages/Settings"));
+const Dashboard  = lazy(() => import("@/pages/Dashboard"));
+const Clients    = lazy(() => import("@/pages/Clients"));
+const Cases      = lazy(() => import("@/pages/Cases"));
+const Analytics  = lazy(() => import("@/pages/Analytics"));
+const Settings   = lazy(() => import("@/pages/Settings"));
+// --- Módulo Horarios ---
+const Horarios   = lazy(() => import("@/pages/Horarios"));
+const MiHorario  = lazy(() => import("@/pages/MiHorario"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -95,6 +98,8 @@ const App = () => (
                   <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
                   <Route path="/cambiar-contrasena" element={<ChangePasswordRoute />} />
                   <Route path="/seleccionar-campana" element={<CampaignRoute />} />
+
+                  {/* Rutas existentes — sin cambios */}
                   <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                   <Route path="/clientes" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
                   <Route path="/casos" element={
@@ -112,6 +117,25 @@ const App = () => (
                     </ProtectedRoute>
                   } />
                   <Route path="/ajustes" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+
+                  {/* Módulo Horarios — admin / supervisor / gerente */}
+                  <Route path="/horarios" element={
+                    <ProtectedRoute>
+                      <RoleRoute roles={["admin", "supervisor", "gerente"]}>
+                        <Horarios />
+                      </RoleRoute>
+                    </ProtectedRoute>
+                  } />
+
+                  {/* Mi Horario — agente: solo lectura de su turno */}
+                  <Route path="/mi-horario" element={
+                    <ProtectedRoute>
+                      <RoleRoute roles={["agent"]}>
+                        <MiHorario />
+                      </RoleRoute>
+                    </ProtectedRoute>
+                  } />
+
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
