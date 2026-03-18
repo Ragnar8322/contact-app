@@ -1,6 +1,6 @@
 // ============================================================
-// MÓDULO HORARIOS — Hooks de lectura (sin mutaciones)
-// Fase 2: Solo queries. Las mutaciones van en Fase 5.
+// MÓDULO HORARIOS — Hooks de lectura
+// FIX: useCampana() expone campanaActiva, no campanaId directamente.
 // ============================================================
 
 import { useQuery } from "@tanstack/react-query";
@@ -18,11 +18,17 @@ import {
   canManageSchedules,
 } from "@/types/schedules";
 
+// Helper interno
+function useCampanaId(): string | null {
+  const { campanaActiva } = useCampana();
+  return campanaActiva?.id ?? null;
+}
+
 // ------------------------------------------------------------
 // 1. Tipos de turno de la campaña activa
 // ------------------------------------------------------------
 export function useShiftTypes() {
-  const { campanaId } = useCampana();
+  const campanaId = useCampanaId();
 
   return useQuery<ShiftType[]>({
     queryKey: ["shift_types", campanaId],
@@ -41,10 +47,10 @@ export function useShiftTypes() {
 }
 
 // ------------------------------------------------------------
-// 2. Schedules (semanas) de la campaña activa
+// 2. Schedules de la campaña activa
 // ------------------------------------------------------------
 export function useSchedules() {
-  const { campanaId } = useCampana();
+  const campanaId = useCampanaId();
 
   return useQuery<Schedule[]>({
     queryKey: ["schedules", campanaId],
@@ -55,7 +61,7 @@ export function useSchedules() {
         .select("*")
         .eq("campana_id", campanaId!)
         .order("semana_inicio", { ascending: false })
-        .limit(12); // máximo 3 meses atrás
+        .limit(12);
       if (error) throw error;
       return data as Schedule[];
     },
@@ -66,7 +72,7 @@ export function useSchedules() {
 // 3. Schedule de la semana actual (o la semana de una fecha dada)
 // ------------------------------------------------------------
 export function useCurrentSchedule(fecha?: Date) {
-  const { campanaId } = useCampana();
+  const campanaId = useCampanaId();
   const ref = fecha ?? new Date();
   const semana_inicio = toISODate(getWeekStart(ref));
   const semana_fin    = toISODate(getWeekEnd(getWeekStart(ref)));
@@ -89,9 +95,7 @@ export function useCurrentSchedule(fecha?: Date) {
 }
 
 // ------------------------------------------------------------
-// 4. Turnos de una semana completa (grilla del equipo)
-//    Solo disponible para admin / supervisor / gerente.
-//    El agente NO llama este hook — usa useMyShifts.
+// 4. Turnos de una semana completa (solo managers)
 // ------------------------------------------------------------
 export function useScheduleShifts(scheduleId: string | null | undefined) {
   const { roles } = useAuth();
@@ -120,7 +124,7 @@ export function useScheduleShifts(scheduleId: string | null | undefined) {
 }
 
 // ------------------------------------------------------------
-// 5. Turnos propios del agente autenticado (vista reducida)
+// 5. Turnos propios del agente autenticado
 // ------------------------------------------------------------
 export function useMyShifts(scheduleId: string | null | undefined) {
   const { user } = useAuth();
@@ -142,7 +146,7 @@ export function useMyShifts(scheduleId: string | null | undefined) {
 }
 
 // ------------------------------------------------------------
-// 6. Novedades de una semana (managers ven todo, agente solo las suyas)
+// 6. Novedades (managers ven todo, agente solo las suyas)
 // ------------------------------------------------------------
 export function useScheduleNovedades(scheduleId: string | null | undefined) {
   const { user, roles } = useAuth();
@@ -158,7 +162,6 @@ export function useScheduleNovedades(scheduleId: string | null | undefined) {
         .eq("schedule_id", scheduleId!)
         .order("fecha");
 
-      // El agente solo ve las suyas (doble garantía sobre la RLS)
       if (!isManager) {
         query = query.eq("agente_id", user!.id);
       }
@@ -171,8 +174,7 @@ export function useScheduleNovedades(scheduleId: string | null | undefined) {
 }
 
 // ------------------------------------------------------------
-// 7. Cobertura intradiaria (agentes activos por franja de 15min)
-//    Retorna un mapa: { "HH:MM" -> count }
+// 7. Cobertura intradiaria por franja de 15 min
 // ------------------------------------------------------------
 export function useCoverageBySlot(
   scheduleId: string | null | undefined,
@@ -197,7 +199,6 @@ export function useCoverageBySlot(
 
       if (error) throw error;
 
-      // Construir mapa de slots de 15min: 07:00 → 18:00
       const slots: Record<string, number> = {};
       for (let h = 7; h < 18; h++) {
         for (const m of [0, 15, 30, 45]) {

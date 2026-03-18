@@ -1,6 +1,6 @@
 // ============================================================
 // Página /horarios — admin | supervisor | gerente
-// Fase 5: UI completa con grilla semanal, cobertura y novedades
+// FIX: useCampana() expone campanaActiva, no campanaId.
 // ============================================================
 import { useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,7 +8,6 @@ import { useCampana } from "@/contexts/CampanaContext";
 import {
   useCurrentSchedule,
   useScheduleShifts,
-  useSchedules,
 } from "@/hooks/useSchedules";
 import {
   getWeekStart, getWeekEnd, toISODate,
@@ -25,11 +24,13 @@ import { CalendarDays, Plus, Send } from "lucide-react";
 
 export default function Horarios() {
   const { isAdmin, isSupervisor } = useAuth();
-  const { campanaId } = useCampana();
+  // FIX: destructurar campanaActiva, no campanaId (no existe en el contexto)
+  const { campanaActiva } = useCampana();
+  const campanaId = campanaActiva?.id ?? null;
+
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  // Semana de referencia
   const [refDate, setRefDate] = useState(() => getWeekStart(new Date()));
   const semanaInicio = toISODate(refDate);
   const semanaFin    = toISODate(getWeekEnd(refDate));
@@ -37,9 +38,7 @@ export default function Horarios() {
   const { data: schedule, isLoading: loadingSched } = useCurrentSchedule(refDate);
   const { data: shifts,   isLoading: loadingShifts, refetch } = useScheduleShifts(schedule?.id);
 
-  // Cobertura del lunes como vista por defecto
   const coberturaFecha = semanaInicio;
-
   const canEdit = isAdmin || isSupervisor;
 
   function prevSemana() {
@@ -49,9 +48,11 @@ export default function Horarios() {
     setRefDate(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n; });
   }
 
-  // Crear semana si no existe
   const handleCrearSemana = useCallback(async () => {
-    if (!campanaId) return;
+    if (!campanaId) {
+      toast({ title: "Error", description: "No hay campaña activa seleccionada.", variant: "destructive" });
+      return;
+    }
     const { error } = await supabase.from("schedules").insert({
       campana_id:    campanaId,
       semana_inicio: semanaInicio,
@@ -61,12 +62,11 @@ export default function Horarios() {
     if (error) {
       toast({ title: "Error al crear semana", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Semana creada" });
+      toast({ title: "Semana creada ✅" });
       qc.invalidateQueries({ queryKey: ["schedules", campanaId, semanaInicio] });
     }
   }, [campanaId, semanaInicio, semanaFin, toast, qc]);
 
-  // Publicar semana
   const handlePublicar = useCallback(async () => {
     if (!schedule) return;
     const { error } = await supabase
@@ -76,28 +76,30 @@ export default function Horarios() {
     if (error) {
       toast({ title: "Error al publicar", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Semana publicada" });
+      toast({ title: "Semana publicada 📢" });
       qc.invalidateQueries({ queryKey: ["schedules", campanaId, semanaInicio] });
     }
   }, [schedule, campanaId, semanaInicio, toast, qc]);
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Módulo Horarios</h1>
-          <p className="text-sm text-muted-foreground">Gestión de turnos semanales del equipo</p>
+          <p className="text-sm text-muted-foreground">
+            Gestión de turnos semanales
+            {campanaActiva ? ` — ${campanaActiva.nombre}` : ""}
+          </p>
         </div>
         {canEdit && (
           <div className="flex gap-2">
             {!loadingSched && !schedule && (
-              <Button size="sm" onClick={handleCrearSemana}>
+              <Button size="sm" onClick={handleCrearSemana} disabled={!campanaId}>
                 <Plus className="mr-1 h-4 w-4" /> Crear semana
               </Button>
             )}
             {schedule && schedule.estado === "borrador" && (
-              <Button size="sm" variant="default" onClick={handlePublicar}>
+              <Button size="sm" onClick={handlePublicar}>
                 <Send className="mr-1 h-4 w-4" /> Publicar semana
               </Button>
             )}
@@ -105,14 +107,12 @@ export default function Horarios() {
         )}
       </div>
 
-      {/* Navegador de semanas */}
       <SemanaNav
         schedule={schedule ?? null}
         onPrev={prevSemana}
         onNext={nextSemana}
       />
 
-      {/* Grilla */}
       {loadingSched || loadingShifts ? (
         <div className="space-y-2">
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
@@ -132,7 +132,6 @@ export default function Horarios() {
         </div>
       )}
 
-      {/* Cobertura intradiaria */}
       {schedule && (
         <CoverageBar
           scheduleId={schedule.id}
