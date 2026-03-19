@@ -1,17 +1,13 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-
-interface Profile {
-  user_id: string;
-  nombre: string;
-  role_id: number;
-  telefono: string | null;
-  role_name?: string;
-  must_change_password?: boolean;
-}
+import { Tables } from "@/integrations/supabase/types";
 
 export type RoleName = "admin" | "agent" | "supervisor" | "gerente";
+
+export interface Profile extends Tables<"profiles"> {
+  role_name?: string;
+}
 
 interface AuthContextType {
   session: Session | null;
@@ -39,9 +35,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<RoleName[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
+  
+  // 1. Condicion de carrera mitigada usando useRef para persistir el lastUserId
+  const lastUserId = useRef<string | null>(null);
 
   const fetchProfile = useCallback(async (userId: string) => {
     setProfileLoading(true);
+    // 3. Manejo de Errores: robust try-catch
     try {
       const [profileResult, rolesResult] = await Promise.all([
         supabase
@@ -57,32 +57,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (profileResult.error) {
         console.error("Error loading profile:", profileResult.error.message);
+        setProfile(null);
+        setRoles([]);
         return;
+      }
+
+      if (rolesResult.error) {
+        console.error("Error loading role assignments:", rolesResult.error.message);
       }
 
       const profileData = profileResult.data;
       const assignments = rolesResult.data ?? [];
 
       if (profileData) {
-        const fallbackRole = (profileData.user_roles as any)?.name as RoleName || "agent";
+        let fallbackRole: RoleName = "agent";
+
+        // 2. Seguridad de Tipos: eliminación de casteos a "any"
+        // Aseguramos qué tipo retorna Supabase para user_roles
+        const roleDataObj = profileData.user_roles;
+        if (roleDataObj && !Array.isArray(roleDataObj) && typeof roleDataObj === 'object' && 'name' in roleDataObj) {
+          fallbackRole = (roleDataObj.name as RoleName) || "agent";
+        }
 
         setProfile({
           ...profileData,
           role_name: fallbackRole,
-          must_change_password: (profileData as any).must_change_password ?? false,
+          must_change_password: profileData.must_change_password ?? false,
         });
 
         if (assignments.length > 0) {
           const roleNames = assignments
-            .map(a => (a.user_roles as any)?.name as RoleName)
-            .filter(Boolean);
+            .map(a => {
+              const r = a.user_roles;
+              if (r && !Array.isArray(r) && typeof r === 'object' && 'name' in r) {
+                return r.name as RoleName;
+              }
+              return undefined;
+            })
+            .filter((role): role is RoleName => Boolean(role));
+
           setRoles(roleNames.length > 0 ? roleNames : [fallbackRole]);
         } else {
           setRoles([fallbackRole]);
         }
+      } else {
+        setProfile(null);
+        setRoles([]);
       }
     } catch (err) {
-      console.error("fetchProfile error:", err);
+      console.error("fetchProfile error inside AuthContext:", err);
+      setProfile(null);
+      setRoles([]);
     } finally {
       setProfileLoading(false);
     }
@@ -93,8 +118,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, fetchProfile]);
 
   useEffect(() => {
-    let lastUserId: string | null = null;
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, newSession) => {
         setSession(newSession);
@@ -102,13 +125,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
 
         if (newSession?.user) {
-          // Solo cargar perfil si cambió el usuario (evita doble carga INITIAL_SESSION + SIGNED_IN)
-          if (newSession.user.id !== lastUserId) {
-            lastUserId = newSession.user.id;
+          // Usamos persistencia a traves del ref
+          if (newSession.user.id !== lastUserId.current) {
+            lastUserId.current = newSession.user.id;
             fetchProfile(newSession.user.id);
           }
         } else {
-          lastUserId = null;
+          lastUserId.current = null;
           setProfile(null);
           setRoles([]);
           setProfileLoading(false);
@@ -116,7 +139,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    return () => subscription.unsubscribe();
+    // 4. Memory Leaks: limpieza con unsubscribe
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [fetchProfile]);
 
   const signOut = async () => {

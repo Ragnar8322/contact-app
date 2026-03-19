@@ -22,9 +22,13 @@ export function useAllProfiles() {
       const assignmentsByUser: Record<string, { role_id: number; role_name: string }[]> = {};
       assignments?.forEach(a => {
         if (!assignmentsByUser[a.user_id]) assignmentsByUser[a.user_id] = [];
+        
+        // Supabase join type might inherently be an array or object depending on relation
+        const roleData = Array.isArray(a.user_roles) ? a.user_roles[0] : a.user_roles;
+
         assignmentsByUser[a.user_id].push({
           role_id: a.role_id,
-          role_name: (a.user_roles as any)?.name || "",
+          role_name: roleData?.name || "",
         });
       });
 
@@ -111,15 +115,18 @@ export function useAllCases(filters?: {
   agente_id?: string;
   from?: string;
   to?: string;
-  page?: number;
+  pageIndex?: number;
   pageSize?: number;
 }) {
-  const page = filters?.page ?? 0;
+  const pageIndex = filters?.pageIndex ?? 0;
   const pageSize = filters?.pageSize ?? 50;
 
   return useQuery({
     queryKey: ["admin-cases", filters],
     queryFn: async () => {
+      const fromRow = pageIndex * pageSize;
+      const toRow = fromRow + pageSize - 1;
+
       let q = supabase
         .from("casos")
         .select(
@@ -127,7 +134,7 @@ export function useAllCases(filters?: {
           { count: "exact" }
         )
         .order("fecha_caso", { ascending: false })
-        .range(page * pageSize, Math.min((page + 1) * pageSize - 1, 49999)); // máx 50.000 registros
+        .range(fromRow, toRow);
 
       if (filters?.estado_id) q = q.eq("estado_id", filters.estado_id);
       if (filters?.agente_id) q = q.eq("agente_id", filters.agente_id);
@@ -136,7 +143,7 @@ export function useAllCases(filters?: {
 
       const { data, error, count } = await q;
       if (error) throw error;
-      return { data, count, page, pageSize };
+      return { data, count, pageIndex, pageSize };
     },
   });
 }
