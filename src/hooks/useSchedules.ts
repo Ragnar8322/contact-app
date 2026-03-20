@@ -35,13 +35,14 @@ export interface AgenteBasico {
 
 // ------------------------------------------------------------
 // 0. Agentes de la campaña activa (FIX PRINCIPAL)
-//    Permite mostrar filas en SemanaGrid aunque no haya turnos aún.
-//
-//    Schema real:
-//      perfil_campanas (user_id, campana_id)
-//        → profiles (user_id, nombre, role_id → user_roles.id)
-//        → user_roles (id, name)
-//    Filtramos por campana_id + role = 'agent'
+//    Usa RPC get_agentes_by_campana para evitar problemas con
+//    alias de FK en PostgREST / Supabase JS.
+//    La RPC usa SECURITY DEFINER y SQL puro:
+//      SELECT p.user_id, p.nombre
+//      FROM perfil_campanas pc
+//      JOIN profiles p   ON p.user_id = pc.user_id
+//      JOIN user_roles r ON r.id = p.role_id
+//      WHERE pc.campana_id = _campana_id AND r.name = 'agent'
 // ------------------------------------------------------------
 export function useCampanaAgentes() {
   const campanaId = useCampanaId();
@@ -53,33 +54,11 @@ export function useCampanaAgentes() {
     enabled: !!campanaId && isManager,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      // Consulta: perfil_campanas → profiles → user_roles
-      // Traemos los agentes (role='agent') que pertenecen a la campaña activa.
       const { data, error } = await supabase
-        .from("perfil_campanas")
-        .select(`
-          user_id,
-          profiles!perfil_campanas_user_id_fkey (
-            nombre,
-            user_roles!profiles_role_id_fkey (
-              name
-            )
-          )
-        `)
-        .eq("campana_id", campanaId!);
+        .rpc("get_agentes_by_campana", { _campana_id: campanaId! });
 
       if (error) throw error;
-
-      // Filtrar solo los que tienen role = 'agent' y mapear al tipo AgenteBasico
-      const agentes: AgenteBasico[] = (data ?? [])
-        .filter((row: any) => row.profiles?.user_roles?.name === "agent")
-        .map((row: any) => ({
-          user_id: row.user_id as string,
-          nombre: (row.profiles?.nombre as string) ?? row.user_id,
-        }))
-        .sort((a, b) => a.nombre.localeCompare(b.nombre));
-
-      return agentes;
+      return (data ?? []) as AgenteBasico[];
     },
   });
 }
