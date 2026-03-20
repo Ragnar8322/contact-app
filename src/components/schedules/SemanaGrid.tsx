@@ -127,13 +127,20 @@ export default function SemanaGrid({ agentes, shifts, semanaInicio, scheduleId, 
                 return acc + (s?.horas_dia ?? 0);
               }, 0);
 
+              // Solo alerta si supera 42h con margen (para tolerar rounding de decimales)
+              const superaTope = totalHoras > 42.1;
+              const totalLabel = totalHoras > 0
+                ? `${totalHoras % 1 === 0 ? totalHoras.toFixed(0) : totalHoras.toFixed(2)}h`
+                : "—";
+
               return (
                 <tr key={agenteId} className="border-b last:border-0 hover:bg-muted/20">
                   <td className="sticky left-0 z-10 bg-background px-3 py-1.5 font-medium truncate max-w-[144px]">
                     {nombre}
                   </td>
-                  <td className={`px-2 py-1.5 text-right font-semibold ${totalHoras > 42 ? "text-destructive" : "text-muted-foreground"}`}>
-                    {totalHoras > 0 ? `${totalHoras.toFixed(2)}h` : "—"}
+                  <td className={`px-2 py-1.5 text-right font-semibold ${superaTope ? "text-destructive" : "text-muted-foreground"}`}>
+                    {totalLabel}
+                    {superaTope && <span className="block text-[10px] font-normal">+42h</span>}
                   </td>
                   {DIAS.map((_, i) => {
                     const shift = shiftMap[`${agenteId}-${i}`];
