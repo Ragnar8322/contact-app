@@ -10,6 +10,7 @@ import {
   useScheduleShifts,
   useCreateSchedule,
   usePublishSchedule,
+  useCampanaAgentes,
 } from "@/hooks/useSchedules";
 import {
   getWeekStart, getWeekEnd, toISODate,
@@ -23,12 +24,10 @@ import { Button }  from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarDays, Plus, Send } from "lucide-react";
 
-// Días de la semana para el selector de cobertura
 const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 export default function Horarios() {
   const { isAdmin, isSupervisor } = useAuth();
-  // FIX: destructurar campanaActiva, no campanaId (no existe en el contexto)
   const { campanaActiva } = useCampana();
   const campanaId = campanaActiva?.id ?? null;
 
@@ -39,8 +38,10 @@ export default function Horarios() {
   const semanaInicio = toISODate(refDate);
   const semanaFin    = toISODate(getWeekEnd(refDate));
 
-  const { data: schedule, isLoading: loadingSched } = useCurrentSchedule(refDate);
-  const { data: shifts,   isLoading: loadingShifts } = useScheduleShifts(schedule?.id);
+  const { data: schedule,  isLoading: loadingSched  } = useCurrentSchedule(refDate);
+  const { data: shifts,    isLoading: loadingShifts } = useScheduleShifts(schedule?.id);
+  // FIX: cargar agentes de la campaña independientemente de los turnos
+  const { data: agentes,   isLoading: loadingAgentes } = useCampanaAgentes();
 
   // [B4] Estado para el día seleccionado en CoverageBar (0=Lun, 6=Dom)
   const [coberturaDiaIdx, setCoberturaDiaIdx] = useState(0);
@@ -53,7 +54,7 @@ export default function Horarios() {
   const canEdit = isAdmin || isSupervisor;
 
   // [B6] Mutaciones via React Query
-  const { mutate: crearSemana, isPending: creando } = useCreateSchedule();
+  const { mutate: crearSemana,   isPending: creando    } = useCreateSchedule();
   const { mutate: publicarSemana, isPending: publicando } = usePublishSchedule();
 
   function prevSemana() {
@@ -65,7 +66,6 @@ export default function Horarios() {
     setCoberturaDiaIdx(0);
   }
 
-  // [B6] Usar useMutation en lugar de llamada directa a supabase
   const handleCrearSemana = useCallback(() => {
     if (!campanaId) {
       toast({ title: "Error", description: "No hay campaña activa seleccionada.", variant: "destructive" });
@@ -80,7 +80,6 @@ export default function Horarios() {
     );
   }, [campanaId, semanaInicio, semanaFin, toast, crearSemana]);
 
-  // [B6] Publicar también via useMutation
   const handlePublicar = useCallback(() => {
     if (!schedule) return;
     publicarSemana(schedule.id, {
@@ -93,6 +92,8 @@ export default function Horarios() {
   const handleShiftSaved = useCallback(() => {
     qc.invalidateQueries({ queryKey: ["schedule_shifts", schedule?.id] });
   }, [qc, schedule?.id]);
+
+  const isLoading = loadingSched || loadingShifts || loadingAgentes;
 
   return (
     <div className="space-y-5">
@@ -112,7 +113,6 @@ export default function Horarios() {
                 {creando ? "Creando..." : "Crear semana"}
               </Button>
             )}
-            {/* [B6] Deshabilitar "Publicar" si ya está publicado */}
             {schedule && schedule.estado === "borrador" && (
               <Button size="sm" onClick={handlePublicar} disabled={publicando}>
                 <Send className="mr-1 h-4 w-4" />
@@ -129,12 +129,13 @@ export default function Horarios() {
         onNext={nextSemana}
       />
 
-      {loadingSched || loadingShifts ? (
+      {isLoading ? (
         <div className="space-y-2">
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
         </div>
       ) : schedule ? (
         <SemanaGrid
+          agentes={agentes ?? []}
           shifts={shifts ?? []}
           semanaInicio={semanaInicio}
           scheduleId={schedule.id}
