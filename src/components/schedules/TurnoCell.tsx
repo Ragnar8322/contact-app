@@ -24,15 +24,20 @@ export default function TurnoCell({ shift, editable = false, onClick }: Props) {
     );
   }
 
-  const colorClass = ACTIVIDAD_COLORS[shift.tipo_actividad as TipoActividad]
-    ?? "bg-gray-100 text-gray-700";
+  // [B14] Avisar en desarrollo si el tipo de actividad no tiene color mapeado
+  const colorClass = ACTIVIDAD_COLORS[shift.tipo_actividad as TipoActividad];
+  if (colorClass === undefined && import.meta.env.DEV) {
+    console.warn(
+      `[TurnoCell] tipo_actividad desconocido: "${shift.tipo_actividad}". Agregar a ACTIVIDAD_COLORS en types/schedules.ts`
+    );
+  }
 
   return (
     <div
       onClick={() => editable && onClick?.(shift)}
       className={cn(
         "flex h-16 flex-col justify-center rounded-md px-2 py-1 text-xs",
-        colorClass,
+        colorClass ?? "bg-gray-100 text-gray-700",
         editable && "cursor-pointer hover:opacity-80 transition-opacity"
       )}
     >
