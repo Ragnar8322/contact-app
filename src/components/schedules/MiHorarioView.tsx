@@ -1,16 +1,21 @@
 // Vista reducida para el agente: su turno de la semana actual.
-import { Clock, CalendarDays } from "lucide-react";
+import { AlertCircle, Clock, CalendarDays } from "lucide-react";
 import { useCurrentSchedule, useMyShifts } from "@/hooks/useSchedules";
 import { formatHoras, ACTIVIDAD_COLORS, TipoActividad } from "@/types/schedules";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
 export default function MiHorarioView() {
-  const { data: schedule, isLoading: loadingSched } = useCurrentSchedule();
-  const { data: shifts,   isLoading: loadingShifts } = useMyShifts(schedule?.id);
+  const { data: schedule, isLoading: loadingSched, isError: errorSched } = useCurrentSchedule();
+  const {
+    data: shifts,
+    isLoading: loadingShifts,
+    isError: errorShifts,  // [B10] capturar error de red/RLS
+  } = useMyShifts(schedule?.id);
 
   if (loadingSched || loadingShifts) {
     return (
@@ -20,12 +25,36 @@ export default function MiHorarioView() {
     );
   }
 
+  // [B10] Error de carga de schedule
+  if (errorSched) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          No se pudo cargar la información del horario. Intenta recargar la página.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
   if (!schedule) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-muted-foreground">
         <CalendarDays className="h-10 w-10 opacity-30" />
         <p className="text-sm">No hay semana programada para esta semana.</p>
       </div>
+    );
+  }
+
+  // [B10] Error de carga de turnos (red o permisos RLS)
+  if (errorShifts) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          No se pudieron cargar tus turnos. Verifica tu conexión o contacta al administrador.
+        </AlertDescription>
+      </Alert>
     );
   }
 
