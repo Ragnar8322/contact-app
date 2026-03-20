@@ -8,11 +8,12 @@ import { useCampana } from "@/contexts/CampanaContext";
 import {
   useCurrentSchedule,
   useScheduleShifts,
+  useCreateSchedule,
+  usePublishSchedule,
 } from "@/hooks/useSchedules";
 import {
   getWeekStart, getWeekEnd, toISODate,
 } from "@/types/schedules";
-import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import SemanaNav   from "@/components/schedules/SemanaNav";
@@ -21,6 +22,9 @@ import CoverageBar from "@/components/schedules/CoverageBar";
 import { Button }  from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarDays, Plus, Send } from "lucide-react";
+
+// Días de la semana para el selector de cobertura
+const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 export default function Horarios() {
   const { isAdmin, isSupervisor } = useAuth();
@@ -36,50 +40,59 @@ export default function Horarios() {
   const semanaFin    = toISODate(getWeekEnd(refDate));
 
   const { data: schedule, isLoading: loadingSched } = useCurrentSchedule(refDate);
-  const { data: shifts,   isLoading: loadingShifts, refetch } = useScheduleShifts(schedule?.id);
+  const { data: shifts,   isLoading: loadingShifts } = useScheduleShifts(schedule?.id);
 
-  const coberturaFecha = semanaInicio;
+  // [B4] Estado para el día seleccionado en CoverageBar (0=Lun, 6=Dom)
+  const [coberturaDiaIdx, setCoberturaDiaIdx] = useState(0);
+  const coberturaFecha = (() => {
+    const d = new Date(semanaInicio + "T12:00:00");
+    d.setDate(d.getDate() + coberturaDiaIdx);
+    return d.toISOString().slice(0, 10);
+  })();
+
   const canEdit = isAdmin || isSupervisor;
+
+  // [B6] Mutaciones via React Query
+  const { mutate: crearSemana, isPending: creando } = useCreateSchedule();
+  const { mutate: publicarSemana, isPending: publicando } = usePublishSchedule();
 
   function prevSemana() {
     setRefDate(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n; });
+    setCoberturaDiaIdx(0);
   }
   function nextSemana() {
     setRefDate(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n; });
+    setCoberturaDiaIdx(0);
   }
 
-  const handleCrearSemana = useCallback(async () => {
+  // [B6] Usar useMutation en lugar de llamada directa a supabase
+  const handleCrearSemana = useCallback(() => {
     if (!campanaId) {
       toast({ title: "Error", description: "No hay campaña activa seleccionada.", variant: "destructive" });
       return;
     }
-    const { error } = await supabase.from("schedules").insert({
-      campana_id:    campanaId,
-      semana_inicio: semanaInicio,
-      semana_fin:    semanaFin,
-      estado:        "borrador",
-    });
-    if (error) {
-      toast({ title: "Error al crear semana", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Semana creada ✅" });
-      qc.invalidateQueries({ queryKey: ["schedules", campanaId, semanaInicio] });
-    }
-  }, [campanaId, semanaInicio, semanaFin, toast, qc]);
+    crearSemana(
+      { campana_id: campanaId, semana_inicio: semanaInicio, semana_fin: semanaFin },
+      {
+        onSuccess: () => toast({ title: "Semana creada ✅" }),
+        onError: (err: Error) => toast({ title: "Error al crear semana", description: err.message, variant: "destructive" }),
+      }
+    );
+  }, [campanaId, semanaInicio, semanaFin, toast, crearSemana]);
 
-  const handlePublicar = useCallback(async () => {
+  // [B6] Publicar también via useMutation
+  const handlePublicar = useCallback(() => {
     if (!schedule) return;
-    const { error } = await supabase
-      .from("schedules")
-      .update({ estado: "publicado" })
-      .eq("id", schedule.id);
-    if (error) {
-      toast({ title: "Error al publicar", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Semana publicada 📢" });
-      qc.invalidateQueries({ queryKey: ["schedules", campanaId, semanaInicio] });
-    }
-  }, [schedule, campanaId, semanaInicio, toast, qc]);
+    publicarSemana(schedule.id, {
+      onSuccess: () => toast({ title: "Semana publicada 📢" }),
+      onError: (err: Error) => toast({ title: "Error al publicar", description: err.message, variant: "destructive" }),
+    });
+  }, [schedule, publicarSemana, toast]);
+
+  // [B7] Invalidar queries en lugar de llamar refetch()
+  const handleShiftSaved = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["schedule_shifts", schedule?.id] });
+  }, [qc, schedule?.id]);
 
   return (
     <div className="space-y-5">
@@ -94,13 +107,16 @@ export default function Horarios() {
         {canEdit && (
           <div className="flex gap-2">
             {!loadingSched && !schedule && (
-              <Button size="sm" onClick={handleCrearSemana} disabled={!campanaId}>
-                <Plus className="mr-1 h-4 w-4" /> Crear semana
+              <Button size="sm" onClick={handleCrearSemana} disabled={!campanaId || creando}>
+                <Plus className="mr-1 h-4 w-4" />
+                {creando ? "Creando..." : "Crear semana"}
               </Button>
             )}
+            {/* [B6] Deshabilitar "Publicar" si ya está publicado */}
             {schedule && schedule.estado === "borrador" && (
-              <Button size="sm" onClick={handlePublicar}>
-                <Send className="mr-1 h-4 w-4" /> Publicar semana
+              <Button size="sm" onClick={handlePublicar} disabled={publicando}>
+                <Send className="mr-1 h-4 w-4" />
+                {publicando ? "Publicando..." : "Publicar semana"}
               </Button>
             )}
           </div>
@@ -123,7 +139,7 @@ export default function Horarios() {
           semanaInicio={semanaInicio}
           scheduleId={schedule.id}
           editable={canEdit}
-          onShiftSaved={() => refetch()}
+          onShiftSaved={handleShiftSaved}
         />
       ) : (
         <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-muted-foreground">
@@ -132,11 +148,27 @@ export default function Horarios() {
         </div>
       )}
 
+      {/* [B4] Selector de día para CoverageBar */}
       {schedule && (
-        <CoverageBar
-          scheduleId={schedule.id}
-          fecha={coberturaFecha}
-        />
+        <div className="space-y-2">
+          <div className="flex gap-1 flex-wrap">
+            {DIAS_SEMANA.map((dia, i) => (
+              <Button
+                key={dia}
+                size="sm"
+                variant={coberturaDiaIdx === i ? "default" : "outline"}
+                className="text-xs h-7 px-2"
+                onClick={() => setCoberturaDiaIdx(i)}
+              >
+                {dia}
+              </Button>
+            ))}
+          </div>
+          <CoverageBar
+            scheduleId={schedule.id}
+            fecha={coberturaFecha}
+          />
+        </div>
       )}
     </div>
   );
