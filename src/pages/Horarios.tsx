@@ -11,6 +11,7 @@ import {
   usePublishSchedule,
   useCampanaAgentes,
   useCopyPreviousWeek,
+  useResetSchedule,
 } from "@/hooks/useSchedules";
 import { getWeekStart, getWeekEnd, toISODate } from "@/types/schedules";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,7 +22,7 @@ import CoverageBar         from "@/components/schedules/CoverageBar";
 import GenerarHorarioModal from "@/components/schedules/GenerarHorarioModal";
 import { Button }          from "@/components/ui/button";
 import { Skeleton }        from "@/components/ui/skeleton";
-import { CalendarDays, Plus, Send, Copy, Sparkles } from "lucide-react";
+import { CalendarDays, Plus, Send, Copy, Sparkles, Trash2, Unlock } from "lucide-react";
 
 const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -55,6 +56,7 @@ export default function Horarios() {
   const { mutate: crearSemana,    isPending: creando      } = useCreateSchedule();
   const { mutate: publicarSemana, isPending: publicando   } = usePublishSchedule();
   const { mutate: copiarSemana,   isPending: copiando     } = useCopyPreviousWeek();
+  const { mutate: limpiarSemana,  isPending: limpiando    } = useResetSchedule();
 
   function prevSemana() {
     setRefDate(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n; });
@@ -81,11 +83,33 @@ export default function Horarios() {
 
   const handlePublicar = useCallback(() => {
     if (!schedule) return;
-    publicarSemana(schedule.id, {
+    publicarSemana({ scheduleId: schedule.id, estado: "publicado" }, {
       onSuccess: () => toast({ title: "Semana publicada 📢" }),
       onError:   (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
     });
   }, [schedule, publicarSemana, toast]);
+
+  const handleDespublicar = useCallback(() => {
+    if (!schedule) return;
+    publicarSemana({ scheduleId: schedule.id, estado: "borrador" }, {
+      onSuccess: () => toast({ title: "Semana regresada a borrador 🔓" }),
+      onError:   (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    });
+  }, [schedule, publicarSemana, toast]);
+
+  const handleLimpiar = useCallback(() => {
+    if (!schedule) return;
+    if (!confirm("¿Estás seguro de que deseas eliminar TODOS los turnos de esta semana? Esta acción no se puede deshacer.")) {
+      return;
+    }
+    limpiarSemana(schedule.id, {
+      onSuccess: (count) => {
+        toast({ title: "Semana limpia 🧹", description: `Se eliminaron ${count} turnos.` });
+        qc.invalidateQueries({ queryKey: ["schedule_shifts", schedule.id] });
+      },
+      onError: (err: Error) => toast({ title: "Error al limpiar", description: err.message, variant: "destructive" }),
+    });
+  }, [schedule, limpiarSemana, toast, qc]);
 
   const handleCopiar = useCallback(() => {
     if (!schedule) return;
@@ -130,6 +154,19 @@ export default function Horarios() {
             {/* Acciones sobre semana en borrador */}
             {schedule && schedule.estado === "borrador" && (
               <>
+                {/* Limpiar semana */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleLimpiar}
+                  disabled={limpiando}
+                  className="text-destructive hover:bg-destructive/10"
+                  title="Elimina todos los turnos programados en esta semana"
+                >
+                  <Trash2 className="mr-1 h-4 w-4" />
+                  {limpiando ? "Limpiando..." : "Limpiar"}
+                </Button>
+
                 {/* Copiar semana anterior */}
                 <Button
                   size="sm"
@@ -160,6 +197,21 @@ export default function Horarios() {
                   {publicando ? "Publicando..." : "Publicar semana"}
                 </Button>
               </>
+            )}
+
+            {/* Acciones sobre semana publicada */}
+            {schedule && schedule.estado === "publicado" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDespublicar}
+                disabled={publicando}
+                className="text-amber-600 hover:bg-amber-50"
+                title="Regresa la semana a estado borrador para permitir ediciones"
+              >
+                <Unlock className="mr-1 h-4 w-4" />
+                Regresar a Borrador
+              </Button>
             )}
           </div>
         )}
