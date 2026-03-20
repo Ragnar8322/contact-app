@@ -17,12 +17,15 @@ interface Props {
   onPrev: () => void;
   onNext: () => void;
   canGoNext?: boolean;
+  // [B11] Agregar canGoPrev simétrico a canGoNext
+  canGoPrev?: boolean;
 }
 
-export default function SemanaNav({ schedule, onPrev, onNext, canGoNext = true }: Props) {
+export default function SemanaNav({ schedule, onPrev, onNext, canGoNext = true, canGoPrev = true }: Props) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-2.5">
-      <Button variant="ghost" size="icon" onClick={onPrev}>
+      {/* [B11] Deshabilitar "← Anterior" cuando canGoPrev sea false */}
+      <Button variant="ghost" size="icon" onClick={onPrev} disabled={!canGoPrev}>
         <ChevronLeft className="h-4 w-4" />
       </Button>
 
