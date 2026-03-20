@@ -36,6 +36,12 @@ export interface AgenteBasico {
 // ------------------------------------------------------------
 // 0. Agentes de la campaña activa (FIX PRINCIPAL)
 //    Permite mostrar filas en SemanaGrid aunque no haya turnos aún.
+//
+//    Schema real:
+//      perfil_campanas (user_id, campana_id)
+//        → profiles (user_id, nombre, role_id → user_roles.id)
+//        → user_roles (id, name)
+//    Filtramos por campana_id + role = 'agent'
 // ------------------------------------------------------------
 export function useCampanaAgentes() {
   const campanaId = useCampanaId();
@@ -45,18 +51,35 @@ export function useCampanaAgentes() {
   return useQuery<AgenteBasico[]>({
     queryKey: ["campana_agentes", campanaId],
     enabled: !!campanaId && isManager,
-    staleTime: 5 * 60 * 1000, // 5 min — la lista de agentes no cambia frecuentemente
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      // profiles tiene campana_id + role. Traemos los agentes de esta campaña.
+      // Consulta: perfil_campanas → profiles → user_roles
+      // Traemos los agentes (role='agent') que pertenecen a la campaña activa.
       const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, nombre")
-        .eq("campana_id", campanaId!)
-        .eq("role", "agent")
-        .eq("activo", true)
-        .order("nombre");
+        .from("perfil_campanas")
+        .select(`
+          user_id,
+          profiles!perfil_campanas_user_id_fkey (
+            nombre,
+            user_roles!profiles_role_id_fkey (
+              name
+            )
+          )
+        `)
+        .eq("campana_id", campanaId!);
+
       if (error) throw error;
-      return data as AgenteBasico[];
+
+      // Filtrar solo los que tienen role = 'agent' y mapear al tipo AgenteBasico
+      const agentes: AgenteBasico[] = (data ?? [])
+        .filter((row: any) => row.profiles?.user_roles?.name === "agent")
+        .map((row: any) => ({
+          user_id: row.user_id as string,
+          nombre: (row.profiles?.nombre as string) ?? row.user_id,
+        }))
+        .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+      return agentes;
     },
   });
 }
@@ -116,7 +139,6 @@ export function useCurrentSchedule(fecha?: Date) {
   const semana_fin    = toISODate(getWeekEnd(getWeekStart(ref)));
 
   return useQuery<Schedule | null>({
-    // [B13] semana_fin incluida en la key para detectar drift de migración
     queryKey: ["schedules", campanaId, semana_inicio, semana_fin],
     enabled: !!campanaId,
     queryFn: async () => {
@@ -243,7 +265,6 @@ export function useCoverageBySlot(
 
       const shifts = data ?? [];
 
-      // [B9] Calcular rango dinámico: mínimo 07:00, máximo 18:00
       let rangeStartMin = 7 * 60;
       let rangeEndMin   = 18 * 60;
 
