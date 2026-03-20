@@ -42,7 +42,7 @@ export interface GenerateScheduleParams {
 }
 
 // ------------------------------------------------------------
-// 0. Agentes de la campaña activa (RPC para evitar problemas de FK alias)
+// 0. Agentes de la campaña activa
 // ------------------------------------------------------------
 export function useCampanaAgentes() {
   const campanaId = useCampanaId();
@@ -107,7 +107,7 @@ export function useSchedules() {
 }
 
 // ------------------------------------------------------------
-// 3. Schedule de la semana actual [B13]
+// 3. Schedule de la semana actual
 // ------------------------------------------------------------
 export function useCurrentSchedule(fecha?: Date) {
   const campanaId = useCampanaId();
@@ -133,7 +133,7 @@ export function useCurrentSchedule(fecha?: Date) {
 }
 
 // ------------------------------------------------------------
-// 4. Turnos de una semana completa (managers)
+// 4. Turnos de una semana completa
 // ------------------------------------------------------------
 export function useScheduleShifts(scheduleId: string | null | undefined) {
   const { roles } = useAuth();
@@ -156,7 +156,7 @@ export function useScheduleShifts(scheduleId: string | null | undefined) {
 }
 
 // ------------------------------------------------------------
-// 5. Turnos propios del agente [B7]
+// 5. Turnos propios del agente
 // ------------------------------------------------------------
 export function useMyShifts(scheduleId: string | null | undefined) {
   const { user } = useAuth();
@@ -203,7 +203,7 @@ export function useScheduleNovedades(scheduleId: string | null | undefined) {
 }
 
 // ------------------------------------------------------------
-// 7. Cobertura intradiaria [B9]
+// 7. Cobertura intradiaria
 // ------------------------------------------------------------
 export function useCoverageBySlot(
   scheduleId: string | null | undefined,
@@ -254,7 +254,7 @@ export function useCoverageBySlot(
 }
 
 // ------------------------------------------------------------
-// 8. Mutación: crear semana [B6]
+// 8. Mutación: crear semana
 // ------------------------------------------------------------
 export function useCreateSchedule() {
   const qc = useQueryClient();
@@ -274,16 +274,16 @@ export function useCreateSchedule() {
 }
 
 // ------------------------------------------------------------
-// 9. Mutación: publicar semana [B6]
+// 9. Mutación: publicar / regresar a borrador
 // ------------------------------------------------------------
 export function usePublishSchedule() {
   const qc = useQueryClient();
   const campanaId = useCampanaId();
 
   return useMutation({
-    mutationFn: async (scheduleId: string) => {
+    mutationFn: async ({ scheduleId, estado }: { scheduleId: string; estado: "borrador" | "publicado" }) => {
       const { data, error } = await supabase
-        .from("schedules").update({ estado: "publicado" })
+        .from("schedules").update({ estado })
         .eq("id", scheduleId).select().single();
       if (error) throw error;
       return data as Schedule;
@@ -300,7 +300,6 @@ export function usePublishSchedule() {
 // ------------------------------------------------------------
 export function useCopyPreviousWeek() {
   const qc = useQueryClient();
-
   return useMutation({
     mutationFn: async (scheduleId: string): Promise<number> => {
       const { data, error } = await supabase
@@ -316,12 +315,9 @@ export function useCopyPreviousWeek() {
 
 // ------------------------------------------------------------
 // 11. Mutación: generar horario inteligente
-// Valores válidos de tipo_actividad: GAP | Tele | Calidad | Apoyo | VIP
-// La RPC también acepta _tipo_actividad como 7mo parámetro.
 // ------------------------------------------------------------
 export function useGenerateSchedule() {
   const qc = useQueryClient();
-
   return useMutation({
     mutationFn: async (params: GenerateScheduleParams): Promise<number> => {
       const { data, error } = await supabase.rpc("generate_schedule", {
@@ -338,6 +334,24 @@ export function useGenerateSchedule() {
     },
     onSuccess: (_count, params) => {
       qc.invalidateQueries({ queryKey: ["schedule_shifts", params.schedule_id] });
+    },
+  });
+}
+
+// ------------------------------------------------------------
+// 12. Mutación: eliminar todos los turnos (Reset)
+// ------------------------------------------------------------
+export function useResetSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (scheduleId: string): Promise<number> => {
+      const { data, error } = await supabase
+        .rpc("reset_schedule_shifts", { _schedule_id: scheduleId });
+      if (error) throw error;
+      return (data as number) ?? 0;
+    },
+    onSuccess: (_count, scheduleId) => {
+      qc.invalidateQueries({ queryKey: ["schedule_shifts", scheduleId] });
     },
   });
 }
