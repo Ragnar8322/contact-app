@@ -1,9 +1,9 @@
 // ============================================================
-// MÓDULO HORARIOS — Hooks de lectura
+// MÓDULO HORARIOS — Hooks de lectura y mutación
 // FIX: useCampana() expone campanaActiva, no campanaId directamente.
 // ============================================================
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
@@ -12,6 +12,7 @@ import {
   Schedule,
   ScheduleShift,
   ScheduleNovedad,
+  CreateSchedulePayload,
   getWeekStart,
   getWeekEnd,
   toISODate,
@@ -70,6 +71,7 @@ export function useSchedules() {
 
 // ------------------------------------------------------------
 // 3. Schedule de la semana actual (o la semana de una fecha dada)
+// [B13] Incluir semana_fin en queryKey para invalidación correcta
 // ------------------------------------------------------------
 export function useCurrentSchedule(fecha?: Date) {
   const campanaId = useCampanaId();
@@ -78,7 +80,8 @@ export function useCurrentSchedule(fecha?: Date) {
   const semana_fin    = toISODate(getWeekEnd(getWeekStart(ref)));
 
   return useQuery<Schedule | null>({
-    queryKey: ["schedules", campanaId, semana_inicio],
+    // [B13] semana_fin incluida en la key para detectar drift de migración
+    queryKey: ["schedules", campanaId, semana_inicio, semana_fin],
     enabled: !!campanaId,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -125,6 +128,7 @@ export function useScheduleShifts(scheduleId: string | null | undefined) {
 
 // ------------------------------------------------------------
 // 5. Turnos propios del agente autenticado
+// [B1/B3] retry:1 para que errores de RLS sean manejables en el componente
 // ------------------------------------------------------------
 export function useMyShifts(scheduleId: string | null | undefined) {
   const { user } = useAuth();
@@ -132,6 +136,7 @@ export function useMyShifts(scheduleId: string | null | undefined) {
   return useQuery<ScheduleShift[]>({
     queryKey: ["my_shifts", scheduleId, user?.id],
     enabled: !!scheduleId && !!user?.id,
+    retry: 1,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("schedule_shifts")
@@ -175,6 +180,7 @@ export function useScheduleNovedades(scheduleId: string | null | undefined) {
 
 // ------------------------------------------------------------
 // 7. Cobertura intradiaria por franja de 15 min
+// [B9] Rango dinámico basado en min/max de hora_inicio/fin del día
 // ------------------------------------------------------------
 export function useCoverageBySlot(
   scheduleId: string | null | undefined,
@@ -199,15 +205,38 @@ export function useCoverageBySlot(
 
       if (error) throw error;
 
-      const slots: Record<string, number> = {};
-      for (let h = 7; h < 18; h++) {
-        for (const m of [0, 15, 30, 45]) {
-          const key = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-          slots[key] = 0;
+      const shifts = data ?? [];
+
+      // [B9] Calcular rango dinámico: mínimo 07:00, máximo 18:00
+      // extendible según los turnos reales del día
+      let rangeStartMin = 7 * 60; // 07:00
+      let rangeEndMin   = 18 * 60; // 18:00
+
+      for (const shift of shifts) {
+        if (shift.hora_inicio) {
+          const [h, m] = shift.hora_inicio.split(":").map(Number);
+          rangeStartMin = Math.min(rangeStartMin, h * 60 + m);
+        }
+        if (shift.hora_fin) {
+          const [h, m] = shift.hora_fin.split(":").map(Number);
+          rangeEndMin = Math.max(rangeEndMin, h * 60 + m);
         }
       }
 
-      for (const shift of data ?? []) {
+      // Redondear a slots de 15 min
+      rangeStartMin = Math.floor(rangeStartMin / 15) * 15;
+      rangeEndMin   = Math.ceil(rangeEndMin / 15) * 15;
+
+      // Generar slots dinámicamente
+      const slots: Record<string, number> = {};
+      for (let min = rangeStartMin; min < rangeEndMin; min += 15) {
+        const h = Math.floor(min / 60);
+        const m = min % 60;
+        const key = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+        slots[key] = 0;
+      }
+
+      for (const shift of shifts) {
         if (!shift.hora_inicio || !shift.hora_fin) continue;
         const [startH, startM] = shift.hora_inicio.split(":").map(Number);
         const [endH, endM]     = shift.hora_fin.split(":").map(Number);
@@ -224,6 +253,60 @@ export function useCoverageBySlot(
       }
 
       return slots;
+    },
+  });
+}
+
+// ------------------------------------------------------------
+// 8. Mutación: crear semana programada (B6)
+// ------------------------------------------------------------
+export function useCreateSchedule() {
+  const qc = useQueryClient();
+  const campanaId = useCampanaId();
+
+  return useMutation({
+    mutationFn: async (payload: CreateSchedulePayload) => {
+      const { data, error } = await supabase
+        .from("schedules")
+        .insert(payload)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Schedule;
+    },
+    onSuccess: (data) => {
+      // Invalidar lista de schedules y la semana específica creada
+      qc.invalidateQueries({ queryKey: ["schedules", campanaId] });
+      qc.invalidateQueries({
+        queryKey: ["schedules", campanaId, data.semana_inicio],
+      });
+    },
+  });
+}
+
+// ------------------------------------------------------------
+// 9. Mutación: publicar semana (B6)
+// ------------------------------------------------------------
+export function usePublishSchedule() {
+  const qc = useQueryClient();
+  const campanaId = useCampanaId();
+
+  return useMutation({
+    mutationFn: async (scheduleId: string) => {
+      const { data, error } = await supabase
+        .from("schedules")
+        .update({ estado: "publicado" })
+        .eq("id", scheduleId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Schedule;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["schedules", campanaId] });
+      qc.invalidateQueries({
+        queryKey: ["schedules", campanaId, data.semana_inicio],
+      });
     },
   });
 }
