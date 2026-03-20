@@ -1,6 +1,9 @@
 // Grilla semanal completa: filas = agentes, columnas = días Lun–Dom
+// FIX: recibe la lista de agentes de la campaña como prop,
+// para poder mostrar filas y asignar turnos aunque no haya shifts aún.
 import { useMemo, useState } from "react";
 import { ScheduleShift } from "@/types/schedules";
+import type { AgenteBasico } from "@/hooks/useSchedules";
 import TurnoCell from "./TurnoCell";
 import TurnoEditModal from "./TurnoEditModal";
 
@@ -13,26 +16,21 @@ function getDoW(fecha: string): number {
 }
 
 interface Props {
+  agentes: AgenteBasico[];       // FIX: lista de agentes de la campaña
   shifts: ScheduleShift[];
-  semanaInicio: string;   // "YYYY-MM-DD" lunes
+  semanaInicio: string;          // "YYYY-MM-DD" lunes
   scheduleId: string;
   editable?: boolean;
   onShiftSaved?: () => void;
 }
 
-export default function SemanaGrid({ shifts, semanaInicio, scheduleId, editable = false, onShiftSaved }: Props) {
-  const [editTarget, setEditTarget] = useState<{ agente_id: string; nombre: string; fecha: string; shift?: ScheduleShift } | null>(null);
-
-  // Construir mapa agente → nombre
-  const agentes = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const s of shifts) {
-      if (!map.has(s.agente_id)) {
-        map.set(s.agente_id, (s.agente as any)?.nombre ?? s.agente_id);
-      }
-    }
-    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [shifts]);
+export default function SemanaGrid({ agentes, shifts, semanaInicio, scheduleId, editable = false, onShiftSaved }: Props) {
+  const [editTarget, setEditTarget] = useState<{
+    agente_id: string;
+    nombre: string;
+    fecha: string;
+    shift?: ScheduleShift;
+  } | null>(null);
 
   // Construir mapa agente+dow → shift
   // [B8] Detectar colisiones de clave (dos shifts del mismo agente en el mismo día)
@@ -43,14 +41,26 @@ export default function SemanaGrid({ shifts, semanaInicio, scheduleId, editable 
       if (import.meta.env.DEV && m[key]) {
         console.warn(
           `[SemanaGrid] Colisión en shiftMap: agente ${s.agente_id} tiene más de un turno en fecha ${s.fecha}. ` +
-          `El constraint UNIQUE (schedule_id, agente_id, fecha) debería prevenir esto. ` +
-          `Verificar integridad de datos.`
+          `El constraint UNIQUE (schedule_id, agente_id, fecha) debería prevenir esto.`
         );
       }
       m[key] = s;
     }
     return m;
   }, [shifts]);
+
+  // Merge: agentes de la campaña + nombres de los shifts ya existentes
+  // (por si hay shifts de agentes que ya no están en profiles activos)
+  const agentesMerged = useMemo(() => {
+    const base = new Map<string, string>(agentes.map(a => [a.user_id, a.nombre]));
+    // Añadir cualquier agente que tenga shifts pero no esté en la lista activa
+    for (const s of shifts) {
+      if (!base.has(s.agente_id)) {
+        base.set(s.agente_id, (s.agente as any)?.nombre ?? s.agente_id);
+      }
+    }
+    return Array.from(base.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [agentes, shifts]);
 
   // Fechas exactas de la semana (lun=0 … dom=6)
   const fechas = useMemo(() => {
@@ -61,10 +71,10 @@ export default function SemanaGrid({ shifts, semanaInicio, scheduleId, editable 
     });
   }, [semanaInicio]);
 
-  if (agentes.length === 0) {
+  if (agentesMerged.length === 0) {
     return (
       <div className="flex h-40 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
-        No hay turnos asignados para esta semana.
+        No hay agentes activos en esta campaña.
       </div>
     );
   }
@@ -88,7 +98,7 @@ export default function SemanaGrid({ shifts, semanaInicio, scheduleId, editable 
             </tr>
           </thead>
           <tbody>
-            {agentes.map(([agenteId, nombre]) => {
+            {agentesMerged.map(([agenteId, nombre]) => {
               const totalHoras = DIAS.reduce((acc, _, i) => {
                 const s = shiftMap[`${agenteId}-${i}`];
                 return acc + (s?.horas_dia ?? 0);
@@ -109,12 +119,15 @@ export default function SemanaGrid({ shifts, semanaInicio, scheduleId, editable 
                         <TurnoCell
                           shift={shift}
                           editable={editable}
-                          onClick={(s) => editable && setEditTarget({
-                            agente_id: agenteId,
-                            nombre,
-                            fecha: fechas[i],
-                            shift: s,
-                          })}
+                          onClick={(s) =>
+                            editable &&
+                            setEditTarget({
+                              agente_id: agenteId,
+                              nombre,
+                              fecha: fechas[i],
+                              shift: s,
+                            })
+                          }
                         />
                       </td>
                     );
@@ -134,7 +147,10 @@ export default function SemanaGrid({ shifts, semanaInicio, scheduleId, editable 
           fecha={editTarget.fecha}
           shift={editTarget.shift}
           onClose={() => setEditTarget(null)}
-          onSaved={() => { setEditTarget(null); onShiftSaved?.(); }}
+          onSaved={() => {
+            setEditTarget(null);
+            onShiftSaved?.();
+          }}
         />
       )}
     </>
