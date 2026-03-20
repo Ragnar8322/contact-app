@@ -1,6 +1,6 @@
 // Modal para crear / editar un turno individual.
 // Mutaciones: upsert en schedule_shifts.
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -14,6 +14,11 @@ import { ScheduleShift, TipoActividad } from "@/types/schedules";
 
 const ACTIVIDADES: TipoActividad[] = [
   "GAP", "Tele", "Calidad", "Apoyo", "VIP",
+  "Descanso", "Vacaciones", "Incapacidad", "No_aplica",
+];
+
+// [B3] Actividades que NO requieren horas de inicio/fin
+const ACTIVIDADES_NO_PRODUCTIVAS: TipoActividad[] = [
   "Descanso", "Vacaciones", "Incapacidad", "No_aplica",
 ];
 
@@ -31,37 +36,60 @@ export default function TurnoEditModal({ scheduleId, agente_id, agente_nombre, f
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [horaInicio, setHoraInicio]   = useState(shift?.hora_inicio?.slice(0,5) ?? "08:00");
-  const [horaFin,    setHoraFin]      = useState(shift?.hora_fin?.slice(0,5)    ?? "16:00");
+  const [horaInicio,   setHoraInicio]   = useState(shift?.hora_inicio?.slice(0,5) ?? "08:00");
+  const [horaFin,      setHoraFin]      = useState(shift?.hora_fin?.slice(0,5)    ?? "16:00");
   const [horaAlmuerzo, setHoraAlmuerzo] = useState(shift?.hora_almuerzo?.slice(0,5) ?? "12:00");
-  const [durAlmuerzo,  setDurAlmuerzo]  = useState(String(shift?.duracion_almuerzo ?? 45));
-  const [actividad,  setActividad]    = useState<TipoActividad>(shift?.tipo_actividad ?? "GAP");
-  const [observacion, setObservacion] = useState(shift?.observacion ?? "");
-  const [saving, setSaving]           = useState(false);
+  // [B12] Guardar duracion_almuerzo como number, no string
+  const [durAlmuerzo,  setDurAlmuerzo]  = useState<number>(shift?.duracion_almuerzo ?? 45);
+  const [actividad,    setActividad]    = useState<TipoActividad>(shift?.tipo_actividad ?? "GAP");
+  const [observacion,  setObservacion]  = useState(shift?.observacion ?? "");
+  const [saving,       setSaving]       = useState(false);
 
-  // Calcular horas_dia automáticamente
-  function calcHoras(): number | null {
+  // [B3] ¿Es una actividad que no requiere tiempo?
+  const isNoProductiva = ACTIVIDADES_NO_PRODUCTIVAS.includes(actividad);
+
+  // [B2] [B12] Calcular horas_dia con validación robusta (memoizado para evitar doble cómputo)
+  const horasCalculadas = useMemo<number | null>(() => {
+    if (isNoProductiva) return 0;
     try {
       const [sh, sm] = horaInicio.split(":").map(Number);
       const [eh, em] = horaFin.split(":").map(Number);
-      const durMin = (eh * 60 + em) - (sh * 60 + sm) - Number(durAlmuerzo);
+      // [B12] Validar que durAlmuerzo sea un número finito
+      const dur = Number.isFinite(durAlmuerzo) ? durAlmuerzo : 0;
+      const durMin = (eh * 60 + em) - (sh * 60 + sm) - dur;
+      // [B2] Validar que el resultado sea positivo
+      if (durMin <= 0) return null;
       return Math.round((durMin / 60) * 100) / 100;
-    } catch { return null; }
-  }
+    } catch {
+      return null;
+    }
+  }, [horaInicio, horaFin, durAlmuerzo, isNoProductiva]);
+
+  // [B2] Estado de error de rango de horas
+  const horasInvalidas = !isNoProductiva && horasCalculadas === null;
 
   async function handleSave() {
+    if (horasInvalidas) {
+      toast({
+        title: "Rango de horas inválido",
+        description: "La hora de fin debe ser mayor que la hora de inicio más el almuerzo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSaving(true);
-    const horas_dia = calcHoras();
     const payload = {
       schedule_id:       scheduleId,
       agente_id,
       fecha,
-      hora_inicio:       horaInicio,
-      hora_fin:          horaFin,
-      hora_almuerzo:     horaAlmuerzo,
-      duracion_almuerzo: Number(durAlmuerzo),
+      // [B3] Actividades no-productivas: sin horas
+      hora_inicio:       isNoProductiva ? null : horaInicio,
+      hora_fin:          isNoProductiva ? null : horaFin,
+      hora_almuerzo:     isNoProductiva ? null : horaAlmuerzo,
+      duracion_almuerzo: isNoProductiva ? 0    : durAlmuerzo,
       tipo_actividad:    actividad,
-      horas_dia,
+      horas_dia:         horasCalculadas,
       observacion:       observacion || null,
     };
 
@@ -92,28 +120,48 @@ export default function TurnoEditModal({ scheduleId, agente_id, agente_nombre, f
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Hora inicio</Label>
-              <Input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Hora fin</Label>
-              <Input type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)} />
-            </div>
-          </div>
+          {/* [B3] Solo mostrar campos de hora para actividades productivas */}
+          {!isNoProductiva && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Hora inicio</Label>
+                  <Input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Hora fin</Label>
+                  <Input
+                    type="time"
+                    value={horaFin}
+                    onChange={e => setHoraFin(e.target.value)}
+                    className={horasInvalidas ? "border-destructive" : ""}
+                  />
+                </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Inicio almuerzo</Label>
-              <Input type="time" value={horaAlmuerzo} onChange={e => setHoraAlmuerzo(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Duración almuerzo (min)</Label>
-              <Input type="number" min={15} max={120} step={15}
-                value={durAlmuerzo} onChange={e => setDurAlmuerzo(e.target.value)} />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Inicio almuerzo</Label>
+                  <Input type="time" value={horaAlmuerzo} onChange={e => setHoraAlmuerzo(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Duración almuerzo (min)</Label>
+                  {/* [B12] Controlar como número nativo */}
+                  <Input
+                    type="number"
+                    min={0}
+                    max={120}
+                    step={15}
+                    value={durAlmuerzo}
+                    onChange={e => {
+                      const v = parseInt(e.target.value, 10);
+                      setDurAlmuerzo(Number.isFinite(v) ? v : 0);
+                    }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="space-y-1">
             <Label>Tipo de actividad</Label>
@@ -127,9 +175,23 @@ export default function TurnoEditModal({ scheduleId, agente_id, agente_nombre, f
             </Select>
           </div>
 
-          {calcHoras() != null && (
+          {/* [B2] Error de rango de horas */}
+          {horasInvalidas && (
+            <p className="text-xs text-destructive">
+              ⚠ La hora de fin debe ser posterior a la de inicio (descontando el almuerzo).
+            </p>
+          )}
+
+          {/* [B2] Mostrar cómputo solo si es válido */}
+          {!isNoProductiva && horasCalculadas != null && (
             <p className="text-xs text-muted-foreground">
-              Horas netas: <strong>{calcHoras()}h</strong>
+              Horas netas: <strong>{horasCalculadas}h</strong>
+            </p>
+          )}
+
+          {isNoProductiva && (
+            <p className="text-xs text-muted-foreground">
+              Esta actividad no requiere horario específico. Se registrará como día no productivo.
             </p>
           )}
 
@@ -142,7 +204,7 @@ export default function TurnoEditModal({ scheduleId, agente_id, agente_nombre, f
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={handleSave} disabled={saving || horasInvalidas}>
             {saving ? "Guardando..." : "Guardar turno"}
           </Button>
         </DialogFooter>
