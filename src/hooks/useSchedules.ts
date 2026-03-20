@@ -24,7 +24,7 @@ function useCampanaId(): string | null {
 }
 
 // ------------------------------------------------------------
-// Tipos
+// Tipos exportados
 // ------------------------------------------------------------
 export interface AgenteBasico {
   user_id: string;
@@ -33,15 +33,16 @@ export interface AgenteBasico {
 
 export interface GenerateScheduleParams {
   schedule_id:       string;
-  hora_inicio:       string;  // "HH:MM"
-  hora_fin:          string;  // "HH:MM"
-  dia_libre_base:    number;  // 0=Lun … 6=Dom
-  duracion_almuerzo: number;  // minutos
+  hora_inicio:       string;   // "HH:MM"
+  hora_fin:          string;   // "HH:MM"
+  dia_libre_base:    number;   // 0=Lun … 6=Dom
+  duracion_almuerzo: number;   // minutos
   skip_existing:     boolean;
+  tipo_actividad:    string;   // GAP | Tele | Calidad | Apoyo | VIP
 }
 
 // ------------------------------------------------------------
-// 0. Agentes de la campaña activa — usa RPC para evitar problemas de FK alias
+// 0. Agentes de la campaña activa (RPC para evitar problemas de FK alias)
 // ------------------------------------------------------------
 export function useCampanaAgentes() {
   const campanaId = useCampanaId();
@@ -106,8 +107,7 @@ export function useSchedules() {
 }
 
 // ------------------------------------------------------------
-// 3. Schedule de la semana actual
-// [B13] semana_fin en queryKey para invalidación correcta
+// 3. Schedule de la semana actual [B13]
 // ------------------------------------------------------------
 export function useCurrentSchedule(fecha?: Date) {
   const campanaId = useCampanaId();
@@ -133,7 +133,7 @@ export function useCurrentSchedule(fecha?: Date) {
 }
 
 // ------------------------------------------------------------
-// 4. Turnos de una semana completa (solo managers)
+// 4. Turnos de una semana completa (managers)
 // ------------------------------------------------------------
 export function useScheduleShifts(scheduleId: string | null | undefined) {
   const { roles } = useAuth();
@@ -145,13 +145,7 @@ export function useScheduleShifts(scheduleId: string | null | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("schedule_shifts")
-        .select(`
-          *,
-          agente:profiles!schedule_shifts_agente_id_fkey(
-            user_id,
-            nombre
-          )
-        `)
+        .select(`*, agente:profiles!schedule_shifts_agente_id_fkey(user_id, nombre)`)
         .eq("schedule_id", scheduleId!)
         .order("fecha")
         .order("hora_inicio");
@@ -162,8 +156,7 @@ export function useScheduleShifts(scheduleId: string | null | undefined) {
 }
 
 // ------------------------------------------------------------
-// 5. Turnos propios del agente autenticado
-// [B7] retry:1 para que errores de RLS sean manejables en el componente
+// 5. Turnos propios del agente [B7]
 // ------------------------------------------------------------
 export function useMyShifts(scheduleId: string | null | undefined) {
   const { user } = useAuth();
@@ -210,7 +203,7 @@ export function useScheduleNovedades(scheduleId: string | null | undefined) {
 }
 
 // ------------------------------------------------------------
-// 7. Cobertura intradiaria por franja de 15 min [B9]
+// 7. Cobertura intradiaria [B9]
 // ------------------------------------------------------------
 export function useCoverageBySlot(
   scheduleId: string | null | undefined,
@@ -228,15 +221,11 @@ export function useCoverageBySlot(
         .select("hora_inicio, hora_fin, tipo_actividad")
         .eq("schedule_id", scheduleId!)
         .eq("fecha", fecha!)
-        .neq("tipo_actividad", "Descanso")
-        .neq("tipo_actividad", "Vacaciones")
-        .neq("tipo_actividad", "Incapacidad")
-        .neq("tipo_actividad", "No_aplica");
+        .not("tipo_actividad", "in", '("Descanso","Vacaciones","Incapacidad","No_aplica")');
       if (error) throw error;
 
       const shifts = data ?? [];
-      let rangeStartMin = 7 * 60;
-      let rangeEndMin   = 18 * 60;
+      let rangeStartMin = 7 * 60, rangeEndMin = 18 * 60;
       for (const s of shifts) {
         if (s.hora_inicio) { const [h,m] = s.hora_inicio.split(":").map(Number); rangeStartMin = Math.min(rangeStartMin, h*60+m); }
         if (s.hora_fin)    { const [h,m] = s.hora_fin.split(":").map(Number);    rangeEndMin   = Math.max(rangeEndMin,   h*60+m); }
@@ -256,8 +245,7 @@ export function useCoverageBySlot(
         const startMin = sh*60+sm, endMin = eh*60+em;
         for (const key of Object.keys(slots)) {
           const [kh,km] = key.split(":").map(Number);
-          const kMin = kh*60+km;
-          if (kMin >= startMin && kMin < endMin) slots[key]++;
+          if (kh*60+km >= startMin && kh*60+km < endMin) slots[key]++;
         }
       }
       return slots;
@@ -295,10 +283,8 @@ export function usePublishSchedule() {
   return useMutation({
     mutationFn: async (scheduleId: string) => {
       const { data, error } = await supabase
-        .from("schedules")
-        .update({ estado: "publicado" })
-        .eq("id", scheduleId)
-        .select().single();
+        .from("schedules").update({ estado: "publicado" })
+        .eq("id", scheduleId).select().single();
       if (error) throw error;
       return data as Schedule;
     },
@@ -310,7 +296,7 @@ export function usePublishSchedule() {
 }
 
 // ------------------------------------------------------------
-// 10. Mutación: copiar semana anterior (Feature 1)
+// 10. Mutación: copiar semana anterior
 // ------------------------------------------------------------
 export function useCopyPreviousWeek() {
   const qc = useQueryClient();
@@ -329,7 +315,9 @@ export function useCopyPreviousWeek() {
 }
 
 // ------------------------------------------------------------
-// 11. Mutación: generar horario inteligente (Feature 2)
+// 11. Mutación: generar horario inteligente
+// Valores válidos de tipo_actividad: GAP | Tele | Calidad | Apoyo | VIP
+// La RPC también acepta _tipo_actividad como 7mo parámetro.
 // ------------------------------------------------------------
 export function useGenerateSchedule() {
   const qc = useQueryClient();
@@ -343,6 +331,7 @@ export function useGenerateSchedule() {
         _dia_libre_base:    params.dia_libre_base,
         _duracion_almuerzo: params.duracion_almuerzo,
         _skip_existing:     params.skip_existing,
+        _tipo_actividad:    params.tipo_actividad,
       });
       if (error) throw error;
       return (data as number) ?? 0;
