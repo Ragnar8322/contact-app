@@ -103,11 +103,14 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
   })();
 
   // Preview horas semanales estimadas (5 días L-V × horas_dia + 4h sábado)
+  // Nota: la RPC aplica tope de 42h, este preview es el bruto sin tope
   const horasSemana = (() => {
     const h = parseFloat(jornadaHoras);
     if (isNaN(h)) return "—";
     return ((h * 5) + 4).toFixed(1);
   })();
+  // Horas reales tras aplicar tope de 42h (la RPC cortará el exceso)
+  const horasEfectivas = Math.min(parseFloat(horasSemana) || 0, 42).toFixed(1);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -194,10 +197,12 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
               <p className="text-base font-bold">{jornadaHoras}<span className="text-xs font-normal">h</span></p>
             </div>
             <div>
-              <p className="text-muted-foreground">Est. semana (con sábado)</p>
-              <p className={`text-base font-bold ${parseFloat(horasSemana) > 42 ? "text-destructive" : "text-green-600"}`}>
-                {horasSemana}<span className="text-xs font-normal">h</span>
-                {parseFloat(horasSemana) > 42 && <span className="text-xs font-normal ml-1">(supera 42h)</span>}
+              <p className="text-muted-foreground">Máximo semanal (tope 42h)</p>
+              <p className="text-base font-bold text-green-600">
+                ≤44<span className="text-xs font-normal">h</span>
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                La RPC recorta al llegar a 42h
               </p>
             </div>
           </div>
