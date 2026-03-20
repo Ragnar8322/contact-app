@@ -35,10 +35,19 @@ export default function SemanaGrid({ shifts, semanaInicio, scheduleId, editable 
   }, [shifts]);
 
   // Construir mapa agente+dow → shift
+  // [B8] Detectar colisiones de clave (dos shifts del mismo agente en el mismo día)
   const shiftMap = useMemo(() => {
     const m: Record<string, ScheduleShift> = {};
     for (const s of shifts) {
-      m[`${s.agente_id}-${getDoW(s.fecha)}`] = s;
+      const key = `${s.agente_id}-${getDoW(s.fecha)}`;
+      if (import.meta.env.DEV && m[key]) {
+        console.warn(
+          `[SemanaGrid] Colisión en shiftMap: agente ${s.agente_id} tiene más de un turno en fecha ${s.fecha}. ` +
+          `El constraint UNIQUE (schedule_id, agente_id, fecha) debería prevenir esto. ` +
+          `Verificar integridad de datos.`
+        );
+      }
+      m[key] = s;
     }
     return m;
   }, [shifts]);
