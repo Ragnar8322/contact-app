@@ -26,6 +26,42 @@ function useCampanaId(): string | null {
 }
 
 // ------------------------------------------------------------
+// Tipo de agente para la grilla
+// ------------------------------------------------------------
+export interface AgenteBasico {
+  user_id: string;
+  nombre: string;
+}
+
+// ------------------------------------------------------------
+// 0. Agentes de la campaña activa (FIX PRINCIPAL)
+//    Permite mostrar filas en SemanaGrid aunque no haya turnos aún.
+// ------------------------------------------------------------
+export function useCampanaAgentes() {
+  const campanaId = useCampanaId();
+  const { roles } = useAuth();
+  const isManager = canManageSchedules(roles);
+
+  return useQuery<AgenteBasico[]>({
+    queryKey: ["campana_agentes", campanaId],
+    enabled: !!campanaId && isManager,
+    staleTime: 5 * 60 * 1000, // 5 min — la lista de agentes no cambia frecuentemente
+    queryFn: async () => {
+      // profiles tiene campana_id + role. Traemos los agentes de esta campaña.
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, nombre")
+        .eq("campana_id", campanaId!)
+        .eq("role", "agent")
+        .eq("activo", true)
+        .order("nombre");
+      if (error) throw error;
+      return data as AgenteBasico[];
+    },
+  });
+}
+
+// ------------------------------------------------------------
 // 1. Tipos de turno de la campaña activa
 // ------------------------------------------------------------
 export function useShiftTypes() {
@@ -208,9 +244,8 @@ export function useCoverageBySlot(
       const shifts = data ?? [];
 
       // [B9] Calcular rango dinámico: mínimo 07:00, máximo 18:00
-      // extendible según los turnos reales del día
-      let rangeStartMin = 7 * 60; // 07:00
-      let rangeEndMin   = 18 * 60; // 18:00
+      let rangeStartMin = 7 * 60;
+      let rangeEndMin   = 18 * 60;
 
       for (const shift of shifts) {
         if (shift.hora_inicio) {
@@ -223,11 +258,9 @@ export function useCoverageBySlot(
         }
       }
 
-      // Redondear a slots de 15 min
       rangeStartMin = Math.floor(rangeStartMin / 15) * 15;
       rangeEndMin   = Math.ceil(rangeEndMin / 15) * 15;
 
-      // Generar slots dinámicamente
       const slots: Record<string, number> = {};
       for (let min = rangeStartMin; min < rangeEndMin; min += 15) {
         const h = Math.floor(min / 60);
@@ -275,7 +308,6 @@ export function useCreateSchedule() {
       return data as Schedule;
     },
     onSuccess: (data) => {
-      // Invalidar lista de schedules y la semana específica creada
       qc.invalidateQueries({ queryKey: ["schedules", campanaId] });
       qc.invalidateQueries({
         queryKey: ["schedules", campanaId, data.semana_inicio],
