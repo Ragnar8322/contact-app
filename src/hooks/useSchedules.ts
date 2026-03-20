@@ -1,6 +1,5 @@
 // ============================================================
 // MÓDULO HORARIOS — Hooks de lectura y mutación
-// FIX: useCampana() expone campanaActiva, no campanaId directamente.
 // ============================================================
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,30 +18,30 @@ import {
   canManageSchedules,
 } from "@/types/schedules";
 
-// Helper interno
 function useCampanaId(): string | null {
   const { campanaActiva } = useCampana();
   return campanaActiva?.id ?? null;
 }
 
 // ------------------------------------------------------------
-// Tipo de agente para la grilla
+// Tipos
 // ------------------------------------------------------------
 export interface AgenteBasico {
   user_id: string;
   nombre: string;
 }
 
+export interface GenerateScheduleParams {
+  schedule_id:       string;
+  hora_inicio:       string;  // "HH:MM"
+  hora_fin:          string;  // "HH:MM"
+  dia_libre_base:    number;  // 0=Lun … 6=Dom
+  duracion_almuerzo: number;  // minutos
+  skip_existing:     boolean;
+}
+
 // ------------------------------------------------------------
-// 0. Agentes de la campaña activa (FIX PRINCIPAL)
-//    Usa RPC get_agentes_by_campana para evitar problemas con
-//    alias de FK en PostgREST / Supabase JS.
-//    La RPC usa SECURITY DEFINER y SQL puro:
-//      SELECT p.user_id, p.nombre
-//      FROM perfil_campanas pc
-//      JOIN profiles p   ON p.user_id = pc.user_id
-//      JOIN user_roles r ON r.id = p.role_id
-//      WHERE pc.campana_id = _campana_id AND r.name = 'agent'
+// 0. Agentes de la campaña activa — usa RPC para evitar problemas de FK alias
 // ------------------------------------------------------------
 export function useCampanaAgentes() {
   const campanaId = useCampanaId();
@@ -56,7 +55,6 @@ export function useCampanaAgentes() {
     queryFn: async () => {
       const { data, error } = await supabase
         .rpc("get_agentes_by_campana", { _campana_id: campanaId! });
-
       if (error) throw error;
       return (data ?? []) as AgenteBasico[];
     },
@@ -108,8 +106,8 @@ export function useSchedules() {
 }
 
 // ------------------------------------------------------------
-// 3. Schedule de la semana actual (o la semana de una fecha dada)
-// [B13] Incluir semana_fin en queryKey para invalidación correcta
+// 3. Schedule de la semana actual
+// [B13] semana_fin en queryKey para invalidación correcta
 // ------------------------------------------------------------
 export function useCurrentSchedule(fecha?: Date) {
   const campanaId = useCampanaId();
@@ -165,7 +163,7 @@ export function useScheduleShifts(scheduleId: string | null | undefined) {
 
 // ------------------------------------------------------------
 // 5. Turnos propios del agente autenticado
-// [B1/B3] retry:1 para que errores de RLS sean manejables en el componente
+// [B7] retry:1 para que errores de RLS sean manejables en el componente
 // ------------------------------------------------------------
 export function useMyShifts(scheduleId: string | null | undefined) {
   const { user } = useAuth();
@@ -188,7 +186,7 @@ export function useMyShifts(scheduleId: string | null | undefined) {
 }
 
 // ------------------------------------------------------------
-// 6. Novedades (managers ven todo, agente solo las suyas)
+// 6. Novedades
 // ------------------------------------------------------------
 export function useScheduleNovedades(scheduleId: string | null | undefined) {
   const { user, roles } = useAuth();
@@ -203,11 +201,7 @@ export function useScheduleNovedades(scheduleId: string | null | undefined) {
         .select("*")
         .eq("schedule_id", scheduleId!)
         .order("fecha");
-
-      if (!isManager) {
-        query = query.eq("agente_id", user!.id);
-      }
-
+      if (!isManager) query = query.eq("agente_id", user!.id);
       const { data, error } = await query;
       if (error) throw error;
       return data as ScheduleNovedad[];
@@ -216,8 +210,7 @@ export function useScheduleNovedades(scheduleId: string | null | undefined) {
 }
 
 // ------------------------------------------------------------
-// 7. Cobertura intradiaria por franja de 15 min
-// [B9] Rango dinámico basado en min/max de hora_inicio/fin del día
+// 7. Cobertura intradiaria por franja de 15 min [B9]
 // ------------------------------------------------------------
 export function useCoverageBySlot(
   scheduleId: string | null | undefined,
@@ -239,59 +232,41 @@ export function useCoverageBySlot(
         .neq("tipo_actividad", "Vacaciones")
         .neq("tipo_actividad", "Incapacidad")
         .neq("tipo_actividad", "No_aplica");
-
       if (error) throw error;
 
       const shifts = data ?? [];
-
       let rangeStartMin = 7 * 60;
       let rangeEndMin   = 18 * 60;
-
-      for (const shift of shifts) {
-        if (shift.hora_inicio) {
-          const [h, m] = shift.hora_inicio.split(":").map(Number);
-          rangeStartMin = Math.min(rangeStartMin, h * 60 + m);
-        }
-        if (shift.hora_fin) {
-          const [h, m] = shift.hora_fin.split(":").map(Number);
-          rangeEndMin = Math.max(rangeEndMin, h * 60 + m);
-        }
+      for (const s of shifts) {
+        if (s.hora_inicio) { const [h,m] = s.hora_inicio.split(":").map(Number); rangeStartMin = Math.min(rangeStartMin, h*60+m); }
+        if (s.hora_fin)    { const [h,m] = s.hora_fin.split(":").map(Number);    rangeEndMin   = Math.max(rangeEndMin,   h*60+m); }
       }
-
       rangeStartMin = Math.floor(rangeStartMin / 15) * 15;
-      rangeEndMin   = Math.ceil(rangeEndMin / 15) * 15;
+      rangeEndMin   = Math.ceil(rangeEndMin   / 15) * 15;
 
       const slots: Record<string, number> = {};
       for (let min = rangeStartMin; min < rangeEndMin; min += 15) {
-        const h = Math.floor(min / 60);
-        const m = min % 60;
-        const key = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+        const key = `${String(Math.floor(min/60)).padStart(2,"0")}:${String(min%60).padStart(2,"0")}`;
         slots[key] = 0;
       }
-
-      for (const shift of shifts) {
-        if (!shift.hora_inicio || !shift.hora_fin) continue;
-        const [startH, startM] = shift.hora_inicio.split(":").map(Number);
-        const [endH, endM]     = shift.hora_fin.split(":").map(Number);
-        const startMin = startH * 60 + startM;
-        const endMin   = endH   * 60 + endM;
-
+      for (const s of shifts) {
+        if (!s.hora_inicio || !s.hora_fin) continue;
+        const [sh,sm] = s.hora_inicio.split(":").map(Number);
+        const [eh,em] = s.hora_fin.split(":").map(Number);
+        const startMin = sh*60+sm, endMin = eh*60+em;
         for (const key of Object.keys(slots)) {
-          const [kH, kM] = key.split(":").map(Number);
-          const kMin = kH * 60 + kM;
-          if (kMin >= startMin && kMin < endMin) {
-            slots[key]++;
-          }
+          const [kh,km] = key.split(":").map(Number);
+          const kMin = kh*60+km;
+          if (kMin >= startMin && kMin < endMin) slots[key]++;
         }
       }
-
       return slots;
     },
   });
 }
 
 // ------------------------------------------------------------
-// 8. Mutación: crear semana programada (B6)
+// 8. Mutación: crear semana [B6]
 // ------------------------------------------------------------
 export function useCreateSchedule() {
   const qc = useQueryClient();
@@ -299,25 +274,19 @@ export function useCreateSchedule() {
 
   return useMutation({
     mutationFn: async (payload: CreateSchedulePayload) => {
-      const { data, error } = await supabase
-        .from("schedules")
-        .insert(payload)
-        .select()
-        .single();
+      const { data, error } = await supabase.from("schedules").insert(payload).select().single();
       if (error) throw error;
       return data as Schedule;
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["schedules", campanaId] });
-      qc.invalidateQueries({
-        queryKey: ["schedules", campanaId, data.semana_inicio],
-      });
+      qc.invalidateQueries({ queryKey: ["schedules", campanaId, data.semana_inicio] });
     },
   });
 }
 
 // ------------------------------------------------------------
-// 9. Mutación: publicar semana (B6)
+// 9. Mutación: publicar semana [B6]
 // ------------------------------------------------------------
 export function usePublishSchedule() {
   const qc = useQueryClient();
@@ -329,16 +298,57 @@ export function usePublishSchedule() {
         .from("schedules")
         .update({ estado: "publicado" })
         .eq("id", scheduleId)
-        .select()
-        .single();
+        .select().single();
       if (error) throw error;
       return data as Schedule;
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["schedules", campanaId] });
-      qc.invalidateQueries({
-        queryKey: ["schedules", campanaId, data.semana_inicio],
+      qc.invalidateQueries({ queryKey: ["schedules", campanaId, data.semana_inicio] });
+    },
+  });
+}
+
+// ------------------------------------------------------------
+// 10. Mutación: copiar semana anterior (Feature 1)
+// ------------------------------------------------------------
+export function useCopyPreviousWeek() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (scheduleId: string): Promise<number> => {
+      const { data, error } = await supabase
+        .rpc("copy_previous_week_shifts", { _dest_schedule_id: scheduleId });
+      if (error) throw error;
+      return (data as number) ?? 0;
+    },
+    onSuccess: (_count, scheduleId) => {
+      qc.invalidateQueries({ queryKey: ["schedule_shifts", scheduleId] });
+    },
+  });
+}
+
+// ------------------------------------------------------------
+// 11. Mutación: generar horario inteligente (Feature 2)
+// ------------------------------------------------------------
+export function useGenerateSchedule() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: GenerateScheduleParams): Promise<number> => {
+      const { data, error } = await supabase.rpc("generate_schedule", {
+        _schedule_id:       params.schedule_id,
+        _hora_inicio:       params.hora_inicio,
+        _hora_fin:          params.hora_fin,
+        _dia_libre_base:    params.dia_libre_base,
+        _duracion_almuerzo: params.duracion_almuerzo,
+        _skip_existing:     params.skip_existing,
       });
+      if (error) throw error;
+      return (data as number) ?? 0;
+    },
+    onSuccess: (_count, params) => {
+      qc.invalidateQueries({ queryKey: ["schedule_shifts", params.schedule_id] });
     },
   });
 }
