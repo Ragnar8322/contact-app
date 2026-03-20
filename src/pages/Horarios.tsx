@@ -20,8 +20,10 @@ import SemanaNav           from "@/components/schedules/SemanaNav";
 import SemanaGrid          from "@/components/schedules/SemanaGrid";
 import CoverageBar         from "@/components/schedules/CoverageBar";
 import GenerarHorarioModal from "@/components/schedules/GenerarHorarioModal";
+import AprobacionesPanel   from "@/components/schedules/AprobacionesPanel";
 import { Button }          from "@/components/ui/button";
 import { Skeleton }        from "@/components/ui/skeleton";
+import { Separator }       from "@/components/ui/separator";
 import { CalendarDays, Plus, Send, Copy, Sparkles, Trash2, Unlock } from "lucide-react";
 
 const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -263,6 +265,14 @@ export default function Horarios() {
           </div>
           <CoverageBar scheduleId={schedule.id} fecha={coberturaFecha} />
         </div>
+      )}
+
+      {/* Panel de Aprobaciones de Novedades */}
+      {canEdit && (
+        <>
+          <Separator />
+          <AprobacionesPanel />
+        </>
       )}
 
       {/* Modal generación inteligente */}

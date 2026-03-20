@@ -25,6 +25,7 @@ export type TipoNovedad =
   | "incapacidad"
   | "permiso_remunerado"
   | "permiso_no_remunerado"
+  | "permiso_horas"
   | "vacaciones"
   | "calamidad"
   | "cambio_turno"
@@ -97,8 +98,15 @@ export interface ScheduleNovedad {
   descripcion: string | null;
   estado: EstadoNovedad;
   revisado_por: string | null;
+  // Campos para novedades parciales por horas (bloques de 15 min)
+  hora_inicio_novedad: string | null;  // "HH:MM"
+  hora_fin_novedad:    string | null;  // "HH:MM"
+  duracion_minutos:    number | null;
+  es_dia_completo:     boolean;
   created_at: string;
   updated_at: string;
+  // join opcional con profiles (panel de aprobaciones)
+  agente?: { nombre: string; user_id: string };
 }
 
 // ------------------------------------------------------------
@@ -130,6 +138,9 @@ export interface CreateNovedadPayload {
   fecha: string;
   tipo_novedad: TipoNovedad;
   descripcion?: string;
+  es_dia_completo: boolean;
+  hora_inicio_novedad?: string | null;
+  hora_fin_novedad?: string | null;
 }
 
 // ------------------------------------------------------------
@@ -194,8 +205,33 @@ export const NOVEDAD_LABELS: Record<TipoNovedad, string> = {
   incapacidad:            "Incapacidad",
   permiso_remunerado:     "Permiso remunerado",
   permiso_no_remunerado:  "Permiso no remunerado",
+  permiso_horas:          "Permiso por horas",
   vacaciones:             "Vacaciones",
   calamidad:              "Calamidad",
   cambio_turno:           "Cambio de turno",
   otro:                   "Otro",
 };
+
+/** Tipos de novedad que siempre son día completo */
+export const NOVEDADES_DIA_COMPLETO: TipoNovedad[] = [
+  "incapacidad", "vacaciones", "calamidad",
+];
+
+/** Genera opciones de tiempo en bloques de 15 min para un rango dado */
+export function generarOpcionesHora(
+  inicio = "07:00",
+  fin = "18:00"
+): string[] {
+  const opciones: string[] = [];
+  const [ih, im] = inicio.split(":").map(Number);
+  const [fh, fm] = fin.split(":").map(Number);
+  let minutos = ih * 60 + im;
+  const maxMinutos = fh * 60 + fm;
+  while (minutos <= maxMinutos) {
+    const h = String(Math.floor(minutos / 60)).padStart(2, "0");
+    const m = String(minutos % 60).padStart(2, "0");
+    opciones.push(`${h}:${m}`);
+    minutos += 15;
+  }
+  return opciones;
+}

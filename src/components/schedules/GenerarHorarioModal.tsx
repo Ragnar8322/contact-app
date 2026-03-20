@@ -1,4 +1,6 @@
 // Modal para configurar y lanzar la generación inteligente de horarios.
+// v2: usa ventanas fijas del plan (L-V 07:30-18:00 / Sáb 08:00-12:00)
+//     con breaks flexibles y tope de 42h semanales.
 import { useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -13,7 +15,8 @@ import {
 } from "@/components/ui/select";
 import { useGenerateSchedule } from "@/hooks/useSchedules";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sparkles, Loader2, Info } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const DIAS = [
   { label: "Lunes",     value: "0" },
@@ -44,9 +47,10 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
   const { toast } = useToast();
   const { mutate: generate, isPending } = useGenerateSchedule();
 
-  const [horaInicio,    setHoraInicio   ] = useState("07:00");
+  // Ventanas L-V (se muestran como referencia, el backend las valida)
+  const [horaInicio,    setHoraInicio   ] = useState("07:30");
   const [horaFin,       setHoraFin      ] = useState("18:00");
-  const [diaLibreBase,  setDiaLibreBase ] = useState("6");
+  const [diaLibreBase,  setDiaLibreBase ] = useState("6");   // Domingo por defecto
   const [durAlmuerzo,   setDurAlmuerzo  ] = useState("60");
   const [skipExisting,  setSkipExisting ] = useState(true);
   const [tipoActividad, setTipoActividad] = useState("Tele");
@@ -65,8 +69,8 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
       {
         onSuccess: (count) => {
           toast({
-            title: `Horario generado ✅`,
-            description: `${count} turnos creados/actualizados.`,
+            title: `Horario generado`,
+            description: `${count} turnos creados o actualizados con breaks y almuerzo flexibles.`,
           });
           onGenerated();
           onClose();
@@ -78,10 +82,11 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
     );
   }
 
+  // Preview de horas netas por día
   const jornadaHoras = (() => {
     const [ih, im] = horaInicio.split(":").map(Number);
     const [fh, fm] = horaFin.split(":").map(Number);
-    const total = (fh * 60 + fm) - (ih * 60 + im) - parseInt(durAlmuerzo, 10);
+    const total = (fh * 60 + fm) - (ih * 60 + im) - parseInt(durAlmuerzo, 10) - 30; // 30 = 2 breaks
     return total > 0 ? (total / 60).toFixed(2) : "—";
   })();
 
@@ -94,21 +99,34 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
             Generar horario inteligente
           </DialogTitle>
           <DialogDescription>
-            El algoritmo asignará turnos a todos los agentes con día libre
-            rotativo y almuerzo escalonado cada 30 min.
+            Asigna turnos automáticamente respetando la ventana horaria, tope de 42h
+            semanales, novedades aprobadas y breaks flexibles.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Jornada */}
+
+          {/* Aviso de reglas */}
+          <Alert className="py-2">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              <strong>Reglas activas:</strong> L-V 07:30–18:00 · Sáb 08:00–12:00 ·
+              Tope 42h/semana · Break mañana + tarde (15 min c/u) · Almuerzo escalonado.
+              Las novedades aprobadas se bloquean automáticamente.
+            </AlertDescription>
+          </Alert>
+
+          {/* Jornada L-V */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label>Hora inicio</Label>
-              <Input type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} />
+              <Label>Hora inicio (L-V)</Label>
+              <Input type="time" value={horaInicio} min="07:30" max="09:00"
+                onChange={(e) => setHoraInicio(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <Label>Hora fin</Label>
-              <Input type="time" value={horaFin} onChange={(e) => setHoraFin(e.target.value)} />
+              <Label>Hora fin (L-V)</Label>
+              <Input type="time" value={horaFin} min="16:00" max="18:00"
+                onChange={(e) => setHoraFin(e.target.value)} />
             </div>
           </div>
 
@@ -116,23 +134,22 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
           <div className="space-y-1">
             <Label>Duración almuerzo (min)</Label>
             <Input
-              type="number" min={0} max={120}
+              type="number" min={30} max={90} step={15}
               value={durAlmuerzo}
               onChange={(e) => setDurAlmuerzo(e.target.value)}
             />
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Horas productivas por día: <strong>{jornadaHoras}h</strong>
+            Horas netas por día (L-V): <strong>{jornadaHoras}h</strong>
+            <span className="ml-2 opacity-60">(descontando almuerzo + 30 min de breaks)</span>
           </p>
 
           {/* Tipo de actividad */}
           <div className="space-y-1">
-            <Label>Tipo de actividad</Label>
+            <Label>Tipo de actividad principal</Label>
             <Select value={tipoActividad} onValueChange={setTipoActividad}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {ACTIVIDADES_PRODUCTIVAS.map((a) => (
                   <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
@@ -144,7 +161,7 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
           {/* Día libre base */}
           <div className="space-y-1">
             <Label>Día libre del primer agente</Label>
-            <p className="text-xs text-muted-foreground">El resto de agentes rotarán a partir de este día.</p>
+            <p className="text-xs text-muted-foreground">El resto de agentes rotan a partir de este día.</p>
             <Select value={diaLibreBase} onValueChange={setDiaLibreBase}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -159,7 +176,7 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
           <div className="flex items-center justify-between rounded-lg border px-3 py-2">
             <div>
               <p className="text-sm font-medium">Preservar ediciones manuales</p>
-              <p className="text-xs text-muted-foreground">Si está activo, no sobreescribirá turnos ya asignados.</p>
+              <p className="text-xs text-muted-foreground">No sobreescribe turnos ya asignados.</p>
             </div>
             <Switch checked={skipExisting} onCheckedChange={setSkipExisting} />
           </div>

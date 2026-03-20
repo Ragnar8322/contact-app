@@ -12,6 +12,7 @@ import {
   ScheduleShift,
   ScheduleNovedad,
   CreateSchedulePayload,
+  CreateNovedadPayload,
   getWeekStart,
   getWeekEnd,
   toISODate,
@@ -339,7 +340,110 @@ export function useGenerateSchedule() {
 }
 
 // ------------------------------------------------------------
-// 12. Mutación: eliminar todos los turnos (Reset)
+// 12. Novedades — todas las campañas (panel de aprobaciones)
+// ------------------------------------------------------------
+export interface NovedadConAgente extends ScheduleNovedad {
+  agente: { nombre: string; user_id: string } | null;
+}
+
+export function useAllNovedades(estado?: "pendiente" | "aprobado" | "rechazado") {
+  const { user, roles } = useAuth();
+  const campanaId = useCampanaId();
+  const isManager = canManageSchedules(roles);
+
+  return useQuery<NovedadConAgente[]>({
+    queryKey: ["all_novedades", campanaId, estado],
+    enabled: !!campanaId && isManager && !!user?.id,
+    queryFn: async () => {
+      let query = supabase
+        .from("schedule_novedades")
+        .select(`
+          *,
+          agente:profiles!schedule_novedades_agente_id_fkey(user_id, nombre)
+        `)
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      if (estado) query = query.eq("estado", estado);
+
+      // Filtrar por campaña a través de schedules
+      const { data: schedIds } = await supabase
+        .from("schedules")
+        .select("id")
+        .eq("campana_id", campanaId!);
+
+      const ids = (schedIds ?? []).map((s) => s.id);
+      if (ids.length === 0) return [];
+
+      query = query.in("schedule_id", ids);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as NovedadConAgente[];
+    },
+  });
+}
+
+// ------------------------------------------------------------
+// 13. Mutación: crear novedad (agente o manager)
+// ------------------------------------------------------------
+export function useCreateNovedad() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (payload: CreateNovedadPayload): Promise<ScheduleNovedad> => {
+      const { data, error } = await supabase
+        .from("schedule_novedades")
+        .insert({
+          ...payload,
+          agente_id: payload.agente_id || user!.id,
+          estado: "pendiente",
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as ScheduleNovedad;
+    },
+    onSuccess: (_data, payload) => {
+      qc.invalidateQueries({ queryKey: ["schedule_novedades", payload.schedule_id] });
+      qc.invalidateQueries({ queryKey: ["all_novedades"] });
+    },
+  });
+}
+
+// ------------------------------------------------------------
+// 14. Mutación: aprobar / rechazar novedad (supervisor / admin)
+// ------------------------------------------------------------
+export function useReviewNovedad() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      novedadId,
+      estado,
+    }: {
+      novedadId: string;
+      estado: "aprobado" | "rechazado";
+    }): Promise<ScheduleNovedad> => {
+      const { data, error } = await supabase
+        .from("schedule_novedades")
+        .update({ estado, revisado_por: user!.id })
+        .eq("id", novedadId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as ScheduleNovedad;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["all_novedades"] });
+      qc.invalidateQueries({ queryKey: ["schedule_novedades"] });
+    },
+  });
+}
+
+// ------------------------------------------------------------
+// 15. Mutación: eliminar todos los turnos (Reset)
 // ------------------------------------------------------------
 export function useResetSchedule() {
   const qc = useQueryClient();
