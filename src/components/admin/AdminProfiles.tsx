@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Check, X, KeyRound, Shield } from "lucide-react";
+import { Plus, Pencil, Check, X, KeyRound, Shield, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
@@ -30,7 +30,6 @@ const ROLE_COLORS: Record<string, string> = {
   gerente: "bg-accent text-accent-foreground border-accent",
 };
 
-// Helper: obtener token fresco antes de llamar edge functions
 async function getFreshToken(): Promise<string> {
   const { data, error } = await supabase.auth.refreshSession();
   const token = data?.session?.access_token;
@@ -41,20 +40,16 @@ async function getFreshToken(): Promise<string> {
 }
 
 function RoleBadges({ assignments, fallbackRole }: { assignments: { role_id: number; role_name: string }[]; fallbackRole?: string }) {
-  const rolesToShow = assignments.length > 0 
-    ? assignments.map(a => a.role_name) 
+  const rolesToShow = assignments.length > 0
+    ? assignments.map(a => a.role_name)
     : fallbackRole ? [fallbackRole] : [];
-  
+
   if (rolesToShow.length === 0) return <span className="text-muted-foreground">—</span>;
 
   return (
     <div className="flex flex-wrap gap-1">
       {rolesToShow.map((role, i) => (
-        <Badge
-          key={i}
-          variant="outline"
-          className={cn("text-xs capitalize", ROLE_COLORS[role] || "")}
-        >
+        <Badge key={i} variant="outline" className={cn("text-xs capitalize", ROLE_COLORS[role] || "")}>
           {role}
         </Badge>
       ))}
@@ -62,13 +57,11 @@ function RoleBadges({ assignments, fallbackRole }: { assignments: { role_id: num
   );
 }
 
-function RoleCheckboxes({ 
-  roles, 
-  selected, 
-  onChange 
-}: { 
-  roles: { id: number; name: string }[]; 
-  selected: number[]; 
+function RoleCheckboxes({
+  roles, selected, onChange
+}: {
+  roles: { id: number; name: string }[];
+  selected: number[];
   onChange: (ids: number[]) => void;
 }) {
   return (
@@ -79,21 +72,18 @@ function RoleCheckboxes({
             id={`role-${r.id}`}
             checked={selected.includes(r.id)}
             onCheckedChange={(checked) => {
-              if (checked) {
-                onChange([...selected, r.id]);
-              } else {
-                onChange(selected.filter(id => id !== r.id));
-              }
+              if (checked) onChange([...selected, r.id]);
+              else onChange(selected.filter(id => id !== r.id));
             }}
           />
-          <Label htmlFor={`role-${r.id}`} className="capitalize cursor-pointer">
-            {r.name}
-          </Label>
+          <Label htmlFor={`role-${r.id}`} className="capitalize cursor-pointer">{r.name}</Label>
         </div>
       ))}
     </div>
   );
 }
+
+const INVITE_FORM_INIT = { email: "", nombre: "", telefono: "", selectedRoleIds: [2] as number[] };
 
 export default function AdminProfiles() {
   const { data: profiles, isLoading, refetch } = useAllProfiles();
@@ -105,13 +95,20 @@ export default function AdminProfiles() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editData, setEditData] = useState({ nombre: "", telefono: "", selectedRoleIds: [] as number[] });
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ email: "", nombre: "", telefono: "", selectedRoleIds: [2] as number[] });
-  const [inviteResult, setInviteResult] = useState<{ temp_password: string } | null>(null);
+  const [inviteForm, setInviteForm] = useState(INVITE_FORM_INIT);
+
+  // Incluye el email para no depender del formulario que se resetea
+  const [inviteResult, setInviteResult] = useState<{ email: string; temp_password: string } | null>(null);
 
   const [tempPwdUser, setTempPwdUser] = useState<{ user_id: string; nombre: string } | null>(null);
   const [tempPwd, setTempPwd] = useState("");
   const [tempPwdConfirm, setTempPwdConfirm] = useState("");
   const [tempPwdLoading, setTempPwdLoading] = useState(false);
+
+  const resetInviteDialog = () => {
+    setInviteResult(null);
+    setInviteForm(INVITE_FORM_INIT);
+  };
 
   const startEdit = (p: any) => {
     setEditId(p.user_id);
@@ -134,15 +131,18 @@ export default function AdminProfiles() {
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Capturamos el email ANTES de cualquier reset de estado
+    const emailSnapshot = inviteForm.email;
     try {
       const result = await inviteUser.mutateAsync({
-        email: inviteForm.email,
+        email: emailSnapshot,
         nombre: inviteForm.nombre,
         telefono: inviteForm.telefono,
         role_id: inviteForm.selectedRoleIds[0] || 2,
         role_ids: inviteForm.selectedRoleIds,
       });
-      setInviteResult(result);
+      // Guardar email junto al resultado para la pantalla de éxito
+      setInviteResult({ email: emailSnapshot, temp_password: result.temp_password });
       toast.success("Usuario creado exitosamente");
     } catch (err: any) {
       toast.error(err.message);
@@ -169,14 +169,8 @@ export default function AdminProfiles() {
     e.preventDefault();
     if (!tempPwdUser) return;
     const validation = passwordSchema.safeParse(tempPwd);
-    if (!validation.success) {
-      toast.error(validation.error.errors[0].message);
-      return;
-    }
-    if (tempPwd !== tempPwdConfirm) {
-      toast.error("Las contraseñas no coinciden");
-      return;
-    }
+    if (!validation.success) { toast.error(validation.error.errors[0].message); return; }
+    if (tempPwd !== tempPwdConfirm) { toast.error("Las contraseñas no coinciden"); return; }
     setTempPwdLoading(true);
     try {
       const token = await getFreshToken();
@@ -206,20 +200,61 @@ export default function AdminProfiles() {
       <CardContent className="p-0">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="font-semibold">Perfiles de Usuario</h3>
-          <Dialog open={inviteOpen} onOpenChange={(o) => { setInviteOpen(o); if (!o) { setInviteResult(null); setInviteForm({ email: "", nombre: "", telefono: "", selectedRoleIds: [2] }); } }}>
+
+          <Dialog
+            open={inviteOpen}
+            onOpenChange={(o) => {
+              setInviteOpen(o);
+              // Solo resetear cuando se CIERRA y ya no hay resultado pendiente de leer
+              if (!o) resetInviteDialog();
+            }}
+          >
             <DialogTrigger asChild>
               <Button size="sm"><Plus className="mr-2 h-4 w-4" />Crear Usuario</Button>
             </DialogTrigger>
+
             <DialogContent>
               <DialogHeader><DialogTitle>Crear Nuevo Usuario</DialogTitle></DialogHeader>
+
               {inviteResult ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">Usuario creado. Comparte estas credenciales temporales:</p>
-                  <div className="rounded-lg bg-muted p-3 text-sm font-mono">
-                    <p>Email: {inviteForm.email}</p>
-                    <p>Contraseña: {inviteResult.temp_password}</p>
+                // — Pantalla de éxito: usa inviteResult.email, NO inviteForm.email —
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Usuario creado. Comparte estas credenciales temporales con <strong>{inviteResult.email}</strong>:
+                  </p>
+                  <div className="rounded-lg bg-muted p-4 space-y-2 text-sm font-mono">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">Email:</span>
+                      <span className="font-semibold">{inviteResult.email}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">Contraseña:</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold tracking-widest">{inviteResult.temp_password}</span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(inviteResult.temp_password);
+                            toast.success("Contraseña copiada");
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                  <Button className="w-full" onClick={() => { setInviteOpen(false); setInviteResult(null); setInviteForm({ email: "", nombre: "", telefono: "", selectedRoleIds: [2] }); }}>Cerrar</Button>
+                  <p className="text-xs text-muted-foreground">
+                    ⚠️ El usuario deberá cambiar esta contraseña al iniciar sesión por primera vez.
+                  </p>
+                  <Button
+                    className="w-full"
+                    onClick={() => { setInviteOpen(false); resetInviteDialog(); }}
+                  >
+                    Cerrar
+                  </Button>
                 </div>
               ) : (
                 <form onSubmit={handleInvite} className="space-y-4">
@@ -248,7 +283,11 @@ export default function AdminProfiles() {
                       <p className="text-xs text-destructive">Selecciona al menos un rol</p>
                     )}
                   </div>
-                  <Button type="submit" className="w-full" disabled={inviteUser.isPending || inviteForm.selectedRoleIds.length === 0}>
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={inviteUser.isPending || inviteForm.selectedRoleIds.length === 0}
+                  >
                     {inviteUser.isPending ? "Creando..." : "Crear Usuario"}
                   </Button>
                 </form>
@@ -256,6 +295,7 @@ export default function AdminProfiles() {
             </DialogContent>
           </Dialog>
         </div>
+
         <Table>
           <TableHeader>
             <TableRow>
@@ -272,14 +312,14 @@ export default function AdminProfiles() {
             ) : profiles?.map((p: any) => (
               <TableRow key={p.user_id}>
                 <TableCell>
-                  {editId === p.user_id ? (
-                    <Input value={editData.nombre} onChange={e => setEditData(d => ({ ...d, nombre: e.target.value }))} className="h-8" />
-                  ) : p.nombre}
+                  {editId === p.user_id
+                    ? <Input value={editData.nombre} onChange={e => setEditData(d => ({ ...d, nombre: e.target.value }))} className="h-8" />
+                    : p.nombre}
                 </TableCell>
                 <TableCell>
-                  {editId === p.user_id ? (
-                    <Input value={editData.telefono} onChange={e => setEditData(d => ({ ...d, telefono: e.target.value }))} className="h-8" />
-                  ) : p.telefono || "-"}
+                  {editId === p.user_id
+                    ? <Input value={editData.telefono} onChange={e => setEditData(d => ({ ...d, telefono: e.target.value }))} className="h-8" />
+                    : p.telefono || "-"}
                 </TableCell>
                 <TableCell>
                   {editId === p.user_id ? (
@@ -291,10 +331,7 @@ export default function AdminProfiles() {
                       />
                     )
                   ) : (
-                    <RoleBadges 
-                      assignments={p.role_assignments || []} 
-                      fallbackRole={(p.user_roles as any)?.name} 
-                    />
+                    <RoleBadges assignments={p.role_assignments || []} fallbackRole={(p.user_roles as any)?.name} />
                   )}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground font-mono">{p.user_id.slice(0, 8)}…</TableCell>
@@ -304,13 +341,16 @@ export default function AdminProfiles() {
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={saveEdit} disabled={editData.selectedRoleIds.length === 0}>
                         <Check className="h-4 w-4" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditId(null)}><X className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditId(null)}>
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
                   ) : (
                     <div className="flex gap-1">
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(p)} title="Editar">
                         <Pencil className="h-4 w-4" />
                       </Button>
+
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button size="icon" variant="ghost" className="h-7 w-7" title="Restablecer contraseña">
@@ -321,7 +361,8 @@ export default function AdminProfiles() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Restablecer contraseña</AlertDialogTitle>
                             <AlertDialogDescription>
-                              ¿Seguro que deseas restablecer la contraseña de <strong>{p.nombre}</strong>? Se le pedirá que la cambie en su próximo inicio de sesión.
+                              ¿Seguro que deseas restablecer la contraseña de <strong>{p.nombre}</strong>?
+                              Se le pedirá que la cambie en su próximo inicio de sesión.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -332,8 +373,12 @@ export default function AdminProfiles() {
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" title="Establecer contraseña temporal"
-                        onClick={() => { setTempPwdUser({ user_id: p.user_id, nombre: p.nombre }); setTempPwd(""); setTempPwdConfirm(""); }}>
+
+                      <Button
+                        size="icon" variant="ghost" className="h-7 w-7"
+                        title="Establecer contraseña temporal"
+                        onClick={() => { setTempPwdUser({ user_id: p.user_id, nombre: p.nombre }); setTempPwd(""); setTempPwdConfirm(""); }}
+                      >
                         <Shield className="h-4 w-4" />
                       </Button>
                     </div>
