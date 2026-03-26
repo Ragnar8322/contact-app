@@ -30,6 +30,16 @@ const ROLE_COLORS: Record<string, string> = {
   gerente: "bg-accent text-accent-foreground border-accent",
 };
 
+// Helper: obtener token fresco antes de llamar edge functions
+async function getFreshToken(): Promise<string> {
+  const { data, error } = await supabase.auth.refreshSession();
+  const token = data?.session?.access_token;
+  if (error || !token) {
+    throw new Error("Sesión expirada. Cierra sesión, vuelve a iniciarla y reintenta.");
+  }
+  return token;
+}
+
 function RoleBadges({ assignments, fallbackRole }: { assignments: { role_id: number; role_name: string }[]; fallbackRole?: string }) {
   const rolesToShow = assignments.length > 0 
     ? assignments.map(a => a.role_name) 
@@ -98,7 +108,6 @@ export default function AdminProfiles() {
   const [inviteForm, setInviteForm] = useState({ email: "", nombre: "", telefono: "", selectedRoleIds: [2] as number[] });
   const [inviteResult, setInviteResult] = useState<{ temp_password: string } | null>(null);
 
-  // Temp password dialog
   const [tempPwdUser, setTempPwdUser] = useState<{ user_id: string; nombre: string } | null>(null);
   const [tempPwd, setTempPwd] = useState("");
   const [tempPwdConfirm, setTempPwdConfirm] = useState("");
@@ -107,29 +116,15 @@ export default function AdminProfiles() {
   const startEdit = (p: any) => {
     setEditId(p.user_id);
     const existingRoleIds = p.role_assignments?.map((a: any) => a.role_id) || [];
-    // Fallback to profile.role_id if no assignments
     const roleIds = existingRoleIds.length > 0 ? existingRoleIds : [p.role_id];
-    setEditData({ 
-      nombre: p.nombre, 
-      telefono: p.telefono || "", 
-      selectedRoleIds: roleIds 
-    });
+    setEditData({ nombre: p.nombre, telefono: p.telefono || "", selectedRoleIds: roleIds });
   };
 
   const saveEdit = async () => {
     if (!editId) return;
     try {
-      // Update profile (nombre, telefono only - don't modify role_id)
-      await updateProfile.mutateAsync({ 
-        user_id: editId, 
-        nombre: editData.nombre, 
-        telefono: editData.telefono 
-      });
-      // Save role assignments
-      await saveRoleAssignments.mutateAsync({ 
-        user_id: editId, 
-        role_ids: editData.selectedRoleIds 
-      });
+      await updateProfile.mutateAsync({ user_id: editId, nombre: editData.nombre, telefono: editData.telefono });
+      await saveRoleAssignments.mutateAsync({ user_id: editId, role_ids: editData.selectedRoleIds });
       toast.success("Perfil actualizado");
       setEditId(null);
     } catch (err: any) {
@@ -144,7 +139,7 @@ export default function AdminProfiles() {
         email: inviteForm.email,
         nombre: inviteForm.nombre,
         telefono: inviteForm.telefono,
-        role_id: inviteForm.selectedRoleIds[0] || 2, // Keep for backward compat
+        role_id: inviteForm.selectedRoleIds[0] || 2,
         role_ids: inviteForm.selectedRoleIds,
       });
       setInviteResult(result);
@@ -156,10 +151,13 @@ export default function AdminProfiles() {
 
   const handleForceChange = async (userId: string, nombre: string) => {
     try {
-      const { error } = await supabase.functions.invoke("reset-password", {
+      const token = await getFreshToken();
+      const { data, error } = await supabase.functions.invoke("reset-password", {
         body: { user_id: userId, action: "force_change" },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       toast.success(`${nombre} deberá cambiar su contraseña en el próximo inicio de sesión.`);
       refetch();
     } catch (err: any) {
@@ -181,10 +179,13 @@ export default function AdminProfiles() {
     }
     setTempPwdLoading(true);
     try {
-      const { error } = await supabase.functions.invoke("reset-password", {
+      const token = await getFreshToken();
+      const { data, error } = await supabase.functions.invoke("reset-password", {
         body: { user_id: tempPwdUser.user_id, action: "set_temp_password", temp_password: tempPwd },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       toast.success("Contraseña temporal establecida. El usuario deberá cambiarla al iniciar sesión.");
       setTempPwdUser(null);
       setTempPwd("");
