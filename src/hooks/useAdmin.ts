@@ -70,11 +70,17 @@ export function useInviteUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (values: { email: string; nombre: string; telefono?: string; role_id: number; role_ids?: number[] }) => {
-      // supabase.functions.invoke inyecta el Authorization header automáticamente
-      // con el token de sesión activa cuando verify_jwt:true está habilitado en la función.
-      // NO pasar header manual para evitar colisiones con tokens vencidos.
+      // Forzar refresh para garantizar un access_token válido (no la anon key)
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      const token = refreshData?.session?.access_token;
+
+      if (refreshError || !token) {
+        throw new Error("Sesión expirada. Cierra sesión, vuelve a iniciarla y reintenta.");
+      }
+
       const { data, error } = await supabase.functions.invoke("invite-user", {
         body: values,
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (error) throw new Error(error.message || "Error al llamar la función");
