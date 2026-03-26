@@ -1,6 +1,44 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+const SUPABASE_URL = "https://rmpmwpzmxfdkuhcgimdi.supabase.co";
+
+// Helper compartido: obtener token fresco
+async function getFreshToken(): Promise<string> {
+  const { data, error } = await supabase.auth.refreshSession();
+  const token = data?.session?.access_token;
+  if (error || !token) {
+    throw new Error("Sesión expirada. Cierra sesión, vuelve a iniciarla y reintenta.");
+  }
+  return token;
+}
+
+// Helper: llamar edge function con fetch directo (evita bug de data:null en invoke con headers)
+async function callEdgeFunction(slug: string, body: Record<string, unknown>) {
+  const token = await getFreshToken();
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/${slug}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  let json: Record<string, unknown> = {};
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error(`Error al leer respuesta (HTTP ${res.status})`);
+  }
+
+  if (!res.ok || json.error) {
+    throw new Error((json.error as string) || `Error HTTP ${res.status}`);
+  }
+
+  return json;
+}
+
 // ── Profiles ──
 export function useAllProfiles() {
   return useQuery({
@@ -22,7 +60,7 @@ export function useAllProfiles() {
         const roleData = Array.isArray(a.user_roles) ? a.user_roles[0] : a.user_roles;
         assignmentsByUser[a.user_id].push({
           role_id: a.role_id,
-          role_name: roleData?.name || "",
+          role_name: (roleData as any)?.name || "",
         });
       });
 
@@ -70,25 +108,20 @@ export function useInviteUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (values: { email: string; nombre: string; telefono?: string; role_id: number; role_ids?: number[] }) => {
-      // Forzar refresh para garantizar un access_token válido (no la anon key)
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-      const token = refreshData?.session?.access_token;
-
-      if (refreshError || !token) {
-        throw new Error("Sesión expirada. Cierra sesión, vuelve a iniciarla y reintenta.");
-      }
-
-      const { data, error } = await supabase.functions.invoke("invite-user", {
-        body: values,
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (error) throw new Error(error.message || "Error al llamar la función");
-      if (data?.error) throw new Error(data.error);
-
-      return data;
+      // fetch directo garantiza que el body se parsea siempre
+      const data = await callEdgeFunction("invite-user", values);
+      // data = { success: true, user: { id }, temp_password: "..." }
+      return data as { success: boolean; user: { id: string }; temp_password: string };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-profiles"] }),
+  });
+}
+
+export function useResetPassword() {
+  return useMutation({
+    mutationFn: async (body: { user_id: string; action: "force_change" | "set_temp_password"; temp_password?: string }) => {
+      return callEdgeFunction("reset-password", body);
+    },
   });
 }
 
