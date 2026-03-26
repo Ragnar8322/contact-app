@@ -6,33 +6,26 @@ export function useAllProfiles() {
   return useQuery({
     queryKey: ["admin-profiles"],
     queryFn: async () => {
-      // Fetch profiles
       const { data: profiles, error } = await supabase
         .from("profiles")
         .select("*, user_roles(name)")
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      // Fetch all role assignments
       const { data: assignments } = await supabase
         .from("user_role_assignments")
         .select("user_id, role_id, user_roles(id, name)");
 
-      // Group assignments by user_id
       const assignmentsByUser: Record<string, { role_id: number; role_name: string }[]> = {};
       assignments?.forEach(a => {
         if (!assignmentsByUser[a.user_id]) assignmentsByUser[a.user_id] = [];
-        
-        // Supabase join type might inherently be an array or object depending on relation
         const roleData = Array.isArray(a.user_roles) ? a.user_roles[0] : a.user_roles;
-
         assignmentsByUser[a.user_id].push({
           role_id: a.role_id,
           role_name: roleData?.name || "",
         });
       });
 
-      // Attach assignments to profiles
       return profiles?.map(p => ({
         ...p,
         role_assignments: assignmentsByUser[p.user_id] || [],
@@ -56,14 +49,12 @@ export function useSaveRoleAssignments() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ user_id, role_ids }: { user_id: string; role_ids: number[] }) => {
-      // Delete existing assignments
       const { error: deleteError } = await supabase
         .from("user_role_assignments")
         .delete()
         .eq("user_id", user_id);
       if (deleteError) throw deleteError;
 
-      // Insert new assignments
       if (role_ids.length > 0) {
         const { error: insertError } = await supabase
           .from("user_role_assignments")
@@ -79,18 +70,16 @@ export function useInviteUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (values: { email: string; nombre: string; telefono?: string; role_id: number; role_ids?: number[] }) => {
-      // Obtener sesión activa y pasar token explícitamente para evitar el error "Failed to send"
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Sesión expirada. Por favor recarga la página e inicia sesión nuevamente.");
-
+      // supabase.functions.invoke inyecta el Authorization header automáticamente
+      // con el token de sesión activa cuando verify_jwt:true está habilitado en la función.
+      // NO pasar header manual para evitar colisiones con tokens vencidos.
       const { data, error } = await supabase.functions.invoke("invite-user", {
         body: values,
-        headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (error) throw error;
+
+      if (error) throw new Error(error.message || "Error al llamar la función");
       if (data?.error) throw new Error(data.error);
 
-      // Role assignments are already saved by the edge function
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-profiles"] }),
