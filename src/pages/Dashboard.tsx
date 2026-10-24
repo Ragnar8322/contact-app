@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { EstadoBadge } from "@/components/cases/EstadoBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
-import { useDashboardStats, QUERY_RESILIENCE } from "@/hooks/useDashboardStats";
+import { useDashboardStats, useDashboardAgentStats, useRecentCases, localTimeZone, QUERY_RESILIENCE } from "@/hooks/useDashboardStats";
 import { useSLAConfigs } from "@/hooks/useSLA";
 import { useCampanasList } from "@/hooks/useCampanas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,51 +18,13 @@ import {
 import {
   AlertTriangle, Clock, FolderOpen, CheckCircle, UserX, ShieldAlert, TrendingUp, RefreshCw, X,
 } from "lucide-react";
-import { formatCOP } from "@/lib/currency";
+import { formatCOP, formatCOPCompact } from "@/lib/currency";
+import { buildFinancialChart, type Periodo } from "@/lib/financial";
 import {
   startOfDay, startOfWeek, startOfMonth, startOfYear,
   endOfDay, endOfWeek, endOfMonth, endOfYear,
   differenceInMinutes, differenceInHours, differenceInDays,
 } from "date-fns";
-
-type Periodo = "dia" | "semana" | "mes" | "año";
-
-const WEEK_KEYS  = ["lun", "mar", "mie", "jue", "vie", "sab", "dom"];
-const MONTH_KEYS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-
-/**
- * TIMEZONE FIX — el problema central:
- *
- * fecha_caso en la BD es tipo `date` de PostgreSQL: llega como string "YYYY-MM-DD".
- * new Date("2026-03-12") → JavaScript lo trata como UTC medianoche → 2026-03-12T00:00:00Z
- * En Colombia (UTC-5) eso equivale a 2026-03-11T19:00:00 local → el caso aparece
- * como del día ANTERIOR, quedando fuera del rango startOfDay(hoy)..endOfDay(hoy).
- *
- * Solución: parseLocalDate() construye la fecha como hora local usando
- * new Date(year, month, day) — que siempre es medianoche local, sin offset UTC.
- *
- * Para timestamps completos (updated_at, created_at con zona horaria incluida),
- * new Date(str) funciona correctamente porque ya incluye la info de zona.
- */
-function parseLocalDate(str: string): Date {
-  // Detecta si es solo fecha "YYYY-MM-DD" (10 chars) o timestamp completo
-  if (!str) return new Date(NaN);
-  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(str);
-  if (dateOnly) {
-    const [y, m, d] = str.split("-").map(Number);
-    return new Date(y, m - 1, d); // medianoche LOCAL — sin offset UTC
-  }
-  // Timestamp completo (ISO con T y zona) → new Date() lo maneja bien
-  return new Date(str);
-}
-
-/** Compara estado de forma insensible a mayúsculas */
-function isRenovado(nombre: string | null | undefined): boolean {
-  return (nombre ?? "").toLowerCase() === "renovado";
-}
-function isPendiente(nombre: string | null | undefined): boolean {
-  return (nombre ?? "").toLowerCase().includes("pendiente");
-}
 
 function getPeriodRange(periodo: Periodo): { inicio: number; fin: number; diasEnMes: number } {
   const now = new Date();
@@ -145,7 +107,8 @@ export default function Dashboard() {
     isLoading: statsLoading,
     isError: statsError,
     dataUpdatedAt: statsUpdatedAt,
-  } = useDashboardStats(campanaIds, campanaNombres, safeSlaConfigs);
+  } = useDashboardStats(campanaIds, campanaNombres);
+  const { data: agentCounts = {}, isError: agentStatsError } = useDashboardAgentStats(campanaIds);
 
   const { data: agents = [], isLoading: agentsLoading, isError: agentsError } = useQuery({
     queryKey: ["dashboard-agents"],
@@ -184,16 +147,18 @@ export default function Dashboard() {
     },
   });
 
-  const hasError = campanasError || slaError || statsError || agentsError;
+  const hasError = campanasError || slaError || statsError || agentsError || agentStatsError;
   const { text: lastUpdatedText, isFresh } = useLastUpdated(statsUpdatedAt);
 
   const handleRetry = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["dashboard-stats-v2"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-stats-v3"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-agent-stats"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-recent-cases"] });
     queryClient.invalidateQueries({ queryKey: ["sla-configs-bulk"] });
     queryClient.invalidateQueries({ queryKey: ["campanas"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard-agents"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard-agent-campanas"] });
-    queryClient.invalidateQueries({ queryKey: ["financial-cases"] });
+    queryClient.invalidateQueries({ queryKey: ["financial-summary"] });
   }, [queryClient]);
 
   const [alertFilter, setAlertFilter] = useState<"vencidos" | "sinAsignar" | null>(null);
@@ -213,55 +178,23 @@ export default function Dashboard() {
   }, [agents, isAdmin, user]);
 
   const agentStats = useMemo(() => {
-    const allCases = stats?.allCases;
-    if (!allCases || !Array.isArray(allCases) || !visibleAgents.length) return [];
-    const now = Date.now();
+    if (!visibleAgents.length) return [];
     return visibleAgents.map((agent: any) => {
-      const myCases = allCases.filter(
-        (c: any) => c.agente_id === agent.user_id && !c.cat_estados?.es_final
-      );
-      let vencidos = 0;
-      myCases.forEach((c: any) => {
-        const cfg = safeSlaConfigs[c.campana_id] || { horas_riesgo: 2, horas_vencido: 6 };
-        const hrs = (now - parseLocalDate(c.fecha_caso).getTime()) / 3600000;
-        if (hrs >= cfg.horas_vencido) vencidos++;
-      });
-      const agentCampanaIds = (agentCampanas ?? [])
+      const counts = agentCounts[agent.user_id] ?? { activos: 0, vencidos: 0 };
+      const campanaNames = (agentCampanas ?? [])
         .filter((ac: any) => ac.user_id === agent.user_id)
-        .map((ac: any) => ac.campana_id);
-      const campanaNames = agentCampanaIds
-        .map((id: string) => campanaNombres[id] || "")
+        .map((ac: any) => campanaNombres[ac.campana_id] || "")
         .filter(Boolean)
         .join(", ");
-      return { ...agent, casosActivos: myCases.length, casosVencidos: vencidos, campanaNames };
+      return { ...agent, casosActivos: counts.activos, casosVencidos: counts.vencidos, campanaNames };
     });
-  }, [stats?.allCases, visibleAgents, safeSlaConfigs, agentCampanas, campanaNombres]);
+  }, [visibleAgents, agentCounts, agentCampanas, campanaNombres]);
 
-  const recentCases = useMemo(() => {
-    const allCases = stats?.allCases;
-    if (!allCases || !Array.isArray(allCases)) return [];
-    const activeCampId = campanaActiva?.id;
-    let filtered = activeCampId
-      ? allCases.filter((c: any) => c.campana_id === activeCampId)
-      : allCases;
-    if (alertFilter === "vencidos") {
-      const now = Date.now();
-      filtered = filtered.filter((c: any) => {
-        if (c.cat_estados?.es_final) return false;
-        const cfg = safeSlaConfigs[c.campana_id] || { horas_riesgo: 2, horas_vencido: 6 };
-        return (now - parseLocalDate(c.fecha_caso).getTime()) / 3600000 >= cfg.horas_vencido;
-      });
-    } else if (alertFilter === "sinAsignar") {
-      filtered = filtered.filter((c: any) => !c.agente_id && !c.cat_estados?.es_final);
-    }
-    return [...filtered]
-      .sort((a: any, b: any) => {
-        const aTime = new Date(a.updated_at || a.fecha_caso).getTime();
-        const bTime = new Date(b.updated_at || b.fecha_caso).getTime();
-        return bTime - aTime;
-      })
-      .slice(0, 10);
-  }, [stats?.allCases, campanaActiva?.id, alertFilter, safeSlaConfigs]);
+  const { data: recentCases = [] } = useRecentCases(
+    campanaActiva?.id,
+    alertFilter,
+    safeSlaConfigs[campanaActiva?.id ?? ""]?.horas_vencido ?? 6,
+  );
 
   const isFirstLoad = (statsLoading || slaLoading) && !stats;
 
@@ -508,23 +441,10 @@ function KpiMini({ label, value, icon, badge }: {
   );
 }
 
-/* ─── Financial Module ───
- *
- * FIXES históricos:
- * A. isRenovado/isPendiente con toLowerCase() → resuelve mismatch de mayúsculas en BD.
- * B. getFechaRef usa siempre fecha_caso (misma fuente que useAnalyticsData).
- * C. Query sin fecha_cierre.
- * D. KPI cards respetan toggles activeStates.
- *
- * FIX ACTUAL (zona horaria):
- * E. parseLocalDate() resuelve el problema central:
- *    fecha_caso = "2026-03-12" (string date-only sin hora ni zona)
- *    → new Date("2026-03-12") = UTC medianoche = Colombia 19:00 del día ANTERIOR
- *    → el caso queda fuera del rango startOfDay(hoy)/endOfDay(hoy)
- *    → resultado: $0 en vista Día y Semana, valores incorrectos en Mes/Año
- *
- *    parseLocalDate("2026-03-12") usa new Date(2026, 2, 12) = medianoche LOCAL
- *    → los rangos coinciden correctamente sin importar el offset UTC-5.
+/* ─── Módulo financiero ───
+ * Los totales por tramo se calculan en la base (financial_summary) sobre todos
+ * los casos de la campaña; antes se descargaban los casos y la API los cortaba
+ * en 1.000 filas.
  */
 function FinancialModule({
   campana,
@@ -540,75 +460,26 @@ function FinancialModule({
 
   const { inicio, fin, diasEnMes } = useMemo(() => getPeriodRange(periodo), [periodo]);
 
-  const { data: financialCases = [], isLoading: financialLoading } = useQuery({
-    queryKey: ["financial-cases", campana.id],
+  const { data: financialRows = [], isLoading: financialLoading } = useQuery({
+    queryKey: ["financial-summary", campana.id, periodo, inicio, fin],
     ...QUERY_RESILIENCE,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("casos")
-        .select("id, fecha_caso, valor_pagar, cat_estados(nombre)")
-        .eq("campana_id", campana.id);
+      const { data, error } = await supabase.rpc("financial_summary", {
+        p_campana_id: campana.id,
+        p_desde: new Date(inicio).toISOString(),
+        p_hasta: new Date(fin).toISOString(),
+        p_periodo: periodo,
+        p_tz: localTimeZone(),
+      });
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  const financialData = useMemo(() => {
-    if (!financialCases.length) return { renovado: 0, pendiente: 0, chartData: [] };
-
-    // FIX E: usar parseLocalDate en lugar de new Date() para evitar offset UTC
-    const inRange = financialCases.filter((c: any) => {
-      const nombre = c.cat_estados?.nombre;
-      if (!isRenovado(nombre) && !isPendiente(nombre)) return false;
-      const t = parseLocalDate(c.fecha_caso).getTime();
-      return t >= inicio && t <= fin;
-    });
-
-    // FIX E: getBucketKey también usa parseLocalDate para que getHours()/getDate()/etc.
-    // retornen valores en hora local, no en UTC
-    function getBucketKey(fechaCaso: string): string {
-      const d = parseLocalDate(fechaCaso);
-      switch (periodo) {
-        case "dia":    return `${d.getHours()}h`;
-        case "semana": return WEEK_KEYS[(d.getDay() + 6) % 7];
-        case "mes":    return String(d.getDate());
-        case "año":   return MONTH_KEYS[d.getMonth()];
-      }
-    }
-
-    const buckets: Record<string, { renovado: number; pendiente: number }> = {};
-    if (periodo === "dia") {
-      for (let i = 0; i < 24; i++) buckets[`${i}h`] = { renovado: 0, pendiente: 0 };
-    } else if (periodo === "semana") {
-      WEEK_KEYS.forEach((k) => (buckets[k] = { renovado: 0, pendiente: 0 }));
-    } else if (periodo === "mes") {
-      for (let i = 1; i <= diasEnMes; i++) buckets[String(i)] = { renovado: 0, pendiente: 0 };
-    } else {
-      MONTH_KEYS.forEach((k) => (buckets[k] = { renovado: 0, pendiente: 0 }));
-    }
-
-    let renovadoTotal = 0;
-    let pendienteTotal = 0;
-
-    inRange.forEach((c: any) => {
-      const key = getBucketKey(c.fecha_caso);
-      const val = Number(c.valor_pagar || 0);
-      if (!buckets[key]) return;
-      if (isRenovado(c.cat_estados?.nombre)) {
-        buckets[key].renovado += val;
-        renovadoTotal += val;
-      } else if (isPendiente(c.cat_estados?.nombre)) {
-        buckets[key].pendiente += val;
-        pendienteTotal += val;
-      }
-    });
-
-    return {
-      renovado: renovadoTotal,
-      pendiente: pendienteTotal,
-      chartData: Object.entries(buckets).map(([name, v]) => ({ name, ...v })),
-    };
-  }, [financialCases, periodo, inicio, fin, diasEnMes]);
+  const financialData = useMemo(
+    () => buildFinancialChart(financialRows, periodo, diasEnMes),
+    [financialRows, periodo, diasEnMes],
+  );
 
   const showRenovado  = activeStates.has("renovado");
   const showPendiente = activeStates.has("pendiente");
@@ -740,7 +611,7 @@ function FinancialModule({
               <BarChart data={financialData.chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => formatCOP(v)} />
+                <YAxis tick={{ fontSize: 11 }} width={72} tickFormatter={(v: number) => formatCOPCompact(v)} />
                 <Tooltip
                   formatter={(value: number, name: string) => [formatCOP(value), name]}
                   labelFormatter={(label) => `${label} — ${periodoLabel[periodo]}`}

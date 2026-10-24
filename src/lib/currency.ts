@@ -22,3 +22,10 @@ export function formatCOPInput(raw: string): string {
   if (num === 0) return "";
   return formatter.format(num);
 }
+
+const compactCOP = new Intl.NumberFormat("es-CO", { notation: "compact", maximumFractionDigits: 1 });
+
+/** Monto abreviado para ejes de gráficas: 180000000 → "$ 180 M", 2100000000 → "$ 2100 M". */
+export function formatCOPCompact(value: number): string {
+  return `$ ${compactCOP.format(value)}`;
+}
