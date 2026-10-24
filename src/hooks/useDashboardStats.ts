@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { toISODate } from "@/types/schedules";
 
 export interface CampaignStats {
   campanaId: string;
@@ -50,7 +51,7 @@ export function useDashboardStats(
 
       if (error) throw error;
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toISODate(new Date());
       const now = Date.now();
 
       const statsByCampaign: CampaignStats[] = campanaIds.map((cid) => {
@@ -64,7 +65,7 @@ export function useDashboardStats(
           (c: any) =>
             c.cat_estados?.es_final &&
             c.cat_estados?.nombre !== "Transferido" &&
-            c.fecha_cierre?.slice(0, 10) === today
+            !!c.fecha_cierre && toISODate(new Date(c.fecha_cierre)) === today
         );
         const sinAsignar = openCases.filter((c: any) => !c.agente_id);
 

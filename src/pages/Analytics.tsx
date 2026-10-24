@@ -333,22 +333,23 @@ export default function Analytics() {
         windowWidth: 1200,
         backgroundColor: "#ffffff",
       });
-      const imgData  = canvas.toDataURL("image/png");
       const imgW     = CW;
-      const imgH     = (canvas.height * imgW) / canvas.width;
       const maxImgH  = H - 50; // espacio disponible después del header
-      const finalH   = Math.min(imgH, maxImgH);
-      pdf.addImage(imgData, "PNG", M, 35, imgW, finalH);
+      // Alto en px del canvas que cabe en una página sin deformar la imagen
+      const pxPerPage = Math.floor((maxImgH * canvas.width) / imgW);
 
-      // Si la imagen es más alta, agregar página adicional
-      if (imgH > maxImgH) {
-        pdf.addPage();
-        drawPageHeader("Análisis Visual (cont.)", `Período: ${periodoStr}`);
-        const ratioY  = maxImgH / imgH;
-        const srcY    = Math.floor(canvas.height * ratioY);
-        const remH    = finalH * (1 - ratioY);
-        pdf.addImage(imgData, "PNG", M, 35, imgW, remH,
-          undefined, "FAST", 0, -(finalH * ratioY));
+      // Si la imagen es más alta que la página, se corta en tramos
+      for (let srcY = 0; srcY < canvas.height; srcY += pxPerPage) {
+        if (srcY > 0) {
+          pdf.addPage();
+          drawPageHeader("Análisis Visual (cont.)", `Período: ${periodoStr}`);
+        }
+        const sliceH = Math.min(pxPerPage, canvas.height - srcY);
+        const slice  = document.createElement("canvas");
+        slice.width  = canvas.width;
+        slice.height = sliceH;
+        slice.getContext("2d")!.drawImage(canvas, 0, srcY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        pdf.addImage(slice.toDataURL("image/png"), "PNG", M, 35, imgW, (sliceH * imgW) / canvas.width);
       }
 
       // ════════════════════════════════════════════

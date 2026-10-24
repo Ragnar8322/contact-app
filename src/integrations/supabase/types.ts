@@ -12,8 +12,83 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
+      activity_log: {
+        Row: {
+          action: string
+          campana_id: string | null
+          created_at: string
+          details: Json | null
+          entity: string
+          entity_id: string | null
+          id: string
+          ip_address: string | null
+          user_email: string | null
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          action: string
+          campana_id?: string | null
+          created_at?: string
+          details?: Json | null
+          entity: string
+          entity_id?: string | null
+          id?: string
+          ip_address?: string | null
+          user_email?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          action?: string
+          campana_id?: string | null
+          created_at?: string
+          details?: Json | null
+          entity?: string
+          entity_id?: string | null
+          id?: string
+          ip_address?: string | null
+          user_email?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_log_campana_id_fkey"
+            columns: ["campana_id"]
+            isOneToOne: false
+            referencedRelation: "campanas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campanas: {
         Row: {
           activa: boolean | null
@@ -305,6 +380,33 @@ export type Database = {
           },
         ]
       }
+      perfiles: {
+        Row: {
+          activo: boolean
+          creado_en: string | null
+          id: string
+          nombre: string | null
+          rol: Database["public"]["Enums"]["rol_usuario"]
+          username: string | null
+        }
+        Insert: {
+          activo?: boolean
+          creado_en?: string | null
+          id: string
+          nombre?: string | null
+          rol?: Database["public"]["Enums"]["rol_usuario"]
+          username?: string | null
+        }
+        Update: {
+          activo?: boolean
+          creado_en?: string | null
+          id?: string
+          nombre?: string | null
+          rol?: Database["public"]["Enums"]["rol_usuario"]
+          username?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -312,6 +414,7 @@ export type Database = {
           nombre: string
           role_id: number
           telefono: string | null
+          updated_at: string | null
           user_id: string
         }
         Insert: {
@@ -320,6 +423,7 @@ export type Database = {
           nombre: string
           role_id: number
           telefono?: string | null
+          updated_at?: string | null
           user_id: string
         }
         Update: {
@@ -328,6 +432,7 @@ export type Database = {
           nombre?: string
           role_id?: number
           telefono?: string | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: [
@@ -336,6 +441,227 @@ export type Database = {
             columns: ["role_id"]
             isOneToOne: false
             referencedRelation: "user_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedule_novedades: {
+        Row: {
+          agente_id: string
+          created_at: string | null
+          descripcion: string | null
+          duracion_minutos: number | null
+          es_dia_completo: boolean
+          estado: string
+          fecha: string
+          hora_fin_novedad: string | null
+          hora_inicio_novedad: string | null
+          id: string
+          revisado_por: string | null
+          schedule_id: string
+          tipo_novedad: string
+          updated_at: string | null
+        }
+        Insert: {
+          agente_id: string
+          created_at?: string | null
+          descripcion?: string | null
+          duracion_minutos?: number | null
+          es_dia_completo?: boolean
+          estado?: string
+          fecha: string
+          hora_fin_novedad?: string | null
+          hora_inicio_novedad?: string | null
+          id?: string
+          revisado_por?: string | null
+          schedule_id: string
+          tipo_novedad: string
+          updated_at?: string | null
+        }
+        Update: {
+          agente_id?: string
+          created_at?: string | null
+          descripcion?: string | null
+          duracion_minutos?: number | null
+          es_dia_completo?: boolean
+          estado?: string
+          fecha?: string
+          hora_fin_novedad?: string | null
+          hora_inicio_novedad?: string | null
+          id?: string
+          revisado_por?: string | null
+          schedule_id?: string
+          tipo_novedad?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_novedades_agente_id_fkey"
+            columns: ["agente_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "schedule_novedades_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedule_shifts: {
+        Row: {
+          agente_id: string
+          created_at: string | null
+          duracion_almuerzo: number | null
+          fecha: string
+          hora_almuerzo: string | null
+          hora_fin: string | null
+          hora_inicio: string | null
+          horas_dia: number | null
+          id: string
+          observacion: string | null
+          schedule_id: string
+          shift_type_id: number | null
+          tipo_actividad: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          agente_id: string
+          created_at?: string | null
+          duracion_almuerzo?: number | null
+          fecha: string
+          hora_almuerzo?: string | null
+          hora_fin?: string | null
+          hora_inicio?: string | null
+          horas_dia?: number | null
+          id?: string
+          observacion?: string | null
+          schedule_id: string
+          shift_type_id?: number | null
+          tipo_actividad?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          agente_id?: string
+          created_at?: string | null
+          duracion_almuerzo?: number | null
+          fecha?: string
+          hora_almuerzo?: string | null
+          hora_fin?: string | null
+          hora_inicio?: string | null
+          horas_dia?: number | null
+          id?: string
+          observacion?: string | null
+          schedule_id?: string
+          shift_type_id?: number | null
+          tipo_actividad?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_shifts_agente_id_fkey"
+            columns: ["agente_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "schedule_shifts_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "schedules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedule_shifts_shift_type_id_fkey"
+            columns: ["shift_type_id"]
+            isOneToOne: false
+            referencedRelation: "shift_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedules: {
+        Row: {
+          campana_id: string
+          creado_por: string | null
+          created_at: string | null
+          estado: string
+          id: string
+          semana_fin: string
+          semana_inicio: string
+          updated_at: string | null
+        }
+        Insert: {
+          campana_id: string
+          creado_por?: string | null
+          created_at?: string | null
+          estado?: string
+          id?: string
+          semana_fin: string
+          semana_inicio: string
+          updated_at?: string | null
+        }
+        Update: {
+          campana_id?: string
+          creado_por?: string | null
+          created_at?: string | null
+          estado?: string
+          id?: string
+          semana_fin?: string
+          semana_inicio?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedules_campana_id_fkey"
+            columns: ["campana_id"]
+            isOneToOne: false
+            referencedRelation: "campanas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shift_types: {
+        Row: {
+          activo: boolean | null
+          campana_id: string
+          color: string | null
+          created_at: string | null
+          hora_fin: string
+          hora_inicio: string
+          id: number
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean | null
+          campana_id: string
+          color?: string | null
+          created_at?: string | null
+          hora_fin: string
+          hora_inicio: string
+          id?: number
+          nombre: string
+        }
+        Update: {
+          activo?: boolean | null
+          campana_id?: string
+          color?: string | null
+          created_at?: string | null
+          hora_fin?: string
+          hora_inicio?: string
+          id?: number
+          nombre?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shift_types_campana_id_fkey"
+            columns: ["campana_id"]
+            isOneToOne: false
+            referencedRelation: "campanas"
             referencedColumns: ["id"]
           },
         ]
@@ -382,6 +708,7 @@ export type Database = {
           descripcion_inicial: string | null
           estado: string | null
           fecha_caso: string | null
+          id: number
           tipo_servicio: string | null
           valor_pagar: string | null
         }
@@ -391,6 +718,7 @@ export type Database = {
           descripcion_inicial?: string | null
           estado?: string | null
           fecha_caso?: string | null
+          id?: number
           tipo_servicio?: string | null
           valor_pagar?: string | null
         }
@@ -400,6 +728,7 @@ export type Database = {
           descripcion_inicial?: string | null
           estado?: string | null
           fecha_caso?: string | null
+          id?: number
           tipo_servicio?: string | null
           valor_pagar?: string | null
         }
@@ -454,12 +783,89 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _copy_previous_week_shifts_impl: {
+        Args: { _dest_schedule_id: string }
+        Returns: number
+      }
+      _generate_schedule_impl:
+        | {
+            Args: {
+              _dia_libre_base?: number
+              _duracion_almuerzo?: number
+              _hora_fin?: string
+              _hora_inicio?: string
+              _schedule_id: string
+              _skip_existing?: boolean
+            }
+            Returns: number
+          }
+        | {
+            Args: {
+              _dia_libre_base?: number
+              _duracion_almuerzo?: number
+              _hora_fin?: string
+              _hora_inicio?: string
+              _schedule_id: string
+              _skip_existing?: boolean
+              _tipo_actividad?: string
+            }
+            Returns: number
+          }
+      assert_schedule_manager: { Args: never; Returns: undefined }
+      copy_previous_week_shifts: {
+        Args: { _dest_schedule_id: string }
+        Returns: number
+      }
+      generate_schedule:
+        | {
+            Args: {
+              _dia_libre_base?: number
+              _duracion_almuerzo?: number
+              _hora_fin?: string
+              _hora_inicio?: string
+              _schedule_id: string
+              _skip_existing?: boolean
+              _tipo_actividad?: string
+            }
+            Returns: number
+          }
+        | {
+            Args: {
+              _dia_libre_base: number
+              _duracion_almuerzo: number
+              _hora_fin: string
+              _hora_inicio: string
+              _schedule_id: string
+              _skip_existing: boolean
+            }
+            Returns: number
+          }
+      get_agentes_by_campana: {
+        Args: { _campana_id: string }
+        Returns: {
+          nombre: string
+          user_id: string
+        }[]
+      }
       get_casos_counts: { Args: { p_campana_id: string }; Returns: Json }
       get_user_role: { Args: { _user_id: string }; Returns: string }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      log_activity: {
+        Args: {
+          p_action: string
+          p_campana_id?: string
+          p_details?: Json
+          p_entity: string
+          p_entity_id: string
+        }
+        Returns: undefined
+      }
+      process_staging_casos: { Args: { p_campana_id?: string }; Returns: Json }
+      reset_schedule_shifts: { Args: { _schedule_id: string }; Returns: number }
+      unpublish_schedule: { Args: { _schedule_id: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      rol_usuario: "agente" | "supervisor" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -475,12 +881,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -504,11 +910,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -529,11 +935,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -554,11 +960,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -571,11 +977,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -585,7 +991,12 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  public: {
+  graphql_public: {
     Enums: {},
+  },
+  public: {
+    Enums: {
+      rol_usuario: ["agente", "supervisor", "admin"],
+    },
   },
 } as const

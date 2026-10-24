@@ -174,9 +174,12 @@ export function getWeekEnd(monday: Date): Date {
   return d;
 }
 
-/** Formatea Date → "YYYY-MM-DD" */
+/** Formatea Date → "YYYY-MM-DD" en hora local (toISOString usaría UTC y podría correr el día) */
 export function toISODate(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 /** Convierte horas decimales (8.5) → "8h 30min" */
