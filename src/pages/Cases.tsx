@@ -161,16 +161,13 @@ export default function Cases() {
     (linkedCase?.id === selectedCaseId ? linkedCase : undefined);
   const isTransferredCase = selectedCase?.cat_estados?.nombre === "Transferido";
 
-  const transferInfo = useMemo(() => {
-    if (!isTransferredCase || !selectedCase?.observacion_cierre) return null;
-    const obs = selectedCase.observacion_cierre as string;
-    const caseMatch = obs.match(/Nuevo caso #(\d+)/);
-    const campMatch = obs.match(/Transferido a campaña: ([^.]+)/);
-    return {
-      newCaseId: caseMatch ? caseMatch[1] : null,
-      targetCampana: campMatch ? campMatch[1] : null,
-    };
-  }, [isTransferredCase, selectedCase]);
+  // El destino viene de la columna transferido_a_caso_id (antes se leía del texto de la observación)
+  const transferInfo = isTransferredCase && selectedCase?.transferido_a_caso_id
+    ? {
+        newCaseId: selectedCase.transferido_a_caso_id as number,
+        targetCampana: (selectedCase.caso_destino?.campanas?.nombre as string | undefined) ?? null,
+      }
+    : null;
 
   const [editEstado, setEditEstado] = useState(0);
   const [originalEstado, setOriginalEstado] = useState(0);
@@ -656,16 +653,13 @@ export default function Cases() {
 }
 
 function TransferColumns({ caso, campanaName, transferidoPor }: { caso: any; campanaName: (id: string | null) => string; transferidoPor?: string }) {
-  const obs = (caso.observacion_cierre || "") as string;
-  const caseMatch = obs.match(/Nuevo caso #(\d+)/);
-  const campMatch = obs.match(/Transferido a campaña: ([^.]+)/);
 
   return (
     <>
       <TableCell className="text-sm">{campanaName(caso.campana_id)}</TableCell>
-      <TableCell className="text-sm">{campMatch ? campMatch[1] : "—"}</TableCell>
+      <TableCell className="text-sm">{caso.caso_destino?.campanas?.nombre ?? "—"}</TableCell>
       <TableCell className="text-sm">{safeFormat(caso.fecha_cierre, "dd/MM/yyyy HH:mm")}</TableCell>
-      <TableCell className="text-sm font-medium">{caseMatch ? `#${caseMatch[1]}` : "—"}</TableCell>
+      <TableCell className="text-sm font-medium">{caso.transferido_a_caso_id ? `#${caso.transferido_a_caso_id}` : "—"}</TableCell>
       <TableCell className="text-sm">{transferidoPor ?? "—"}</TableCell>
     </>
   );

@@ -7,12 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { validateRow, useClearStaging, useInsertStaging, useConfirmImport, type StagingRow } from "@/hooks/useImportCasos";
+import { validateRow, useClearStaging, useInsertStaging, useConfirmImport, type StagingRow, type ImportResult } from "@/hooks/useImportCasos";
 import { useCampana } from "@/contexts/CampanaContext";
 
 const TEMPLATE_HEADERS = [
   "cliente_identificacion",
-  "agente_nombre",
+  "agente_correo",
   "estado",
   "tipo_servicio",
   "descripcion_inicial",
@@ -27,6 +27,7 @@ export default function AdminImportCasos() {
   const [step, setStep]     = useState<Step>("upload");
   const [rows, setRows]     = useState<StagingRow[]>([]);
   const [fileName, setFileName] = useState("");
+  const [resultado, setResultado] = useState<ImportResult | null>(null);
 
   const { campanaActiva } = useCampana();
   const clearMutation   = useClearStaging();
@@ -63,8 +64,10 @@ export default function AdminImportCasos() {
     try {
       await clearMutation.mutateAsync();
       await insertMutation.mutateAsync(rows);
-      await confirmMutation.mutateAsync(campanaActiva?.id ?? null);
-      toast.success(`${valid.length} casos importados en ${campanaActiva?.nombre ?? "la campaña activa"}`);
+      const r = await confirmMutation.mutateAsync(campanaActiva?.id ?? null);
+      setResultado(r);
+      if (r.inserted > 0) toast.success(`${r.inserted} casos importados en ${campanaActiva?.nombre ?? "la campaña activa"}`);
+      if (r.skipped > 0) toast.warning(`${r.skipped} filas rechazadas`, { description: "Revisa el detalle para corregirlas." });
       setStep("done");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Error al importar";
@@ -73,6 +76,7 @@ export default function AdminImportCasos() {
   };
 
   const handleReset = () => {
+    setResultado(null);
     setRows([]);
     setFileName("");
     setStep("upload");
@@ -83,7 +87,7 @@ export default function AdminImportCasos() {
     const XLSX = await import("xlsx");
     const ws = XLSX.utils.aoa_to_sheet([
       TEMPLATE_HEADERS,
-      ["123456789", "Juan Pérez", "Activo", "Renovación", "Descripción del caso", "2026-01-15", "150000"],
+      ["900123456", "agente@camarabaq.org.co", "Registrado", "Renovación Web", "Solicita renovación de matrícula", "15/01/2026", "$150.000"],
     ]);
     ws["!cols"] = TEMPLATE_HEADERS.map(() => ({ wch: 22 }));
     const wb = XLSX.utils.book_new();
@@ -100,7 +104,7 @@ export default function AdminImportCasos() {
         {(["upload", "preview", "done"] as Step[]).map((s, i) => (
           <>
             <span key={s} className={`flex items-center gap-1 font-medium ${
-              step === s ? "text-primary" : STEPS.indexOf(step) > i ? "text-green-600" : "text-muted-foreground"
+              step === s ? "text-primary" : STEPS.indexOf(step) > i ? "text-success" : "text-muted-foreground"
             }`}>
               {STEPS.indexOf(step) > i ? <CheckCircle2 className="h-4 w-4" /> : <span className="w-5 h-5 rounded-full border flex items-center justify-center text-xs">{i + 1}</span>}
               {s === "upload" ? "Cargar archivo" : s === "preview" ? "Revisar" : "Completado"}
@@ -132,8 +136,9 @@ export default function AdminImportCasos() {
           <Alert>
             <FileSpreadsheet className="h-4 w-4" />
             <AlertDescription>
-              El archivo debe tener las columnas: <strong>cliente_identificacion, agente_nombre, estado, tipo_servicio, descripcion_inicial, fecha_caso</strong> (valor_pagar opcional).
-              Los nombres de columna son flexibles — descarga la plantilla para ver el formato exacto.
+              El archivo debe tener las columnas <strong>cliente_identificacion, agente_correo, estado, tipo_servicio, descripcion_inicial y fecha_caso</strong>; <strong>valor_pagar</strong> es opcional.
+              Si no tienes el correo del agente puedes usar la columna <strong>agente_nombre</strong>. Las fechas pueden ir como 2026-01-15 o 15/01/2026, y los montos como 150000 o $150.000.
+              Descarga la plantilla para ver el formato exacto.
             </AlertDescription>
           </Alert>
         </div>
@@ -211,16 +216,16 @@ export default function AdminImportCasos() {
                         <TableCell className="text-xs text-muted-foreground">{row._rowIndex}</TableCell>
                         <TableCell>
                           {row._valid
-                            ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-                            : <XCircle className="h-4 w-4 text-red-600" />}
+                            ? <CheckCircle2 className="h-4 w-4 text-success" aria-label="Válida" />
+                            : <XCircle className="h-4 w-4 text-destructive" aria-label="Con errores" />}
                         </TableCell>
                         <TableCell className="text-xs">{row.cliente_identificacion ?? "—"}</TableCell>
-                        <TableCell className="text-xs">{row.agente_nombre ?? "—"}</TableCell>
+                        <TableCell className="text-xs">{row.agente_correo ?? row.agente_nombre ?? "—"}</TableCell>
                         <TableCell className="text-xs">{row.estado ?? "—"}</TableCell>
                         <TableCell className="text-xs">{row.tipo_servicio ?? "—"}</TableCell>
                         <TableCell className="text-xs">{row.fecha_caso ?? "—"}</TableCell>
                         <TableCell className="text-xs">{row.valor_pagar ?? "—"}</TableCell>
-                        <TableCell className="text-xs text-red-600 max-w-[200px]">
+                        <TableCell className="text-xs text-destructive max-w-[200px]">
                           {row._errors.join(" · ") || "—"}
                         </TableCell>
                       </TableRow>
@@ -247,17 +252,52 @@ export default function AdminImportCasos() {
       )}
 
       {/* STEP 3: Done */}
-      {step === "done" && (
-        <Card className="border-success/30 bg-success/10">
-          <CardContent className="py-16 text-center space-y-4">
-            <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto" />
-            <h3 className="text-xl font-bold text-green-700">{valid.length} casos importados exitosamente</h3>
-            {invalid.length > 0 && (
-              <p className="text-sm text-muted-foreground">{invalid.length} filas con errores fueron omitidas.</p>
-            )}
-            <Button onClick={handleReset} className="mt-4">Importar otro archivo</Button>
-          </CardContent>
-        </Card>
+      {step === "done" && resultado && (
+        <div className="space-y-4">
+          <Card className={resultado.skipped === 0 ? "border-success/30 bg-success/10" : "border-warning/30 bg-warning/10"}>
+            <CardContent className="py-10 text-center space-y-3">
+              {resultado.skipped === 0
+                ? <CheckCircle2 className="h-14 w-14 text-success mx-auto" aria-hidden="true" />
+                : <AlertTriangle className="h-14 w-14 text-warning mx-auto" aria-hidden="true" />}
+              <h3 className="text-xl font-bold">
+                {resultado.inserted} {resultado.inserted === 1 ? "caso importado" : "casos importados"}
+              </h3>
+              {(resultado.skipped > 0 || invalid.length > 0) && (
+                <p className="text-sm text-muted-foreground">
+                  {resultado.skipped > 0 && `${resultado.skipped} filas rechazadas al procesar. `}
+                  {invalid.length > 0 && `${invalid.length} filas con errores de formato no se enviaron.`}
+                </p>
+              )}
+              <Button onClick={handleReset} className="mt-2">Importar otro archivo</Button>
+            </CardContent>
+          </Card>
+
+          {resultado.rechazados.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base">Filas rechazadas</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-20">Fila</TableHead>
+                      <TableHead>Identificación</TableHead>
+                      <TableHead>Motivo</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resultado.rechazados.map((rr) => (
+                      <TableRow key={rr.fila}>
+                        <TableCell className="font-mono text-xs">{rr.fila}</TableCell>
+                        <TableCell className="text-xs">{rr.identificacion ?? "—"}</TableCell>
+                        <TableCell className="text-xs">{rr.motivo}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllPages } from "@/lib/fetchAllPages";
 import { format, eachDayOfInterval, parseISO, differenceInDays } from "date-fns";
 
 export interface TramiteRenovado {
@@ -78,24 +79,6 @@ export interface AnalyticsQueryFilters {
   campanaId?: string | null;
   agenteId?: string | null;
   estadoId?: number | null;
-}
-
-// Pagina una query de Supabase que no soporta count exacto grande
-async function fetchAllPages<T>(
-  buildQuery: (from: number, to: number) => any,
-  pageSize = 1000
-): Promise<T[]> {
-  const results: T[] = [];
-  let from = 0;
-  while (true) {
-    const { data, error } = await buildQuery(from, from + pageSize - 1);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    results.push(...data);
-    if (data.length < pageSize) break;
-    from += pageSize;
-  }
-  return results;
 }
 
 export function useAnalyticsData(filters: AnalyticsQueryFilters) {
