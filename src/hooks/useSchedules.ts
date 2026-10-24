@@ -342,7 +342,7 @@ export function useGenerateSchedule() {
 // ------------------------------------------------------------
 // 12. Novedades — todas las campañas (panel de aprobaciones)
 // ------------------------------------------------------------
-export interface NovedadConAgente extends ScheduleNovedad {
+export interface NovedadConAgente extends Omit<ScheduleNovedad, "agente"> {
   agente: { nombre: string; user_id: string } | null;
 }
 

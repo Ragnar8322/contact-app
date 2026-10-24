@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 
 export type ActivityLogEntry = {
   id: string;
@@ -73,7 +74,8 @@ export async function logActivity(
   await supabase.rpc("log_activity", {
     p_action: action,
     p_entity: entity,
-    p_entity_id: entityId ?? null,
-    p_details: details ?? {},
+    // La función acepta NULL; los tipos generados no lo reflejan
+    p_entity_id: entityId ?? (null as unknown as string),
+    p_details: (details ?? {}) as Json,
   });
 }

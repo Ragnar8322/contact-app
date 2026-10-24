@@ -16,25 +16,25 @@ import type { RoleName } from "@/contexts/AuthContext";
 // ============================================================
 describe("getWeekStart", () => {
   it("retorna el lunes dado un miércoles", () => {
-    const wed = new Date("2026-03-18"); // miércoles
+    const wed = new Date(2026, 2, 18); // miércoles
     const result = getWeekStart(wed);
     expect(toISODate(result)).toBe("2026-03-16");
   });
 
   it("retorna el lunes anterior dado un domingo", () => {
-    const sun = new Date("2026-03-22"); // domingo
+    const sun = new Date(2026, 2, 22); // domingo
     const result = getWeekStart(sun);
     expect(toISODate(result)).toBe("2026-03-16");
   });
 
   it("retorna el mismo día si ya es lunes", () => {
-    const mon = new Date("2026-03-16"); // lunes
+    const mon = new Date(2026, 2, 16); // lunes
     const result = getWeekStart(mon);
     expect(toISODate(result)).toBe("2026-03-16");
   });
 
   it("retorna el lunes dado un sábado", () => {
-    const sat = new Date("2026-03-21"); // sábado
+    const sat = new Date(2026, 2, 21); // sábado
     const result = getWeekStart(sat);
     expect(toISODate(result)).toBe("2026-03-16");
   });
@@ -45,7 +45,7 @@ describe("getWeekStart", () => {
 // ============================================================
 describe("getWeekEnd", () => {
   it("retorna el domingo dado el lunes de una semana", () => {
-    const mon = new Date("2026-03-16");
+    const mon = new Date(2026, 2, 16);
     const result = getWeekEnd(mon);
     expect(toISODate(result)).toBe("2026-03-22");
   });
@@ -56,7 +56,12 @@ describe("getWeekEnd", () => {
 // ============================================================
 describe("toISODate", () => {
   it("formatea un Date al formato YYYY-MM-DD", () => {
-    const d = new Date("2026-01-05T12:00:00Z");
+    const d = new Date(2026, 0, 5, 12);
+    expect(toISODate(d)).toBe("2026-01-05");
+  });
+
+  it("usa el día local aunque en UTC ya sea el día siguiente", () => {
+    const d = new Date(2026, 0, 5, 23, 30);
     expect(toISODate(d)).toBe("2026-01-05");
   });
 });

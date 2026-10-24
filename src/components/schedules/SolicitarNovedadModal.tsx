@@ -25,6 +25,7 @@ import {
   NOVEDAD_LABELS,
   NOVEDADES_DIA_COMPLETO,
   generarOpcionesHora,
+  toISODate,
 } from "@/types/schedules";
 import { ClipboardList, Clock } from "lucide-react";
 
@@ -153,7 +154,7 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
               type="date"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
-              min={new Date().toISOString().slice(0, 10)}
+              min={toISODate(new Date())}
             />
           </div>
 

@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { validateRow, useClearStaging, useInsertStaging, useConfirmImport, type StagingRow } from "@/hooks/useImportCasos";
+import { useCampana } from "@/contexts/CampanaContext";
 
 const TEMPLATE_HEADERS = [
   "cliente_identificacion",
@@ -27,6 +28,7 @@ export default function AdminImportCasos() {
   const [rows, setRows]     = useState<StagingRow[]>([]);
   const [fileName, setFileName] = useState("");
 
+  const { campanaActiva } = useCampana();
   const clearMutation   = useClearStaging();
   const insertMutation  = useInsertStaging();
   const confirmMutation = useConfirmImport();
@@ -61,8 +63,8 @@ export default function AdminImportCasos() {
     try {
       await clearMutation.mutateAsync();
       await insertMutation.mutateAsync(rows);
-      await confirmMutation.mutateAsync();
-      toast.success(`✅ ${valid.length} casos importados correctamente`);
+      await confirmMutation.mutateAsync(campanaActiva?.id ?? null);
+      toast.success(`✅ ${valid.length} casos importados en ${campanaActiva?.nombre ?? "la campaña activa"}`);
       setStep("done");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Error al importar";

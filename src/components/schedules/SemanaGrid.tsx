@@ -1,7 +1,7 @@
 // Grilla semanal completa: filas = agentes, columnas = días Lun–Dom
 // v2: pasa novedades parciales a TurnoCell y horas acumuladas al modal de edición.
 import { useMemo, useState } from "react";
-import { ScheduleShift, ScheduleNovedad } from "@/types/schedules";
+import { ScheduleShift, ScheduleNovedad, toISODate } from "@/types/schedules";
 import type { AgenteBasico } from "@/hooks/useSchedules";
 import { useScheduleNovedades } from "@/hooks/useSchedules";
 import TurnoCell from "./TurnoCell";
@@ -78,7 +78,7 @@ export default function SemanaGrid({ agentes, shifts, semanaInicio, scheduleId, 
     return DIAS.map((_, i) => {
       const d = new Date(semanaInicio + "T12:00:00");
       d.setDate(d.getDate() + i);
-      return d.toISOString().slice(0, 10);
+      return toISODate(d);
     });
   }, [semanaInicio]);
 

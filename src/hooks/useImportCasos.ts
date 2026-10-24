@@ -108,9 +108,9 @@ export function useInsertStaging() {
 export function useConfirmImport() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
-      // Llama a la función SQL que procesa staging → casos
-      const { error } = await supabase.rpc("process_staging_casos" as never);
+    mutationFn: async (campanaId: string | null) => {
+      // Llama a la función SQL que procesa staging → casos de la campaña activa
+      const { error } = await supabase.rpc("process_staging_casos", { p_campana_id: campanaId ?? undefined });
       if (error) throw error;
     },
     onSuccess: () => {

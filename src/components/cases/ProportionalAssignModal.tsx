@@ -165,7 +165,8 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
   function toggleCaso(id: number) {
     setSelectedCasoIds(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
@@ -178,7 +179,8 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
   function toggleAgent(id: string) {
     setSelectedAgentIds(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }

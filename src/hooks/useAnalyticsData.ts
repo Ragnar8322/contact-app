@@ -149,7 +149,7 @@ export function useAnalyticsData(filters: AnalyticsQueryFilters) {
       // ──────────────────────────────────────────────────────
       // 2. HISTORIAL (filtrado por caso_id IN casosIds)
       // ──────────────────────────────────────────────────────
-      let filteredHistorial: any[] = [];
+      const filteredHistorial: any[] = [];
 
       if (casosIds.size > 0) {
         const casosIdsArr = [...casosIds];
@@ -176,7 +176,7 @@ export function useAnalyticsData(filters: AnalyticsQueryFilters) {
       // ──────────────────────────────────────────────────────
       // 3. CLIENTES (solo los que aparecen en los casos)
       // ──────────────────────────────────────────────────────
-      let filteredClientes: any[] = [];
+      const filteredClientes: any[] = [];
 
       if (casosClienteIds.length > 0) {
         const chunkSize = 500;

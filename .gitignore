@@ -33,3 +33,6 @@ bun.lock
 bun.lockb
 yarn.lock
 pnpm-lock.yaml
+
+# Supabase CLI
+supabase/.temp

@@ -50,7 +50,7 @@ export default function Horarios() {
   const coberturaFecha = (() => {
     const d = new Date(semanaInicio + "T12:00:00");
     d.setDate(d.getDate() + coberturaDiaIdx);
-    return d.toISOString().slice(0, 10);
+    return toISODate(d);
   })();
 
   const canEdit = isAdmin || isSupervisor;
