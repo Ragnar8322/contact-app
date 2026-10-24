@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import { useCampanasList } from "@/hooks/useCampanas";
-import { useInsertHistorial, useEstados } from "@/hooks/useCases";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,10 +16,7 @@ interface CaseTransferProps {
 }
 
 export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps) {
-  const { user, profile } = useAuth();
   const { data: campanas } = useCampanasList();
-  const { data: estados } = useEstados();
-  const insertHistorial = useInsertHistorial();
   const qc = useQueryClient();
 
   const [targetCampanaId, setTargetCampanaId] = useState<string>("");
@@ -37,87 +32,29 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
   const targetCampana = campanas?.find((c: any) => c.id === targetCampanaId);
   const otherCampanas = campanas?.filter((c: any) => c.id !== currentCampanaId) || [];
 
-  // Find the "Transferido" estado
-  const transferidoEstado = estados?.find((e: any) => e.nombre === "Transferido");
-
+  // Toda la transferencia ocurre en la base en una sola transacción (transfer_case):
+  // cierra el caso, crea el nuevo en la campaña destino asignado al supervisor
+  // con menos casos abiertos, enlaza ambos y registra el historial.
   const handleTransfer = async () => {
-    if (!user || !targetCampanaId || !caso.id) return;
+    if (!targetCampanaId || !caso.id) return;
     setTransferring(true);
     try {
-      // Look up "Registrado" estado dynamically
-      const registradoEstado = estados?.find((e: any) => e.nombre === "Registrado");
-      const registradoId = registradoEstado?.id ?? caso.estado_id;
-
-      // Get first admin user_id as fallback agente
-      const { data: adminProfile } = await supabase
-        .from("profiles")
-        .select("user_id")
-        .eq("role_id", 1)
-        .limit(1)
-        .single();
-
-      const newAgenteId = adminProfile?.user_id || user.id;
-
-      // Mark current case as "Transferido"
-      const transferidoId = transferidoEstado?.id;
-      if (transferidoId) {
-        const { error: updateError } = await supabase
-          .from("casos")
-          .update({
-            estado_id: transferidoId,
-            fecha_cierre: new Date().toISOString(),
-            observacion_cierre: `Transferido a campaña: ${targetCampana?.nombre || targetCampanaId}`,
-            updated_by: user.id,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", caso.id);
-        if (updateError) throw new Error("Error al actualizar caso original: " + updateError.message);
-      }
-
-      // Create new case in target campaign
-      const { data: newCase, error: createError } = await supabase
-        .from("casos")
-        .insert({
-          cliente_id: caso.cliente_id,
-          tipo_servicio_id: caso.tipo_servicio_id,
-          descripcion_inicial: caso.descripcion_inicial,
-          agente_id: newAgenteId,
-          created_by: user.id,
-          estado_id: registradoId,
-          campana_id: targetCampanaId,
-        })
-        .select("id")
-        .single();
-
-      if (createError) throw createError;
-
-      // Update observacion_cierre with new case reference
-      if (newCase) {
-        const { error: refError } = await supabase
-          .from("casos")
-          .update({
-            observacion_cierre: `Transferido a campaña: ${targetCampana?.nombre}. Nuevo caso #${newCase.id}`,
-          })
-          .eq("id", caso.id);
-        if (refError) console.error("Error updating case reference:", refError.message);
-      }
-
-      const comentario = `Caso transferido de ${currentCampana?.nombre || "campaña anterior"} a ${targetCampana?.nombre || "nueva campaña"} por ${profile?.nombre || "usuario"}. Nuevo caso #${newCase?.id || ""}`;
-
-      await insertHistorial.mutateAsync({
-        caso_id: caso.id,
-        estado_id: transferidoId || caso.estado_id,
-        cambiado_por: user.id,
-        comentario,
+      const { data, error } = await supabase.rpc("transfer_case", {
+        p_caso_id: caso.id,
+        p_campana_destino: targetCampanaId,
       });
-
-      toast.success(`Caso transferido correctamente a ${targetCampana?.nombre}. Nuevo caso #${newCase?.id}`);
+      if (error) throw error;
+      const r = data as { nuevo_caso_id: number; supervisor_nombre: string; campana_destino: string };
+      toast.success(`Caso transferido a ${r.campana_destino}`, {
+        description: `Nuevo caso #${r.nuevo_caso_id}, asignado a ${r.supervisor_nombre}.`,
+      });
       qc.invalidateQueries({ queryKey: ["casos"] });
+      qc.invalidateQueries({ queryKey: ["casos-counts"] });
       qc.invalidateQueries({ queryKey: ["historial"] });
       setConfirmOpen(false);
       onTransferred();
-    } catch (err: any) {
-      toast.error("Error al transferir: " + err.message);
+    } catch (err) {
+      toast.error("No se pudo transferir", { description: (err as Error).message });
     } finally {
       setTransferring(false);
     }
@@ -186,7 +123,7 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar transferencia</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Confirmas que deseas transferir el Caso #{caso.id} de <strong>{currentCampana?.nombre}</strong> a <strong>{targetCampana?.nombre}</strong>? El caso será visible para los agentes de la campaña destino.
+              ¿Confirmas que deseas transferir el Caso #{caso.id} de <strong>{currentCampana?.nombre}</strong> a <strong>{targetCampana?.nombre}</strong>? Se creará un caso nuevo en la campaña destino, asignado a su supervisor.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

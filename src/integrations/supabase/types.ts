@@ -191,6 +191,8 @@ export type Database = {
           id: number
           observacion_cierre: string | null
           tipo_servicio_id: number
+          transferido_a_caso_id: number | null
+          transferido_desde_caso_id: number | null
           updated_at: string | null
           updated_by: string | null
           valor_pagar: number | null
@@ -208,6 +210,8 @@ export type Database = {
           id?: number
           observacion_cierre?: string | null
           tipo_servicio_id: number
+          transferido_a_caso_id?: number | null
+          transferido_desde_caso_id?: number | null
           updated_at?: string | null
           updated_by?: string | null
           valor_pagar?: number | null
@@ -225,6 +229,8 @@ export type Database = {
           id?: number
           observacion_cierre?: string | null
           tipo_servicio_id?: number
+          transferido_a_caso_id?: number | null
+          transferido_desde_caso_id?: number | null
           updated_at?: string | null
           updated_by?: string | null
           valor_pagar?: number | null
@@ -263,6 +269,20 @@ export type Database = {
             columns: ["tipo_servicio_id"]
             isOneToOne: false
             referencedRelation: "cat_tipo_servicio"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "casos_transferido_a_caso_id_fkey"
+            columns: ["transferido_a_caso_id"]
+            isOneToOne: false
+            referencedRelation: "casos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "casos_transferido_desde_caso_id_fkey"
+            columns: ["transferido_desde_caso_id"]
+            isOneToOne: false
+            referencedRelation: "casos"
             referencedColumns: ["id"]
           },
         ]
@@ -703,31 +723,37 @@ export type Database = {
       }
       staging_casos: {
         Row: {
+          agente_correo: string | null
           agente_nombre: string | null
           cliente_identificacion: string | null
           descripcion_inicial: string | null
           estado: string | null
           fecha_caso: string | null
+          fila_excel: number | null
           id: number
           tipo_servicio: string | null
           valor_pagar: string | null
         }
         Insert: {
+          agente_correo?: string | null
           agente_nombre?: string | null
           cliente_identificacion?: string | null
           descripcion_inicial?: string | null
           estado?: string | null
           fecha_caso?: string | null
+          fila_excel?: number | null
           id?: number
           tipo_servicio?: string | null
           valor_pagar?: string | null
         }
         Update: {
+          agente_correo?: string | null
           agente_nombre?: string | null
           cliente_identificacion?: string | null
           descripcion_inicial?: string | null
           estado?: string | null
           fecha_caso?: string | null
+          fila_excel?: number | null
           id?: number
           tipo_servicio?: string | null
           valor_pagar?: string | null
@@ -812,9 +838,35 @@ export type Database = {
             Returns: number
           }
       assert_schedule_manager: { Args: never; Returns: undefined }
+      assign_cases: {
+        Args: {
+          p_agente_ids: string[]
+          p_campana_id: string
+          p_caso_ids: number[]
+        }
+        Returns: Json
+      }
+      assignment_candidates: {
+        Args: { p_campana_id: string }
+        Returns: {
+          abiertos: number
+          nombre: string
+          user_id: string
+        }[]
+      }
       copy_previous_week_shifts: {
         Args: { _dest_schedule_id: string }
         Returns: number
+      }
+      create_case_with_client: {
+        Args: {
+          p_campana_id: string
+          p_cliente?: Json
+          p_cliente_id?: number
+          p_descripcion: string
+          p_tipo_servicio_id: number
+        }
+        Returns: Json
       }
       dashboard_agent_stats: {
         Args: { p_campana_ids: string[] }
@@ -893,6 +945,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      parse_monto_cop: { Args: { p: string }; Returns: number }
       process_staging_casos: { Args: { p_campana_id?: string }; Returns: Json }
       reset_schedule_shifts: { Args: { _schedule_id: string }; Returns: number }
       sla_vigente: {
@@ -902,6 +955,17 @@ export type Database = {
           horas_riesgo: number
           horas_vencido: number
         }[]
+      }
+      supervisor_de_campana: {
+        Args: { p_campana_id: string }
+        Returns: {
+          nombre: string
+          user_id: string
+        }[]
+      }
+      transfer_case: {
+        Args: { p_campana_destino: string; p_caso_id: number }
+        Returns: Json
       }
       unpublish_schedule: { Args: { _schedule_id: string }; Returns: boolean }
     }

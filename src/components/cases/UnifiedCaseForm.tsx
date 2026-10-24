@@ -4,7 +4,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
-import { useEstados, useTiposServicio } from "@/hooks/useCases";
+import { useTiposServicio } from "@/hooks/useCases";
 import { useClientByIdentificacion } from "@/hooks/useClientByIdentificacion";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -43,7 +43,6 @@ interface Props {
 export default function UnifiedCaseForm({ onSuccess }: Props) {
   const { user } = useAuth();
   const { campanaActiva } = useCampana();
-  const { data: estados } = useEstados();
   const { data: tipos } = useTiposServicio();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -80,7 +79,6 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
     },
   });
 
-  const registradoId = estados?.find(e => e.nombre === "Registrado")?.id || 1;
 
   // Section 2 enabled when client is resolved
   const section2Enabled = clientExists || (clientNotFound && !searching);
@@ -102,12 +100,10 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
   };
 
   const handleSave = async () => {
-    if (!user) return;
+    if (!user || !campanaActiva) return;
     setSaving(true);
 
     try {
-      let clienteId: number;
-
       if (clientExists) {
         // Existing client - only validate case form
         const casoValid = await casoForm.trigger();
@@ -115,7 +111,6 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
           setSaving(false);
           return;
         }
-        clienteId = foundClient!.id;
       } else {
         // New client - validate both forms
         const [clientValid, casoValid] = await Promise.all([
@@ -135,51 +130,32 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
           return;
         }
 
-        const clientData = clientForm.getValues();
-        const { data: newClient, error: clientError } = await supabase
-          .from("clientes")
-          .insert({
-            identificacion: clientData.identificacion,
-            tipo_cliente: clientData.tipo_cliente,
-            nombre_contacto: clientData.nombre_contacto.toUpperCase(),
-            razon_social: clientData.tipo_cliente === "Empresa" ? (clientData.razon_social?.toUpperCase() || null) : null,
-            telefono: clientData.telefono || null,
-            celular: clientData.celular || null,
-            correo: clientData.correo?.toLowerCase() || null,
-          })
-          .select()
-          .single();
-
-        if (clientError) {
-          toast.error("Error al crear cliente: " + clientError.message);
-          setSaving(false);
-          return;
-        }
-
-        clienteId = newClient.id;
       }
 
-      // Create case
+      // Cliente (si es nuevo) + caso + historial en una sola transacción:
+      // si el caso no se puede crear, tampoco queda el cliente.
+      const clientData = clientExists ? null : clientForm.getValues();
       const casoData = casoForm.getValues();
+      const { error } = await supabase.rpc("create_case_with_client", {
+        p_campana_id: campanaActiva.id,
+        p_tipo_servicio_id: casoData.tipo_servicio_id,
+        p_descripcion: casoData.descripcion_inicial,
+        p_cliente_id: clientExists ? foundClient!.id : undefined,
+        p_cliente: clientData
+          ? {
+              identificacion: clientData.identificacion,
+              tipo_cliente: clientData.tipo_cliente,
+              nombre_contacto: clientData.nombre_contacto,
+              razon_social: clientData.tipo_cliente === "Empresa" ? clientData.razon_social : null,
+              telefono: clientData.telefono || null,
+              celular: clientData.celular || null,
+              correo: clientData.correo || null,
+            }
+          : undefined,
+      });
 
-      const { error: casoError } = await supabase
-        .from("casos")
-        .insert({
-          cliente_id: clienteId,
-          tipo_servicio_id: casoData.tipo_servicio_id,
-          descripcion_inicial: casoData.descripcion_inicial,
-          valor_pagar: null,
-          estado_id: registradoId,
-          agente_id: user.id,
-          created_by: user.id,
-          campana_id: campanaActiva?.id || null,
-        });
-
-      if (casoError) {
-        const msg = clientExists
-          ? "Error al crear el caso: " + casoError.message
-          : "El cliente fue registrado pero hubo un error al crear el caso. Por favor crea el caso manualmente desde la lista de clientes.";
-        toast.error(msg);
+      if (error) {
+        toast.error("No se pudo crear el caso", { description: error.message });
         setSaving(false);
         return;
       }

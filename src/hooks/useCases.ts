@@ -43,7 +43,7 @@ export function useCases(filters?: CasesFilters, pagination?: PaginationParams) 
     queryFn: async (): Promise<PaginatedResult<any>> => {
       let query = supabase
         .from("casos")
-        .select("*, clientes!inner(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)", { count: "exact" })
+        .select("*, clientes!inner(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre), caso_destino:transferido_a_caso_id(id, campanas(nombre))", { count: "exact" })
         .order("fecha_caso", { ascending: false });
 
       // Agents only see their own cases; supervisor/admin/gerente see all
@@ -107,7 +107,7 @@ export function useCaseById(id: number | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("casos")
-        .select("*, clientes(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre)")
+        .select("*, clientes(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre), caso_destino:transferido_a_caso_id(id, campanas(nombre))")
         .eq("id", id!)
         .single();
       if (error) throw error;

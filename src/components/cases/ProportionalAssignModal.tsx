@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { fetchAllPages } from "@/lib/fetchAllPages";
 import { useCampana } from "@/contexts/CampanaContext";
 import { useEstados } from "@/hooks/useCases";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -33,7 +33,6 @@ interface AgentItem {
 }
 
 export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
-  const { user } = useAuth();
   const { campanaActiva } = useCampana();
   const { data: estados } = useEstados();
   const qc = useQueryClient();
@@ -85,78 +84,42 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
     if (!campanaActiva?.id || !estados || estados.length === 0) return;
     setLoading(true);
     try {
-      // ─ 1. Rol agent ID
-      const { data: roleRow, error: roleErr } = await supabase
-        .from("user_roles").select("id").eq("name", "agent").single();
-      if (roleErr || !roleRow) throw new Error("No se encontró el rol 'agent'.");
+      // Agentes de la campaña con su carga actual (una sola consulta; antes una por agente
+      // y leyendo tablas que un supervisor no puede ver)
+      const { data: candidatos, error: candErr } = await supabase.rpc("assignment_candidates", {
+        p_campana_id: campanaActiva.id,
+      });
+      if (candErr) throw candErr;
+      const agentList: AgentItem[] = (candidatos ?? []).map((a) => ({
+        user_id: a.user_id, nombre: a.nombre, currentCount: a.abiertos,
+      }));
+      setAgents(agentList);
+      setSelectedAgentIds(new Set(agentList.map((a) => a.user_id)));
 
-      // ─ 2. user_ids con rol agent
-      const { data: assignments, error: assignErr } = await supabase
-        .from("user_role_assignments").select("user_id").eq("role_id", roleRow.id);
-      if (assignErr) throw assignErr;
-      const agentUserIds = (assignments ?? []).map((r: any) => r.user_id);
-
-      if (agentUserIds.length === 0) {
-        setAgents([]);
-        setCasos([]);
+      if (mode === "registrado" && !registradoEstadoId) {
+        toast.error("No se encontró el estado 'Registrado'.");
         return;
       }
+      const estadoIds = mode === "registrado" ? [registradoEstadoId!] : activeEstadoIds;
 
-      // ─ 3. Nombres desde profiles
-      const { data: profiles, error: profErr } = await supabase
-        .from("profiles").select("user_id, nombre").in("user_id", agentUserIds);
-      if (profErr) throw profErr;
-
-      // ─ 4. Contar casos activos por agente
-      const agentList: AgentItem[] = await Promise.all(
-        (profiles ?? []).map(async (agent: any) => {
-          const { count } = await supabase
-            .from("casos")
-            .select("id", { count: "exact", head: true })
-            .eq("campana_id", campanaActiva.id)
-            .eq("agente_id", agent.user_id)
-            .in("estado_id", activeEstadoIds);
-          return { user_id: agent.user_id, nombre: agent.nombre, currentCount: count ?? 0 };
-        })
+      // Todos los casos, paginados (la API corta en 1.000 filas)
+      const casosData = await fetchAllPages<{ id: number; clientes: { nombre_contacto: string; razon_social: string | null } | null }>(
+        (from, to) => supabase
+          .from("casos")
+          .select("id, clientes(nombre_contacto, razon_social)")
+          .eq("campana_id", campanaActiva.id)
+          .in("estado_id", estadoIds)
+          .order("id", { ascending: false })
+          .range(from, to)
       );
-      setAgents(agentList.sort((a, b) => a.nombre.localeCompare(b.nombre)));
-      // Preseleccionar todos los agentes
-      setSelectedAgentIds(new Set(agentList.map(a => a.user_id)));
-
-      // ─ 5. Casos a listar según modo
-      if (mode === "registrado") {
-        if (!registradoEstadoId) { toast.error("No se encontró el estado 'Registrado'."); return; }
-        const { data: casosData, error: casosErr } = await supabase
-          .from("casos")
-          .select("id, clientes(nombre_contacto, razon_social)")
-          .eq("campana_id", campanaActiva.id)
-          .eq("estado_id", registradoEstadoId)
-          .order("id", { ascending: false });
-        if (casosErr) throw casosErr;
-        const items: CasoItem[] = (casosData ?? []).map((c: any) => ({
-          id: c.id,
-          nombreCliente: c.clientes?.razon_social || c.clientes?.nombre_contacto || `Caso #${c.id}`,
-        }));
-        setCasos(items);
-        // Preseleccionar todos los casos
-        setSelectedCasoIds(new Set(items.map(c => c.id)));
-      } else {
-        const { data: casosData, error: casosErr } = await supabase
-          .from("casos")
-          .select("id, clientes(nombre_contacto, razon_social)")
-          .eq("campana_id", campanaActiva.id)
-          .in("estado_id", activeEstadoIds)
-          .order("id", { ascending: false });
-        if (casosErr) throw casosErr;
-        const items: CasoItem[] = (casosData ?? []).map((c: any) => ({
-          id: c.id,
-          nombreCliente: c.clientes?.razon_social || c.clientes?.nombre_contacto || `Caso #${c.id}`,
-        }));
-        setCasos(items);
-        setSelectedCasoIds(new Set(items.map(c => c.id)));
-      }
-    } catch (err: any) {
-      toast.error("Error al cargar datos: " + err.message);
+      const items: CasoItem[] = casosData.map((c) => ({
+        id: c.id,
+        nombreCliente: c.clientes?.razon_social || c.clientes?.nombre_contacto || `Caso #${c.id}`,
+      }));
+      setCasos(items);
+      setSelectedCasoIds(new Set(items.map((c) => c.id)));
+    } catch (err) {
+      toast.error("Error al cargar datos", { description: (err as Error).message });
     } finally {
       setLoading(false);
     }
@@ -203,62 +166,30 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
       : `${selectedAgentIds.size} agente${selectedAgentIds.size > 1 ? "s" : ""} seleccionado${selectedAgentIds.size > 1 ? "s" : ""}`;
 
   async function handleConfirm() {
-    if (!campanaActiva?.id || !user) return;
+    if (!campanaActiva?.id) return;
     if (selectedCasoIds.size === 0) { toast.warning("Selecciona al menos un caso."); return; }
     if (selectedAgentIds.size === 0) { toast.warning("Selecciona al menos un agente."); return; }
 
     setSubmitting(true);
     try {
-      const casosToAssign = casos.filter(c => selectedCasoIds.has(c.id));
-      const agentPool = agents
-        .filter(a => selectedAgentIds.has(a.user_id))
-        .sort((a, b) => a.currentCount - b.currentCount);
-
-      // Distribución proporcional: asignar en round-robin ponderado
-      const updates = casosToAssign.map((caso, index) => ({
-        id: caso.id,
-        agente_id: agentPool[index % agentPool.length].user_id,
-      }));
-
-      const chunkSize = 50;
-      for (let i = 0; i < updates.length; i += chunkSize) {
-        for (const u of updates.slice(i, i + chunkSize)) {
-          const { error } = await supabase
-            .from("casos")
-            .update({ agente_id: u.agente_id, updated_by: user.id })
-            .eq("id", u.id);
-          if (error) throw error;
-        }
-      }
-
-      // Obtener estado_id de cada caso para el historial
-      const { data: casosDetalle } = await supabase
-        .from("casos").select("id, estado_id").in("id", updates.map(u => u.id));
-
-      const historialEntries = updates.map((u) => {
-        const caso = casosDetalle?.find(c => c.id === u.id);
-        const agente = agentPool.find(a => a.user_id === u.agente_id);
-        return {
-          caso_id: u.id,
-          estado_id: caso?.estado_id ?? activeEstadoIds[0],
-          cambiado_por: user.id,
-          agente_id: u.agente_id,
-          agente_nombre: agente?.nombre ?? "",
-          observacion: "Asignación proporcional automática",
-        };
+      // Reparto, actualización e historial en una sola transacción (assign_cases):
+      // cada caso va al agente con menos casos abiertos; si alguno falla, no se guarda nada.
+      const casoIds = casos.filter((c) => selectedCasoIds.has(c.id)).map((c) => c.id);
+      const { data, error } = await supabase.rpc("assign_cases", {
+        p_campana_id: campanaActiva.id,
+        p_caso_ids: casoIds,
+        p_agente_ids: [...selectedAgentIds],
       });
-
-      for (let i = 0; i < historialEntries.length; i += chunkSize) {
-        const { error } = await supabase.from("caso_historial").insert(historialEntries.slice(i, i + chunkSize));
-        if (error) throw error;
-      }
-
-      toast.success(`${updates.length} casos asignados entre ${agentPool.length} agentes`);
+      if (error) throw error;
+      const r = data as { asignados: number; por_agente: { nombre: string; asignados: number }[] };
+      toast.success(`${r.asignados} casos asignados entre ${r.por_agente.length} agentes`, {
+        description: r.por_agente.map((a) => `${a.nombre}: ${a.asignados}`).join(" · "),
+      });
       qc.invalidateQueries({ queryKey: ["casos"] });
       qc.invalidateQueries({ queryKey: ["casos-counts"] });
       onOpenChange(false);
-    } catch (err: any) {
-      toast.error("Error: " + err.message);
+    } catch (err) {
+      toast.error("No se pudo asignar", { description: (err as Error).message });
     } finally {
       setSubmitting(false);
     }
