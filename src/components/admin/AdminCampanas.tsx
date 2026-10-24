@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { EstadoBadge } from "@/components/cases/EstadoBadge";
 import { useAllProfiles } from "@/hooks/useAdmin";
 import { useCampanasList, usePerfilCampanas, useAssignCampana, useUnassignCampana } from "@/hooks/useCampanas";
 import { useAllCases, useAdminUpdateCase } from "@/hooks/useAdmin";
@@ -11,9 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Lock } from "lucide-react";
 import { toast } from "sonner";
-import { getEstadoInlineStyle } from "@/lib/estadoColors";
 
 // Devuelve true si el perfil tiene alguno de los roles indicados
 function hasAnyRole(p: any, roleNames: string[]): boolean {
@@ -164,9 +163,9 @@ export default function AdminCampanas() {
         <CardContent>
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div>
-              <Label className="text-xs">Campaña</Label>
+              <Label htmlFor="admin-campanas-campana" className="text-xs">Campaña</Label>
               <Select value={filterCampana} onValueChange={setFilterCampana}>
-                <SelectTrigger className="h-8"><SelectValue placeholder="Todas" /></SelectTrigger>
+                <SelectTrigger id="admin-campanas-campana" className="h-8"><SelectValue placeholder="Todas" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
                   {campanas?.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
@@ -174,9 +173,9 @@ export default function AdminCampanas() {
               </Select>
             </div>
             <div>
-              <Label className="text-xs">Estado</Label>
+              <Label htmlFor="admin-campanas-estado" className="text-xs">Estado</Label>
               <Select value={filterEstado} onValueChange={setFilterEstado}>
-                <SelectTrigger className="h-8"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectTrigger id="admin-campanas-estado" className="h-8"><SelectValue placeholder="Todos" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
                   {estados?.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}
@@ -226,14 +225,7 @@ export default function AdminCampanas() {
                   </TableCell>
                   <TableCell>
                     {/* Paleta de colores consistente con la vista de Casos */}
-                    <span
-                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
-                      style={getEstadoInlineStyle(caso.cat_estados?.nombre)}
-                    >
-                      {caso.cat_estados?.es_final && <Lock className="h-3 w-3" />}
-                      {caso.cat_estados?.nombre === "Transferido" && "🔄 "}
-                      {caso.cat_estados?.nombre}
-                    </span>
+                    <EstadoBadge nombre={caso.cat_estados?.nombre} showLock={!!caso.cat_estados?.es_final} />
                   </TableCell>
                 </TableRow>
               ))}

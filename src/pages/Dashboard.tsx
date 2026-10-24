@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { EstadoBadge } from "@/components/cases/EstadoBadge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
 import { useDashboardStats, QUERY_RESILIENCE } from "@/hooks/useDashboardStats";
@@ -10,14 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import {
-  AlertTriangle, Clock, FolderOpen, CheckCircle, UserX, ShieldAlert, TrendingUp, RefreshCw,
+  AlertTriangle, Clock, FolderOpen, CheckCircle, UserX, ShieldAlert, TrendingUp, RefreshCw, X,
 } from "lucide-react";
 import { formatCOP } from "@/lib/currency";
-import { getEstadoInlineStyle } from "@/lib/estadoColors";
 import {
   startOfDay, startOfWeek, startOfMonth, startOfYear,
   endOfDay, endOfWeek, endOfMonth, endOfYear,
@@ -111,6 +112,8 @@ function useLastUpdated(dataUpdatedAt: number) {
 
 export default function Dashboard() {
   const { user, isAdmin, isAgente, hasRole } = useAuth();
+  // El gerente ve el resumen pero no tiene acceso a /casos
+  const canOpenCases = hasRole(["admin", "supervisor", "agent"]);
   const { campanaActiva } = useCampana();
   const queryClient = useQueryClient();
   const { data: allCampanas = [], isError: campanasError } = useCampanasList();
@@ -309,7 +312,7 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">Resumen general del contact center</p>
         </div>
-        <div className={`flex items-center gap-1.5 text-xs ${isFresh ? "text-accent" : "text-muted-foreground"}`}>
+        <div className={`flex items-center gap-1.5 text-xs ${isFresh ? "text-success" : "text-muted-foreground"}`}>
           <Clock className="h-3.5 w-3.5" />
           <span>{lastUpdatedText}</span>
         </div>
@@ -337,7 +340,7 @@ export default function Dashboard() {
           {totalVencidos > 0 && (
             <div className="flex items-center gap-2">
               <ShieldAlert className="h-5 w-5 text-destructive" />
-              <span className="text-sm font-medium text-destructive">{totalVencidos} casos vencidos SLA</span>
+              <span className="text-sm font-medium text-destructive">{totalVencidos} {totalVencidos === 1 ? "caso vencido" : "casos vencidos"} SLA</span>
               <Button size="sm" variant="outline" className="h-7 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
                 onClick={() => setAlertFilter(alertFilter === "vencidos" ? null : "vencidos")}>
                 {alertFilter === "vencidos" ? "Quitar filtro" : "Ver ahora"}
@@ -347,7 +350,7 @@ export default function Dashboard() {
           {totalSinAsignar > 0 && (
             <div className="flex items-center gap-2">
               <UserX className="h-5 w-5 text-warning" />
-              <span className="text-sm font-medium" style={{ color: "hsl(var(--warning))" }}>{totalSinAsignar} casos sin asignar</span>
+              <span className="text-sm font-medium" style={{ color: "hsl(var(--warning))" }}>{totalSinAsignar} {totalSinAsignar === 1 ? "caso sin asignar" : "casos sin asignar"}</span>
               <Button size="sm" variant="outline" className="h-7 text-xs border-warning/40 hover:bg-warning/10"
                 style={{ color: "hsl(var(--warning))" }}
                 onClick={() => setAlertFilter(alertFilter === "sinAsignar" ? null : "sinAsignar")}>
@@ -431,32 +434,36 @@ export default function Dashboard() {
             <CardTitle className="text-base">
               Casos Recientes
               {alertFilter && (
-                <Badge variant="outline" className="ml-2 text-xs cursor-pointer" onClick={() => setAlertFilter(null)}>
-                  Filtro: {alertFilter === "vencidos" ? "Vencidos" : "Sin asignar"} ✕
-                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ml-2 h-6 gap-1 rounded-full px-2.5 text-xs font-normal"
+                  onClick={() => setAlertFilter(null)}
+                  aria-label={`Quitar filtro: ${alertFilter === "vencidos" ? "vencidos" : "sin asignar"}`}
+                >
+                  Filtro: {alertFilter === "vencidos" ? "Vencidos" : "Sin asignar"}
+                  <X className="h-3 w-3" aria-hidden="true" />
+                </Button>
               )}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="divide-y">
               {recentCases.map((caso: any) => (
-                <div key={caso.id} className="flex items-center justify-between px-5 py-3">
+                <RecentCaseRow key={caso.id} casoId={caso.id} linked={canOpenCases}>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">#{caso.id}</p>
+                    {caso.clientes?.nombre_contacto && (
+                      <p className="text-xs text-muted-foreground truncate">{caso.clientes.nombre_contacto}</p>
+                    )}
                   </div>
                   <div className="text-right flex items-center gap-2">
-                    <span
-                      className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                      style={getEstadoInlineStyle(caso.cat_estados?.nombre)}
-                    >
-                      {caso.cat_estados?.nombre === "Transferido" && "🔄 "}
-                      {caso.cat_estados?.nombre || "—"}
-                    </span>
+                    <EstadoBadge nombre={caso.cat_estados?.nombre} />
                     <span className="text-xs text-muted-foreground whitespace-nowrap">
                       {timeAgo(caso.updated_at || caso.fecha_caso)}
                     </span>
                   </div>
-                </div>
+                </RecentCaseRow>
               ))}
               {recentCases.length === 0 && (
                 <p className="py-8 text-center text-sm text-muted-foreground">No hay casos</p>
@@ -466,6 +473,19 @@ export default function Dashboard() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function RecentCaseRow({ casoId, linked, children }: { casoId: number; linked: boolean; children: React.ReactNode }) {
+  const className = "flex items-center justify-between gap-3 px-5 py-3";
+  if (!linked) return <div className={className}>{children}</div>;
+  return (
+    <Link
+      to={`/casos?caso=${casoId}`}
+      className={`${className} transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
+    >
+      {children}
+    </Link>
   );
 }
 
@@ -626,7 +646,7 @@ function FinancialModule({
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-accent" />
+            <TrendingUp className="h-4 w-4 text-success" />
             Módulo Financiero — {campana.nombre}
           </CardTitle>
           <div className="flex items-center gap-2">
@@ -634,6 +654,8 @@ function FinancialModule({
               {periodos.map((p) => (
                 <button
                   key={p.key}
+                  type="button"
+                  aria-pressed={periodo === p.key}
                   onClick={() => setPeriodo(p.key)}
                   className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
                     periodo === p.key
@@ -647,23 +669,27 @@ function FinancialModule({
             </div>
             <div className="flex gap-1">
               <button
+                type="button"
+                aria-pressed={showRenovado}
                 onClick={() => toggleState("renovado")}
-                className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full border transition-colors ${
                   showRenovado
-                    ? "bg-accent/15 border-accent text-accent"
+                    ? "bg-success/10 border-success text-success"
                     : "border-border text-muted-foreground"
                 }`}
               >
-                🟢 Renovado
+                <span className="h-2 w-2 rounded-full bg-success" aria-hidden="true" />Renovado
               </button>
               <button
+                type="button"
+                aria-pressed={showPendiente}
                 onClick={() => toggleState("pendiente")}
-                className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full border transition-colors ${
                   showPendiente ? "bg-warning/15 border-warning" : "border-border text-muted-foreground"
                 }`}
                 style={showPendiente ? { color: "hsl(var(--warning))" } : {}}
               >
-                🟡 Pendiente
+                <span className="h-2 w-2 rounded-full bg-[hsl(var(--chart-3))]" aria-hidden="true" />Pendiente
               </button>
             </div>
           </div>
@@ -681,28 +707,28 @@ function FinancialModule({
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className={`rounded-lg p-3 text-center transition-opacity ${
-                showRenovado ? "bg-accent/10" : "bg-muted/30 opacity-50"
+                showRenovado ? "bg-success/10" : "bg-muted/30 opacity-50"
               }`}>
-                <p className="text-[11px] text-muted-foreground">💰 Valor Renovado</p>
-                <p className="text-lg font-bold text-accent">
+                <p className="text-[11px] text-muted-foreground">Valor renovado</p>
+                <p className="text-lg font-bold text-success">
                   {renovadoVisible ? formatCOP(renovadoVisible) : "—"}
                 </p>
               </div>
               <div className={`rounded-lg p-3 text-center transition-opacity ${
                 showPendiente ? "bg-warning/10" : "bg-muted/30 opacity-50"
               }`}>
-                <p className="text-[11px] text-muted-foreground">⏳ Valor Pendiente</p>
+                <p className="text-[11px] text-muted-foreground">Valor pendiente</p>
                 <p className="text-lg font-bold" style={{ color: "hsl(var(--warning))" }}>
                   {pendienteVisible ? formatCOP(pendienteVisible) : "—"}
                 </p>
               </div>
               <div className="rounded-lg bg-muted/50 p-3 text-center">
-                <p className="text-[11px] text-muted-foreground">📊 Total en gestión</p>
+                <p className="text-[11px] text-muted-foreground">Total en gestión</p>
                 <p className="text-lg font-bold">{total ? formatCOP(total) : "—"}</p>
               </div>
               {showPctRecuperado && (
                 <div className="rounded-lg bg-muted/50 p-3 text-center">
-                  <p className="text-[11px] text-muted-foreground">📈 % Recuperado</p>
+                  <p className="text-[11px] text-muted-foreground">% Recuperado</p>
                   <p className="text-lg font-bold">
                     {pctRecuperado}{pctRecuperado !== "—" ? "%" : ""}
                   </p>
@@ -712,19 +738,20 @@ function FinancialModule({
 
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={financialData.chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 15%, 90%)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => formatCOP(v)} />
                 <Tooltip
                   formatter={(value: number, name: string) => [formatCOP(value), name]}
                   labelFormatter={(label) => `${label} — ${periodoLabel[periodo]}`}
                 />
-                <Legend />
+                {/* Texto de la leyenda en color de texto; el color de la serie solo en el marcador */}
+                <Legend formatter={(value) => <span className="text-foreground">{value}</span>} />
                 {showRenovado && (
-                  <Bar dataKey="renovado" name="Renovado" fill="hsl(130, 50%, 45%)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="renovado" name="Renovado" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
                 )}
                 {showPendiente && (
-                  <Bar dataKey="pendiente" name="Pendiente de pago" fill="hsl(38, 92%, 50%)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="pendiente" name="Pendiente de pago" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
                 )}
               </BarChart>
             </ResponsiveContainer>

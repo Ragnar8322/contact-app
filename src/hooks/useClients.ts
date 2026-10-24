@@ -1,24 +1,32 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 function sanitizeSearch(text: string): string {
   return text.replace(/[%()]/g, "").trim();
 }
 
-export function useClients(search?: string) {
+export function useClients(search: string, pagination: { page: number; pageSize: number }) {
+  const { page, pageSize } = pagination;
   return useQuery({
-    queryKey: ["clientes", search],
+    queryKey: ["clientes", search, page, pageSize],
+    placeholderData: keepPreviousData,
     queryFn: async () => {
-      let query = supabase.from("clientes").select("*").order("id", { ascending: false });
+      const from = (page - 1) * pageSize;
+      let query = supabase
+        .from("clientes")
+        .select("*", { count: "exact" })
+        .order("id", { ascending: false })
+        .range(from, from + pageSize - 1);
       if (search) {
         const safe = sanitizeSearch(search);
         if (safe) {
           query = query.or(`identificacion.ilike.%${safe}%,nombre_contacto.ilike.%${safe}%,razon_social.ilike.%${safe}%`);
         }
       }
-      const { data, error } = await query;
+      const { data, error, count } = await query;
       if (error) throw error;
-      return data;
+      const totalCount = count ?? 0;
+      return { rows: data, totalCount, totalPages: Math.max(1, Math.ceil(totalCount / pageSize)) };
     },
   });
 }

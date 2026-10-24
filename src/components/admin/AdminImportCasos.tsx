@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { UploadCloud, FileSpreadsheet, CheckCircle2, XCircle, AlertTriangle, Loader2, Trash2, Download } from "lucide-react";
+import { UploadCloud, FileSpreadsheet, CheckCircle2, XCircle, AlertTriangle, Loader2, X, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,7 +64,7 @@ export default function AdminImportCasos() {
       await clearMutation.mutateAsync();
       await insertMutation.mutateAsync(rows);
       await confirmMutation.mutateAsync(campanaActiva?.id ?? null);
-      toast.success(`✅ ${valid.length} casos importados en ${campanaActiva?.nombre ?? "la campaña activa"}`);
+      toast.success(`${valid.length} casos importados en ${campanaActiva?.nombre ?? "la campaña activa"}`);
       setStep("done");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Error al importar";
@@ -149,7 +149,7 @@ export default function AdminImportCasos() {
               <Badge variant="secondary">{rows.length} filas</Badge>
             </div>
             <Button variant="ghost" size="sm" onClick={handleReset}>
-              <Trash2 className="h-4 w-4 mr-1" />Cancelar
+              <X className="h-4 w-4 mr-1" />Cancelar
             </Button>
           </div>
 
@@ -161,16 +161,16 @@ export default function AdminImportCasos() {
                 <p className="text-xs text-muted-foreground mt-1">Total filas</p>
               </CardContent>
             </Card>
-            <Card className="border-green-200 bg-green-50 dark:bg-green-950/20">
+            <Card className="border-success/30 bg-success/10">
               <CardContent className="pt-4 text-center">
-                <p className="text-3xl font-bold text-green-600">{valid.length}</p>
-                <p className="text-xs text-muted-foreground mt-1">Válidas ✅</p>
+                <p className="text-3xl font-bold text-success">{valid.length}</p>
+                <p className="text-xs text-muted-foreground mt-1">Válidas</p>
               </CardContent>
             </Card>
-            <Card className="border-red-200 bg-red-50 dark:bg-red-950/20">
+            <Card className="border-destructive/30 bg-destructive/10">
               <CardContent className="pt-4 text-center">
-                <p className="text-3xl font-bold text-red-600">{invalid.length}</p>
-                <p className="text-xs text-muted-foreground mt-1">Con errores ❌</p>
+                <p className="text-3xl font-bold text-destructive">{invalid.length}</p>
+                <p className="text-xs text-muted-foreground mt-1">Con errores</p>
               </CardContent>
             </Card>
           </div>
@@ -248,7 +248,7 @@ export default function AdminImportCasos() {
 
       {/* STEP 3: Done */}
       {step === "done" && (
-        <Card className="border-green-200 bg-green-50 dark:bg-green-950/20">
+        <Card className="border-success/30 bg-success/10">
           <CardContent className="py-16 text-center space-y-4">
             <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto" />
             <h3 className="text-xl font-bold text-green-700">{valid.length} casos importados exitosamente</h3>

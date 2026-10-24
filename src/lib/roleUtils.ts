@@ -18,3 +18,16 @@ export function hasMinRole(roles: RoleName[], minRole: RoleName): boolean {
   const highest = getHighestRole(roles);
   return ROLE_PRIORITY[highest] >= ROLE_PRIORITY[minRole];
 }
+
+/** Nombre visible de cada rol (los valores en BD están en inglés/minúsculas). */
+export const ROLE_LABELS: Record<RoleName, string> = {
+  admin: "Administrador",
+  gerente: "Gerente",
+  supervisor: "Supervisor",
+  agent: "Agente",
+};
+
+export function roleLabel(role: string | null | undefined): string {
+  if (!role) return "—";
+  return ROLE_LABELS[role.toLowerCase() as RoleName] ?? role;
+}

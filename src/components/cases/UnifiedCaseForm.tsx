@@ -208,9 +208,9 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
 
           {/* Identificación */}
           <div className="space-y-2 mb-4">
-            <Label>Identificación *</Label>
+            <Label htmlFor="unified-case-form-identificacion">Identificación *</Label>
             <div className="relative">
-              <Input
+              <Input id="unified-case-form-identificacion"
                 placeholder="Cédula o NIT..."
                 value={identificacion}
                 onChange={e => handleIdentificacionChange(e.target.value)}
@@ -271,13 +271,13 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
               <div className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Tipo *</Label>
+                    <Label htmlFor="unified-case-form-tipo">Tipo *</Label>
                     <Controller
                       control={clientForm.control}
                       name="tipo_cliente"
                       render={({ field }) => (
                         <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectTrigger id="unified-case-form-tipo"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="Persona">Persona</SelectItem>
                             <SelectItem value="Empresa">Empresa</SelectItem>
@@ -287,13 +287,13 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Nombre del Contacto *</Label>
+                    <Label htmlFor="unified-case-form-nombre-del-contacto">Nombre del Contacto *</Label>
                     <Controller
                       control={clientForm.control}
                       name="nombre_contacto"
                       render={({ field, fieldState }) => (
                         <>
-                          <Input
+                          <Input id="unified-case-form-nombre-del-contacto"
                             {...field}
                             onChange={e => field.onChange(e.target.value.toUpperCase())}
                             className="uppercase"
@@ -308,13 +308,13 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
 
                 {tipoCliente === "Empresa" && (
                   <div className="space-y-2">
-                    <Label>Razón Social *</Label>
+                    <Label htmlFor="unified-case-form-razon-social">Razón Social *</Label>
                     <Controller
                       control={clientForm.control}
                       name="razon_social"
                       render={({ field, fieldState }) => (
                         <>
-                          <Input
+                          <Input id="unified-case-form-razon-social"
                             {...field}
                             onChange={e => field.onChange(e.target.value.toUpperCase())}
                             className="uppercase"
@@ -329,12 +329,12 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Teléfono</Label>
+                    <Label htmlFor="unified-case-form-telefono">Teléfono</Label>
                     <Controller
                       control={clientForm.control}
                       name="telefono"
                       render={({ field }) => (
-                        <Input
+                        <Input id="unified-case-form-telefono" type="tel" inputMode="tel" autoComplete="tel"
                           {...field}
                           onChange={e => field.onChange(e.target.value.replace(/[^0-9]/g, ""))}
                           placeholder="Teléfono fijo"
@@ -343,12 +343,12 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Celular</Label>
+                    <Label htmlFor="unified-case-form-celular">Celular</Label>
                     <Controller
                       control={clientForm.control}
                       name="celular"
                       render={({ field }) => (
-                        <Input
+                        <Input id="unified-case-form-celular" type="tel" inputMode="tel" autoComplete="tel"
                           {...field}
                           onChange={e => field.onChange(e.target.value.replace(/[^0-9]/g, ""))}
                           placeholder="Celular"
@@ -359,13 +359,13 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Correo electrónico</Label>
+                  <Label htmlFor="unified-case-form-correo-electronico">Correo electrónico</Label>
                   <Controller
                     control={clientForm.control}
                     name="correo"
                     render={({ field, fieldState }) => (
                       <>
-                        <Input
+                        <Input id="unified-case-form-correo-electronico"
                           {...field}
                           type="email"
                           onChange={e => field.onChange(e.target.value.toLowerCase())}
@@ -390,7 +390,7 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Tipo de Servicio *</Label>
+              <Label htmlFor="unified-case-form-tipo-de-servicio">Tipo de Servicio *</Label>
               <Controller
                 control={casoForm.control}
                 name="tipo_servicio_id"
@@ -403,7 +403,7 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
                       }}
                       disabled={!section2Enabled}
                     >
-                      <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                      <SelectTrigger id="unified-case-form-tipo-de-servicio"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                       <SelectContent>
                         {tipos?.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.nombre}</SelectItem>)}
                       </SelectContent>
@@ -415,13 +415,13 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
             </div>
 
             <div className="space-y-2">
-              <Label>Descripción Inicial *</Label>
+              <Label htmlFor="unified-case-form-descripcion-inicial">Descripción Inicial *</Label>
               <Controller
                 control={casoForm.control}
                 name="descripcion_inicial"
                 render={({ field, fieldState }) => (
                   <>
-                    <Textarea
+                    <Textarea id="unified-case-form-descripcion-inicial"
                       {...field}
                       rows={3}
                       placeholder="Describe el motivo o requerimiento del caso..."

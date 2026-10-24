@@ -1,5 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdminProfiles from "@/components/admin/AdminProfiles";
 import AdminCases from "@/components/admin/AdminCases";
@@ -9,8 +9,15 @@ import AdminCampanas from "@/components/admin/AdminCampanas";
 import AdminActivityLog from "@/components/admin/AdminActivityLog";
 import AdminImportCasos from "@/components/admin/AdminImportCasos";
 
+const TABS = ["profiles", "cases", "clients", "catalogs", "campanas", "auditoria", "importar"] as const;
+type Tab = typeof TABS[number];
+
 export default function Settings() {
   const { isAdmin, loading } = useAuth();
+  // La pestaña vive en la URL: sobrevive a recargas y se puede enlazar (/ajustes?tab=campanas)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const tab: Tab = TABS.includes(tabParam as Tab) ? (tabParam as Tab) : "profiles";
 
   if (loading) return <div className="flex items-center justify-center py-12 text-muted-foreground">Cargando...</div>;
   if (!isAdmin) return <Navigate to="/" replace />;
@@ -22,8 +29,9 @@ export default function Settings() {
         <p className="text-muted-foreground">Gestión de usuarios, casos, clientes, catálogos, campañas, auditoría e importación</p>
       </div>
 
-      <Tabs defaultValue="profiles" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-7">
+      <Tabs value={tab} onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })} className="space-y-4">
+        {/* En pantallas angostas las pestañas se desplazan en lugar de aplastarse */}
+        <TabsList className="flex h-auto w-full justify-start overflow-x-auto lg:grid lg:grid-cols-7">
           <TabsTrigger value="profiles">Perfiles</TabsTrigger>
           <TabsTrigger value="cases">Casos</TabsTrigger>
           <TabsTrigger value="clients">Clientes</TabsTrigger>

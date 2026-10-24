@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { useClients, useCreateClient, useUpdateClient } from "@/hooks/useClients";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,8 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, Pencil } from "lucide-react";
+import { Search, Plus, Pencil, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { RefetchBar, TableSkeletonRows } from "@/components/TableLoading";
+import { TablePagination } from "@/components/TablePagination";
+
+const PAGE_SIZE = 25;
 
 const emptyForm = {
   identificacion: "", nombre_contacto: "", tipo_cliente: "Persona",
@@ -18,8 +24,13 @@ const emptyForm = {
 
 export default function Clients() {
   const [searchParams] = useSearchParams();
+  const { hasRole } = useAuth();
+  const canOpenCases = hasRole(["admin", "supervisor", "agent"]);
   const [search, setSearch] = useState(searchParams.get("buscar") || "");
-  const { data: clients, isLoading } = useClients(search);
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebouncedValue(search);
+  const { data: result, isLoading, isFetching } = useClients(debouncedSearch, { page, pageSize: PAGE_SIZE });
+  const clients = result?.rows;
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
 
@@ -106,10 +117,11 @@ export default function Clients() {
         <CardHeader className="pb-3">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Buscar por identificación o nombre..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+            <Input placeholder="Buscar por identificación o nombre..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pl-10" aria-label="Buscar clientes" />
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 relative">
+          <RefetchBar active={isFetching && !isLoading} />
           <Table>
             <TableHeader>
               <TableRow>
@@ -119,12 +131,12 @@ export default function Clients() {
                 <TableHead>Tipo</TableHead>
                 <TableHead>Teléfono</TableHead>
                 <TableHead>Correo</TableHead>
-                <TableHead className="w-10"></TableHead>
+                <TableHead className="w-24"><span className="sr-only">Acciones</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8">Cargando...</TableCell></TableRow>
+                <TableSkeletonRows columns={7} />
               ) : clients?.length === 0 ? (
                 <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No se encontraron clientes</TableCell></TableRow>
               ) : clients?.map(c => (
@@ -136,14 +148,31 @@ export default function Clients() {
                   <TableCell>{c.telefono || c.celular || "-"}</TableCell>
                   <TableCell>{c.correo || "-"}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(c)} title="Editar cliente">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      {canOpenCases && (
+                        <Button asChild variant="ghost" size="icon" title="Ver casos del cliente">
+                          <Link to={`/casos?buscar=${encodeURIComponent(c.identificacion)}`} aria-label={`Ver casos de ${c.nombre_contacto}`}>
+                            <FolderOpen className="h-4 w-4" aria-hidden="true" />
+                          </Link>
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(c)} title="Editar cliente" aria-label={`Editar ${c.nombre_contacto}`}>
+                        <Pencil className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          <TablePagination
+            page={page}
+            totalPages={result?.totalPages ?? 1}
+            totalCount={result?.totalCount ?? 0}
+            pageSize={PAGE_SIZE}
+            itemLabel="clientes"
+            onPageChange={setPage}
+          />
         </CardContent>
       </Card>
 
@@ -170,13 +199,13 @@ function ClientForm({ form, setForm, onSubmit, isPending, submitLabel, pendingLa
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label>Identificación *</Label>
-          <Input value={form.identificacion} onChange={e => setForm(f => ({ ...f, identificacion: e.target.value }))} required />
+          <Label htmlFor="clients-identificacion">Identificación *</Label>
+          <Input id="clients-identificacion" value={form.identificacion} onChange={e => setForm(f => ({ ...f, identificacion: e.target.value }))} required />
         </div>
         <div className="space-y-2">
-          <Label>Tipo *</Label>
+          <Label htmlFor="clients-tipo">Tipo *</Label>
           <Select value={form.tipo_cliente} onValueChange={v => setForm(f => ({ ...f, tipo_cliente: v }))}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger id="clients-tipo"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="Persona">Persona</SelectItem>
               <SelectItem value="Empresa">Empresa</SelectItem>
@@ -185,26 +214,26 @@ function ClientForm({ form, setForm, onSubmit, isPending, submitLabel, pendingLa
         </div>
       </div>
       <div className="space-y-2">
-        <Label>Nombre del Contacto *</Label>
-        <Input value={form.nombre_contacto} onChange={e => setForm(f => ({ ...f, nombre_contacto: e.target.value.toUpperCase() }))} className="uppercase" required />
+        <Label htmlFor="clients-nombre-del-contacto">Nombre del Contacto *</Label>
+        <Input id="clients-nombre-del-contacto" value={form.nombre_contacto} onChange={e => setForm(f => ({ ...f, nombre_contacto: e.target.value.toUpperCase() }))} className="uppercase" required />
       </div>
       <div className="space-y-2">
-        <Label>Razón Social</Label>
-        <Input value={form.razon_social} onChange={e => setForm(f => ({ ...f, razon_social: e.target.value.toUpperCase() }))} className="uppercase" />
+        <Label htmlFor="clients-razon-social">Razón Social{form.tipo_cliente === "Empresa" && " *"}</Label>
+        <Input id="clients-razon-social" required={form.tipo_cliente === "Empresa"} value={form.razon_social} onChange={e => setForm(f => ({ ...f, razon_social: e.target.value.toUpperCase() }))} className="uppercase" />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label>Teléfono</Label>
-          <Input value={form.telefono} onChange={e => setForm(f => ({ ...f, telefono: e.target.value.replace(/[^0-9]/g, "") }))} />
+          <Label htmlFor="clients-telefono">Teléfono</Label>
+          <Input id="clients-telefono" type="tel" inputMode="tel" autoComplete="tel" value={form.telefono} onChange={e => setForm(f => ({ ...f, telefono: e.target.value.replace(/[^0-9]/g, "") }))} />
         </div>
         <div className="space-y-2">
-          <Label>Celular</Label>
-          <Input value={form.celular} onChange={e => setForm(f => ({ ...f, celular: e.target.value.replace(/[^0-9]/g, "") }))} />
+          <Label htmlFor="clients-celular">Celular</Label>
+          <Input id="clients-celular" type="tel" inputMode="tel" autoComplete="tel" value={form.celular} onChange={e => setForm(f => ({ ...f, celular: e.target.value.replace(/[^0-9]/g, "") }))} />
         </div>
       </div>
       <div className="space-y-2">
-        <Label>Correo electrónico</Label>
-        <Input type="email" value={form.correo} onChange={e => setForm(f => ({ ...f, correo: e.target.value.toLowerCase() }))} className="lowercase" />
+        <Label htmlFor="clients-correo-electronico">Correo electrónico</Label>
+        <Input id="clients-correo-electronico" type="email" value={form.correo} onChange={e => setForm(f => ({ ...f, correo: e.target.value.toLowerCase() }))} className="lowercase" />
       </div>
       <Button type="submit" className="w-full" disabled={isPending}>
         {isPending ? pendingLabel : submitLabel}

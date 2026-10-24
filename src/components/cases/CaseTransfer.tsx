@@ -129,7 +129,7 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
 
   return (
     <>
-      <Separator />
+      <Separator className="mt-4" />
       <div className="space-y-3">
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <ArrowRightLeft className="h-4 w-4" />

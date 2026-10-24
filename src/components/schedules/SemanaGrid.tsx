@@ -106,7 +106,7 @@ export default function SemanaGrid({ agentes, shifts, semanaInicio, scheduleId, 
         <table className="min-w-full text-xs">
           <thead>
             <tr className="border-b bg-muted/50">
-              <th className="sticky left-0 z-10 bg-muted/50 px-3 py-2 text-left font-semibold w-36">Asesor</th>
+              <th className="sticky left-0 z-10 bg-muted/50 px-3 py-2 text-left font-semibold w-36">Agente</th>
               <th className="px-2 py-2 text-right font-semibold text-muted-foreground w-14">Total</th>
               {DIAS.map((d, i) => (
                 <th key={d} className="px-2 py-2 text-center font-semibold min-w-[100px]">
@@ -153,6 +153,7 @@ export default function SemanaGrid({ agentes, shifts, semanaInicio, scheduleId, 
                         <TurnoCell
                           shift={shift}
                           editable={editable}
+                          label={`${nombre}, ${DIAS[i].toLowerCase()} ${new Date(fechas[i] + "T12:00:00").toLocaleDateString("es-CO", { day: "numeric", month: "short" })}`}
                           novedadHoras={
                             novedadParcial?.hora_inicio_novedad
                               ? {

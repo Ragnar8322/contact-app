@@ -14,6 +14,10 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ["'DM Sans'", "system-ui", "sans-serif"],
+        display: ["'Space Grotesk'", "system-ui", "sans-serif"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -73,6 +77,10 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       keyframes: {
+        "refetch-slide": {
+          from: { transform: "translateX(-100%)" },
+          to: { transform: "translateX(300%)" },
+        },
         "accordion-down": {
           from: {
             height: "0",

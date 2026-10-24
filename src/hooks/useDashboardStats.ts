@@ -44,7 +44,7 @@ export function useDashboardStats(
       const { data: allCases, error } = await supabase
         .from("casos")
         .select(
-          "id, estado_id, agente_id, fecha_caso, fecha_cierre, campana_id, valor_pagar, updated_at, cat_estados(nombre, es_final)"
+          "id, estado_id, agente_id, fecha_caso, fecha_cierre, campana_id, valor_pagar, updated_at, cat_estados(nombre, es_final), clientes(nombre_contacto)"
         )
         .in("campana_id", campanaIds)
         .order("updated_at", { ascending: false }); // Casos más recientes primero

@@ -34,7 +34,7 @@ const queryClient = new QueryClient({
 
 function LoadingScreen() {
   return (
-    <div className="flex h-screen items-center justify-center text-muted-foreground">
+    <div className="flex h-screen items-center justify-center text-muted-foreground" role="status" aria-live="polite">
       Cargando...
     </div>
   );
@@ -72,7 +72,7 @@ function CampaignRoute() {
 
 function AuthRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
-  if (loading) return null;
+  if (loading) return <LoadingScreen />;
   if (session) return <Navigate to="/" replace />;
   return <>{children}</>;
 }

@@ -1,4 +1,5 @@
 import { useCampana } from "@/contexts/CampanaContext";
+import { APP_MONOGRAM } from "@/lib/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -58,8 +59,8 @@ export default function SelectCampaign() {
       {headerBar}
       <div className="w-full max-w-2xl space-y-6">
         <div className="text-center space-y-2">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-xl">
-            CC
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-xl" aria-hidden="true">
+            {APP_MONOGRAM}
           </div>
           <h1 className="text-2xl font-bold tracking-tight font-display">Selecciona una campaña</h1>
           <p className="text-muted-foreground">Elige el espacio de trabajo en el que deseas operar</p>
@@ -67,21 +68,22 @@ export default function SelectCampaign() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           {campanas.map(c => (
-            <Card
+            <button
               key={c.id}
-              className="border-0 shadow-md cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02] hover:ring-2 hover:ring-primary/30"
+              type="button"
               onClick={() => setCampanaActiva(c)}
+              className="group rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
-              <CardContent className="p-6 flex flex-col items-center text-center space-y-3">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  {getIcon(c.nombre)}
-                </div>
-                <h3 className="text-lg font-semibold font-display">{c.nombre}</h3>
-                {c.descripcion && (
-                  <p className="text-sm text-muted-foreground">{c.descripcion}</p>
-                )}
-              </CardContent>
-            </Card>
+              <span className="flex h-full flex-col items-center space-y-3 rounded-lg bg-card p-6 text-center text-card-foreground shadow-md transition-[box-shadow,transform] duration-150 group-hover:shadow-lg group-hover:ring-2 group-hover:ring-primary/30 group-active:scale-[0.98] motion-reduce:transition-none motion-reduce:group-active:scale-100">
+                  <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary" aria-hidden="true">
+                    {getIcon(c.nombre)}
+                  </span>
+                  <span className="block text-lg font-semibold font-display">{c.nombre}</span>
+                  {c.descripcion && (
+                    <span className="block text-sm text-muted-foreground">{c.descripcion}</span>
+                  )}
+              </span>
+            </button>
           ))}
         </div>
       </div>

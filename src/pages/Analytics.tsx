@@ -1,8 +1,9 @@
 import { useState, useRef } from "react";
 import { format } from "date-fns";
-import { BarChart2, FileSpreadsheet, FileText, RefreshCw, Loader2, Filter, X } from "lucide-react";
+import { FileSpreadsheet, FileText, RefreshCw, Loader2, Filter, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -814,10 +815,7 @@ export default function Analytics() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <BarChart2 className="h-6 w-6" />
-            Analítica
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight">Analítica</h1>
           <p className="text-muted-foreground">Análisis detallado de gestión, casos y rendimiento</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -825,11 +823,11 @@ export default function Analytics() {
             {isRefetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             <span className="ml-1 hidden sm:inline">Actualizar</span>
           </Button>
-          <Button onClick={handleExportPdf} disabled={exportingPdf || !hasData} className="bg-primary hover:bg-primary/90">
+          <Button variant="outline" onClick={handleExportPdf} disabled={exportingPdf || !hasData}>
             {exportingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
             <span className="ml-1">Exportar PDF</span>
           </Button>
-          <Button onClick={handleExportExcel} disabled={exportingExcel || !hasData} className="bg-primary hover:bg-primary/90">
+          <Button variant="outline" onClick={handleExportExcel} disabled={exportingExcel || !hasData}>
             {exportingExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
             <span className="ml-1">Exportar Excel</span>
           </Button>
@@ -877,7 +875,7 @@ export default function Analytics() {
                 {estadoOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Button onClick={handleApplyFilters} className="bg-primary hover:bg-primary/90"><Filter className="h-4 w-4 mr-1" />Aplicar</Button>
+            <Button onClick={handleApplyFilters}><Filter className="h-4 w-4 mr-1" />Aplicar</Button>
             <Button variant="ghost" onClick={handleClearFilters}><X className="h-4 w-4 mr-1" />Limpiar filtros</Button>
             {activeFilterCount > 0 && (
               <Badge variant="secondary" className="ml-2">
@@ -888,23 +886,31 @@ export default function Analytics() {
         </CardContent>
       </Card>
 
-      {isLoading || isRefetching ? (
-        <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+      {/* Solo la primera carga muestra esqueletos; al actualizar se conservan los datos visibles */}
+      {isLoading ? (
+        <div className="space-y-6" aria-busy="true" aria-label="Cargando analítica">
+          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24 rounded-lg" />)}
+          </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            {[1, 2].map((i) => <Skeleton key={i} className="h-72 rounded-lg" />)}
+          </div>
+        </div>
       ) : !hasData ? (
         <Card><CardContent className="py-20 text-center"><p className="text-muted-foreground">Sin datos para los filtros seleccionados</p></CardContent></Card>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total Casos</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(data!.totalCasos)}</div></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Casos Renovados</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">{formatNumber(data!.casosRenovados)}</div></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Tasa de Renovación</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-blue-600">{formatPercentage(data!.tasaRenovacion)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Casos Renovados</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-success">{formatNumber(data!.casosRenovados)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Tasa de Renovación</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-primary">{formatPercentage(data!.tasaRenovacion)}</div></CardContent></Card>
             <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Gestiones Registradas</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatNumber(data!.gestionesRegistradas)}</div></CardContent></Card>
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">💰 Total Facturado</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">{formatCOPValue(data!.totalFacturado)}</div></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">⏳ Pendiente de Cobro</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-amber-600">{formatCOPValue(data!.pendienteCobro)}</div></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">📊 Valor Promedio</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatCOPValue(data!.valorPromedio)}</div></CardContent></Card>
-            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">🎯 % Recaudo</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-blue-600">{formatPercentage(data!.porcentajeRecaudo)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total facturado</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-success">{formatCOPValue(data!.totalFacturado)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Pendiente de cobro</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-warning">{formatCOPValue(data!.pendienteCobro)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Valor promedio</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatCOPValue(data!.valorPromedio)}</div></CardContent></Card>
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">% Recaudo</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-primary">{formatPercentage(data!.porcentajeRecaudo)}</div></CardContent></Card>
           </div>
 
           <div ref={chartsRef} className="grid gap-4 md:grid-cols-2">
@@ -947,7 +953,7 @@ export default function Analytics() {
                       <TableCell className="text-right">{formatNumber(agent.gestiones)}</TableCell>
                       <TableCell className="text-right">{formatNumber(agent.renovados)}</TableCell>
                       <TableCell className="text-right">
-                        <span className={cn(agent.tasaRenovacion >= 50 ? "text-green-600" : agent.tasaRenovacion >= 25 ? "text-amber-600" : "text-red-600")}>
+                        <span className={cn(agent.tasaRenovacion >= 50 ? "text-success" : agent.tasaRenovacion >= 25 ? "text-warning" : "text-red-600")}>
                           {formatPercentage(agent.tasaRenovacion)}
                         </span>
                       </TableCell>

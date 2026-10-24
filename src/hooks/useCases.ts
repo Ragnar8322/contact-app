@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getHighestRole } from "@/lib/roleUtils";
@@ -38,6 +38,8 @@ export function useCases(filters?: CasesFilters, pagination?: PaginationParams) 
 
   return useQuery({
     queryKey: ["casos", filters, page, pageSize, highestRole, user?.id],
+    // Mantiene la página anterior visible mientras llega la nueva (búsqueda, filtros, paginación)
+    placeholderData: keepPreviousData,
     queryFn: async (): Promise<PaginatedResult<any>> => {
       let query = supabase
         .from("casos")

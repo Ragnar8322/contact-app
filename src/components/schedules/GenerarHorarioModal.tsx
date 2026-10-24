@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useGenerateSchedule } from "@/hooks/useSchedules";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Sparkles, Loader2, Info, Clock } from "lucide-react";
 
 // Opciones de hora en bloques de 30 min para inicio y fin
@@ -57,7 +57,6 @@ interface Props {
 }
 
 export default function GenerarHorarioModal({ scheduleId, open, onClose, onGenerated }: Props) {
-  const { toast } = useToast();
   const { mutate: generate, isPending } = useGenerateSchedule();
 
   const [horaInicio,    setHoraInicio   ] = useState("07:30");
@@ -80,15 +79,12 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
       },
       {
         onSuccess: (count) => {
-          toast({
-            title: `Horario generado`,
-            description: `${count} turnos creados. Sábado: 08:00–12:00. L-V con breaks y almuerzo flexibles.`,
-          });
+          toast.success(`Horario generado`, { description: `${count} turnos creados. Sábado: 08:00–12:00. L-V con breaks y almuerzo flexibles.` });
           onGenerated();
           onClose();
         },
         onError: (err: Error) => {
-          toast({ title: "Error al generar horario", description: err.message, variant: "destructive" });
+          toast.error("Error al generar horario", { description: err.message });
         },
       }
     );
@@ -142,12 +138,12 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
           {/* Hora inicio / fin — Select en lugar de input time para evitar formato 12h */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5">
+              <Label htmlFor="generar-horario-modal-inicio-l-v" className="flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                 Inicio L-V
               </Label>
               <Select value={horaInicio} onValueChange={setHoraInicio}>
-                <SelectTrigger>
+                <SelectTrigger id="generar-horario-modal-inicio-l-v">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -158,12 +154,12 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5">
+              <Label htmlFor="generar-horario-modal-fin-l-v" className="flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                 Fin L-V
               </Label>
               <Select value={horaFin} onValueChange={setHoraFin}>
-                <SelectTrigger>
+                <SelectTrigger id="generar-horario-modal-fin-l-v">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -177,9 +173,9 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
 
           {/* Almuerzo */}
           <div className="space-y-1.5">
-            <Label>Duración almuerzo</Label>
+            <Label htmlFor="generar-horario-modal-duracion-almuerzo">Duración almuerzo</Label>
             <Select value={durAlmuerzo} onValueChange={setDurAlmuerzo}>
-              <SelectTrigger>
+              <SelectTrigger id="generar-horario-modal-duracion-almuerzo">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -209,9 +205,9 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
 
           {/* Tipo de actividad */}
           <div className="space-y-1.5">
-            <Label>Actividad principal</Label>
+            <Label htmlFor="generar-horario-modal-actividad-principal">Actividad principal</Label>
             <Select value={tipoActividad} onValueChange={setTipoActividad}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="generar-horario-modal-actividad-principal"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {ACTIVIDADES_PRODUCTIVAS.map((a) => (
                   <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
@@ -222,10 +218,10 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
 
           {/* Día libre base */}
           <div className="space-y-1.5">
-            <Label>Día libre del 1er agente</Label>
+            <Label htmlFor="generar-horario-modal-dia-libre-del-1er">Día libre del 1er agente</Label>
             <p className="text-xs text-muted-foreground -mt-1">El resto de agentes rotan desde este día.</p>
             <Select value={diaLibreBase} onValueChange={setDiaLibreBase}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="generar-horario-modal-dia-libre-del-1er"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {DIAS.map((d) => (
                   <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>

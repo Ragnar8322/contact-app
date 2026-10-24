@@ -7,7 +7,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { CalendarIcon, Search, X } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { CasesFilters } from "@/hooks/useCases";
@@ -172,14 +172,14 @@ export default function CasesFilterBar({
             >
               <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
               {filters.fechaDesde
-                ? format(new Date(filters.fechaDesde), "dd/MM/yyyy")
+                ? format(parseISO(filters.fechaDesde), "dd/MM/yyyy")
                 : "Desde"}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
             <Calendar
               mode="single"
-              selected={filters.fechaDesde ? new Date(filters.fechaDesde) : undefined}
+              selected={filters.fechaDesde ? parseISO(filters.fechaDesde) : undefined}
               onSelect={(d) =>
                 onFiltersChange({
                   ...filters,
@@ -205,14 +205,14 @@ export default function CasesFilterBar({
             >
               <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
               {filters.fechaHasta
-                ? format(new Date(filters.fechaHasta), "dd/MM/yyyy")
+                ? format(parseISO(filters.fechaHasta), "dd/MM/yyyy")
                 : "Hasta"}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
             <Calendar
               mode="single"
-              selected={filters.fechaHasta ? new Date(filters.fechaHasta) : undefined}
+              selected={filters.fechaHasta ? parseISO(filters.fechaHasta) : undefined}
               onSelect={(d) =>
                 onFiltersChange({
                   ...filters,

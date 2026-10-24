@@ -200,8 +200,26 @@ export const ACTIVIDAD_COLORS: Record<TipoActividad, string> = {
   Descanso:     "bg-gray-100 text-gray-600",
   Vacaciones:   "bg-teal-100 text-teal-800",
   Incapacidad:  "bg-red-100 text-red-800",
-  No_aplica:    "bg-slate-100 text-slate-500",
+  No_aplica:    "bg-slate-100 text-slate-600",
 };
+
+/** Texto visible para cada tipo de actividad (el valor guardado puede tener "_") */
+export const ACTIVIDAD_LABELS: Record<TipoActividad, string> = {
+  GAP:         "GAP",
+  Tele:        "Tele",
+  Calidad:     "Calidad",
+  Apoyo:       "Apoyo",
+  VIP:         "VIP",
+  Descanso:    "Descanso",
+  Vacaciones:  "Vacaciones",
+  Incapacidad: "Incapacidad",
+  No_aplica:   "No aplica",
+};
+
+export function actividadLabel(tipo: string | null | undefined): string {
+  if (!tipo) return "—";
+  return ACTIVIDAD_LABELS[tipo as TipoActividad] ?? tipo.replace(/_/g, " ");
+}
 
 /** Label legible para tipo novedad */
 export const NOVEDAD_LABELS: Record<TipoNovedad, string> = {
