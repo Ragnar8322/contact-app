@@ -57,10 +57,9 @@ export function useAllProfiles() {
       const assignmentsByUser: Record<string, { role_id: number; role_name: string }[]> = {};
       assignments?.forEach(a => {
         if (!assignmentsByUser[a.user_id]) assignmentsByUser[a.user_id] = [];
-        const roleData = Array.isArray(a.user_roles) ? a.user_roles[0] : a.user_roles;
         assignmentsByUser[a.user_id].push({
           role_id: a.role_id,
-          role_name: (roleData as any)?.name || "",
+          role_name: a.user_roles?.name || "",
         });
       });
 
@@ -246,3 +245,6 @@ export function useUpdateClient() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["clientes"] }),
   });
 }
+
+export type AdminProfile = NonNullable<ReturnType<typeof useAllProfiles>["data"]>[number];
+export type AdminCase = NonNullable<NonNullable<ReturnType<typeof useAllCases>["data"]>["data"]>[number];

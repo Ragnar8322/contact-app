@@ -3,7 +3,7 @@ import { EstadoBadge } from "@/components/cases/EstadoBadge";
 import { CaseIdButton } from "@/components/cases/CaseIdButton";
 import { TableSkeletonRows } from "@/components/TableLoading";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAllCases, useAdminUpdateCase } from "@/hooks/useAdmin";
+import { useAllCases, useAdminUpdateCase, type AdminCase } from "@/hooks/useAdmin";
 import { useEstados, useTiposServicio, useAgentes, useInsertHistorial } from "@/hooks/useCases";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -20,6 +20,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useCaseHistory } from "@/hooks/useCases";
 import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
+import { errorMessage } from "@/lib/errors";
 
 const PAGE_SIZE = 50;
 
@@ -61,7 +62,7 @@ export default function AdminCases() {
   // Detail
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const { data: history } = useCaseHistory(selectedId);
-  const selectedCase = cases?.find((c: any) => c.id === selectedId);
+  const selectedCase = cases?.find((c) => c.id === selectedId);
 
   const [editEstado, setEditEstado] = useState(0);
   const [originalEstado, setOriginalEstado] = useState(0);
@@ -78,7 +79,7 @@ export default function AdminCases() {
   const selectedEstadoNombre = estados?.find(e => e.id === editEstado)?.nombre;
   const showValorPagar = isEditRenovacion && (selectedEstadoNombre === "Renovado" || selectedEstadoNombre === "Pendiente de Pago");
 
-  const openDetail = (caso: any) => {
+  const openDetail = (caso: AdminCase) => {
     setSelectedId(caso.id);
     setEditEstado(caso.estado_id);
     setOriginalEstado(caso.estado_id);
@@ -116,15 +117,15 @@ export default function AdminCases() {
       setValorError("");
     }
     try {
-      const updates: any = { id: selectedId, estado_id: editEstado, agente_id: editAgente, tipo_servicio_id: editTipo, updated_by: user.id };
-      if (showValorPagar) {
-        updates.valor_pagar = parseCOPInput(editValorDisplay);
-      }
-      if (selectedEstadoFinal) {
-        updates.fecha_cierre = new Date().toISOString();
-        updates.observacion_cierre = editObservaciones.trim();
-      }
-      await updateCase.mutateAsync(updates);
+      await updateCase.mutateAsync({
+        id: selectedId,
+        estado_id: editEstado,
+        agente_id: editAgente,
+        tipo_servicio_id: editTipo,
+        updated_by: user.id,
+        ...(showValorPagar ? { valor_pagar: parseCOPInput(editValorDisplay) } : {}),
+        ...(selectedEstadoFinal ? { fecha_cierre: new Date().toISOString(), observacion_cierre: editObservaciones.trim() } : {}),
+      });
       if (estadoChanged) {
         await insertHistorial.mutateAsync({
           caso_id: selectedId,
@@ -137,8 +138,8 @@ export default function AdminCases() {
       setEditObservaciones("");
       setObsError("");
       toast.success("Caso actualizado");
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(errorMessage(err));
     }
   };
 
@@ -200,7 +201,7 @@ export default function AdminCases() {
                 <TableSkeletonRows columns={8} />
               ) : !cases?.length ? (
                 <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No hay casos</TableCell></TableRow>
-              ) : cases.map((caso: any) => (
+              ) : cases.map((caso) => (
                 <TableRow key={caso.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(caso)}>
                   <TableCell><CaseIdButton id={caso.id} onOpen={() => openDetail(caso)} /></TableCell>
                   <TableCell>{caso.clientes?.nombre_contacto || "-"}</TableCell>
@@ -326,7 +327,7 @@ export default function AdminCases() {
               <div>
                 <h3 className="mb-3 text-sm font-semibold">Historial de gestiones</h3>
                 <div className="space-y-2">
-                  {history?.map((h: any) => (
+                  {history?.map((h) => (
                     <div key={h.id} className="rounded-lg bg-muted p-3 text-sm">
                       <div className="flex items-center justify-between">
                         <EstadoBadge nombre={h.cat_estados?.nombre} />

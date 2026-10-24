@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { UploadCloud, FileSpreadsheet, CheckCircle2, XCircle, AlertTriangle, Loader2, X, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { validateRow, useClearStaging, useInsertStaging, useConfirmImport, type StagingRow, type ImportResult } from "@/hooks/useImportCasos";
 import { useCampana } from "@/contexts/CampanaContext";
+import { XLSX_MIME, readFirstSheet, loadExcelJS, downloadWorkbook } from "@/lib/reports/excel";
+import { errorMessage } from "@/lib/errors";
 
 const TEMPLATE_HEADERS = [
   "cliente_identificacion",
@@ -37,25 +39,20 @@ export default function AdminImportCasos() {
   const valid   = rows.filter(r => r._valid);
   const invalid = rows.filter(r => !r._valid);
 
-  // Parse Excel with dynamic import (xlsx already lazy from Fase 5)
+  // ExcelJS se carga bajo demanda al soltar el archivo
   const parseFile = useCallback(async (file: File) => {
     try {
-      const XLSX = await import("xlsx");
-      const buffer = await file.arrayBuffer();
-      const wb     = XLSX.read(buffer, { type: "array", cellDates: true });
-      const ws     = wb.Sheets[wb.SheetNames[0]];
-      const raw    = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null });
-      const parsed = raw.map((r, i) => validateRow(r, i + 2)); // row 2 = first data row
-      setRows(parsed);
+      const filas = await readFirstSheet(await file.arrayBuffer());
+      setRows(filas.map((f) => validateRow(f.valores, f.fila)));
       setFileName(file.name);
       setStep("preview");
     } catch {
-      toast.error("No se pudo leer el archivo. Asegúrate de que sea .xlsx o .xls");
+      toast.error("No se pudo leer el archivo. Asegúrate de que sea un Excel .xlsx");
     }
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"], "application/vnd.ms-excel": [".xls"] },
+    accept: { [XLSX_MIME]: [".xlsx"] },
     maxFiles: 1,
     onDrop: ([file]) => file && parseFile(file),
   });
@@ -70,7 +67,7 @@ export default function AdminImportCasos() {
       if (r.skipped > 0) toast.warning(`${r.skipped} filas rechazadas`, { description: "Revisa el detalle para corregirlas." });
       setStep("done");
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Error al importar";
+      const msg = errorMessage(e, "Error al importar");
       toast.error(msg);
     }
   };
@@ -82,17 +79,13 @@ export default function AdminImportCasos() {
     setStep("upload");
   };
 
-  // Download template
   const handleTemplate = async () => {
-    const XLSX = await import("xlsx");
-    const ws = XLSX.utils.aoa_to_sheet([
-      TEMPLATE_HEADERS,
-      ["900123456", "agente@camarabaq.org.co", "Registrado", "Renovación Web", "Solicita renovación de matrícula", "15/01/2026", "$150.000"],
-    ]);
-    ws["!cols"] = TEMPLATE_HEADERS.map(() => ({ wch: 22 }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Plantilla");
-    XLSX.writeFile(wb, "plantilla_importacion_casos.xlsx");
+    const ExcelJS = await loadExcelJS();
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Plantilla");
+    ws.columns = TEMPLATE_HEADERS.map((h) => ({ header: h, key: h, width: 22 }));
+    ws.addRow(["900123456", "agente@camarabaq.org.co", "Registrado", "Renovación Web", "Solicita renovación de matrícula", "15/01/2026", "$150.000"]);
+    await downloadWorkbook(wb, "plantilla_importacion_casos.xlsx");
   };
 
   const isLoading = clearMutation.isPending || insertMutation.isPending || confirmMutation.isPending;
@@ -101,16 +94,16 @@ export default function AdminImportCasos() {
     <div className="space-y-6">
       {/* Progress steps */}
       <div className="flex items-center gap-2 text-sm">
-        {(["upload", "preview", "done"] as Step[]).map((s, i) => (
-          <>
-            <span key={s} className={`flex items-center gap-1 font-medium ${
+        {STEPS.map((s, i) => (
+          <Fragment key={s}>
+            <span className={`flex items-center gap-1 font-medium ${
               step === s ? "text-primary" : STEPS.indexOf(step) > i ? "text-success" : "text-muted-foreground"
             }`}>
               {STEPS.indexOf(step) > i ? <CheckCircle2 className="h-4 w-4" /> : <span className="w-5 h-5 rounded-full border flex items-center justify-center text-xs">{i + 1}</span>}
               {s === "upload" ? "Cargar archivo" : s === "preview" ? "Revisar" : "Completado"}
             </span>
             {i < 2 && <span className="text-muted-foreground">→</span>}
-          </>
+          </Fragment>
         ))}
       </div>
 
@@ -131,7 +124,7 @@ export default function AdminImportCasos() {
             <input {...getInputProps()} />
             <UploadCloud className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-lg font-medium">{isDragActive ? "Suelta el archivo aquí" : "Arrastra tu archivo Excel aquí"}</p>
-            <p className="text-sm text-muted-foreground mt-1">o haz clic para seleccionar · .xlsx / .xls</p>
+            <p className="text-sm text-muted-foreground mt-1">o haz clic para seleccionar · .xlsx</p>
           </div>
           <Alert>
             <FileSpreadsheet className="h-4 w-4" />

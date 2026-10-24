@@ -1,63 +1,19 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { EstadoBadge } from "@/components/cases/EstadoBadge";
+import { useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Clock, RefreshCw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
-import { useDashboardStats, useDashboardAgentStats, useRecentCases, localTimeZone, QUERY_RESILIENCE } from "@/hooks/useDashboardStats";
+import {
+  useDashboardStats, useDashboardAgentStats, useDashboardAgents, useRecentCases, type RecentCasesFilter,
+} from "@/hooks/useDashboardStats";
 import { useSLAConfigs } from "@/hooks/useSLA";
 import { useCampanasList } from "@/hooks/useCampanas";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supabase } from "@/integrations/supabase/client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { FinancialModule } from "@/components/dashboard/FinancialModule";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-} from "recharts";
-import {
-  AlertTriangle, Clock, FolderOpen, CheckCircle, UserX, ShieldAlert, TrendingUp, RefreshCw, X,
-} from "lucide-react";
-import { formatCOP, formatCOPCompact } from "@/lib/currency";
-import { buildFinancialChart, type Periodo } from "@/lib/financial";
-import {
-  startOfDay, startOfWeek, startOfMonth, startOfYear,
-  endOfDay, endOfWeek, endOfMonth, endOfYear,
-  differenceInMinutes, differenceInHours, differenceInDays,
-} from "date-fns";
-
-function getPeriodRange(periodo: Periodo): { inicio: number; fin: number; diasEnMes: number } {
-  const now = new Date();
-  switch (periodo) {
-    case "dia":
-      return { inicio: startOfDay(now).getTime(), fin: endOfDay(now).getTime(), diasEnMes: 0 };
-    case "semana":
-      return {
-        inicio: startOfWeek(now, { weekStartsOn: 1 }).getTime(),
-        fin:    endOfWeek(now,   { weekStartsOn: 1 }).getTime(),
-        diasEnMes: 0,
-      };
-    case "mes":
-      return {
-        inicio: startOfMonth(now).getTime(),
-        fin:    endOfMonth(now).getTime(),
-        diasEnMes: endOfMonth(now).getDate(),
-      };
-    case "año":
-      return { inicio: startOfYear(now).getTime(), fin: endOfYear(now).getTime(), diasEnMes: 0 };
-  }
-}
-
-function timeAgo(dateStr: string): string {
-  const now = new Date();
-  const d = new Date(dateStr);
-  const mins = differenceInMinutes(now, d);
-  if (mins < 60) return `${mins} min`;
-  const hrs = differenceInHours(now, d);
-  if (hrs < 24) return `${hrs} h`;
-  const days = differenceInDays(now, d);
-  return `${days} d`;
-}
+  AgentsCard, CampaignKpis, DashboardSkeleton, RecentCasesCard, SlaAlerts, type AgentRow,
+} from "@/components/dashboard/DashboardSections";
 
 function useLastUpdated(dataUpdatedAt: number) {
   const [now, setNow] = useState(Date.now());
@@ -70,6 +26,18 @@ function useLastUpdated(dataUpdatedAt: number) {
   const isFresh = mins < 2;
   const text = mins < 1 ? "Ahora" : `Hace ${mins} min`;
   return { text, isFresh };
+}
+
+function DashboardHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground">Resumen general del contact center</p>
+      </div>
+      {children}
+    </div>
+  );
 }
 
 export default function Dashboard() {
@@ -110,42 +78,9 @@ export default function Dashboard() {
   } = useDashboardStats(campanaIds, campanaNombres);
   const { data: agentCounts = {}, isError: agentStatsError } = useDashboardAgentStats(campanaIds);
 
-  const { data: agents = [], isLoading: agentsLoading, isError: agentsError } = useQuery({
-    queryKey: ["dashboard-agents"],
-    ...QUERY_RESILIENCE,
-    queryFn: async () => {
-      const { data: roleRow, error: roleErr } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("name", "agent")
-        .single();
-      if (roleErr || !roleRow) return [];
-      const { data: assignments, error: assignErr } = await supabase
-        .from("user_role_assignments")
-        .select("user_id")
-        .eq("role_id", roleRow.id);
-      if (assignErr) throw assignErr;
-      const userIds = (assignments ?? []).map((a: any) => a.user_id);
-      if (userIds.length === 0) return [];
-      const { data: profiles, error: profErr } = await supabase
-        .from("profiles")
-        .select("user_id, nombre")
-        .in("user_id", userIds)
-        .order("nombre");
-      if (profErr) throw profErr;
-      return profiles ?? [];
-    },
-  });
-
-  const { data: agentCampanas = [] } = useQuery({
-    queryKey: ["dashboard-agent-campanas"],
-    ...QUERY_RESILIENCE,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("perfil_campanas").select("user_id, campana_id");
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  const { agents: agentsQuery, campanas: agentCampanasQuery } = useDashboardAgents();
+  const { data: agents = [], isLoading: agentsLoading, isError: agentsError } = agentsQuery;
+  const { data: agentCampanas = [] } = agentCampanasQuery;
 
   const hasError = campanasError || slaError || statsError || agentsError || agentStatsError;
   const { text: lastUpdatedText, isFresh } = useLastUpdated(statsUpdatedAt);
@@ -161,34 +96,25 @@ export default function Dashboard() {
     queryClient.invalidateQueries({ queryKey: ["financial-summary"] });
   }, [queryClient]);
 
-  const [alertFilter, setAlertFilter] = useState<"vencidos" | "sinAsignar" | null>(null);
-  const totalVencidos   = stats?.totalVencidos   ?? 0;
-  const totalSinAsignar = stats?.totalSinAsignar ?? 0;
-  const showAlerts = totalVencidos > 0 || totalSinAsignar > 0;
+  const [alertFilter, setAlertFilter] = useState<RecentCasesFilter>(null);
 
   const renovacionCampana = useMemo(
     () => allCampanas.find((c) => c.nombre.toLowerCase().includes("renovaci")),
     [allCampanas]
   );
 
-  const visibleAgents = useMemo(() => {
-    if (!agents || !Array.isArray(agents)) return [];
-    if (isAdmin) return agents;
-    return agents.filter((a: any) => a.user_id === user?.id);
-  }, [agents, isAdmin, user]);
-
-  const agentStats = useMemo(() => {
-    if (!visibleAgents.length) return [];
-    return visibleAgents.map((agent: any) => {
+  const agentStats = useMemo((): AgentRow[] => {
+    const visibleAgents = isAdmin ? agents : agents.filter((a) => a.user_id === user?.id);
+    return visibleAgents.map((agent) => {
       const counts = agentCounts[agent.user_id] ?? { activos: 0, vencidos: 0 };
-      const campanaNames = (agentCampanas ?? [])
-        .filter((ac: any) => ac.user_id === agent.user_id)
-        .map((ac: any) => campanaNombres[ac.campana_id] || "")
+      const campanaNames = agentCampanas
+        .filter((ac) => ac.user_id === agent.user_id)
+        .map((ac) => (ac.campana_id && campanaNombres[ac.campana_id]) || "")
         .filter(Boolean)
         .join(", ");
       return { ...agent, casosActivos: counts.activos, casosVencidos: counts.vencidos, campanaNames };
     });
-  }, [visibleAgents, agentCounts, agentCampanas, campanaNombres]);
+  }, [agents, isAdmin, user, agentCounts, agentCampanas, campanaNombres]);
 
   const { data: recentCases = [] } = useRecentCases(
     campanaActiva?.id,
@@ -201,55 +127,20 @@ export default function Dashboard() {
   if (isFirstLoad) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground">Resumen general del contact center</p>
-          </div>
-          <Skeleton className="h-5 w-32" />
-        </div>
-        <div className="grid gap-6 lg:grid-cols-2">
-          {[1, 2].map((i) => (
-            <Card key={i} className="border-0 shadow-sm">
-              <CardHeader className="pb-3"><Skeleton className="h-5 w-40" /></CardHeader>
-              <CardContent><div className="grid grid-cols-5 gap-3">{[1,2,3,4,5].map(j => <Skeleton key={j} className="h-20 rounded-lg" />)}</div></CardContent>
-            </Card>
-          ))}
-        </div>
-        <Card className="border-0 shadow-sm">
-          <CardHeader><Skeleton className="h-5 w-60" /></CardHeader>
-          <CardContent><Skeleton className="h-72 w-full rounded-lg" /></CardContent>
-        </Card>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card className="border-0 shadow-sm">
-            <CardHeader><Skeleton className="h-5 w-32" /></CardHeader>
-            <CardContent className="space-y-3">
-              {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-10 w-full rounded" />)}
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm">
-            <CardHeader><Skeleton className="h-5 w-32" /></CardHeader>
-            <CardContent className="space-y-3">
-              {[1,2,3,4,5,6,7,8].map(i => <Skeleton key={i} className="h-10 w-full rounded" />)}
-            </CardContent>
-          </Card>
-        </div>
+        <DashboardHeader><Skeleton className="h-5 w-32" /></DashboardHeader>
+        <DashboardSkeleton />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">Resumen general del contact center</p>
-        </div>
+      <DashboardHeader>
         <div className={`flex items-center gap-1.5 text-xs ${isFresh ? "text-success" : "text-muted-foreground"}`}>
           <Clock className="h-3.5 w-3.5" />
           <span>{lastUpdatedText}</span>
         </div>
-      </div>
+      </DashboardHeader>
 
       {hasError && (
         <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 flex items-center justify-between gap-3">
@@ -266,54 +157,15 @@ export default function Dashboard() {
         </div>
       )}
 
-      {showAlerts && (
-        <div className={`rounded-xl p-4 flex flex-wrap items-center gap-4 ${
-          totalVencidos > 0 ? "bg-destructive/10 border border-destructive/30" : "bg-warning/10 border border-warning/30"
-        }`}>
-          {totalVencidos > 0 && (
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="h-5 w-5 text-destructive" />
-              <span className="text-sm font-medium text-destructive">{totalVencidos} {totalVencidos === 1 ? "caso vencido" : "casos vencidos"} SLA</span>
-              <Button size="sm" variant="outline" className="h-7 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
-                onClick={() => setAlertFilter(alertFilter === "vencidos" ? null : "vencidos")}>
-                {alertFilter === "vencidos" ? "Quitar filtro" : "Ver ahora"}
-              </Button>
-            </div>
-          )}
-          {totalSinAsignar > 0 && (
-            <div className="flex items-center gap-2">
-              <UserX className="h-5 w-5 text-warning" />
-              <span className="text-sm font-medium" style={{ color: "hsl(var(--warning))" }}>{totalSinAsignar} {totalSinAsignar === 1 ? "caso sin asignar" : "casos sin asignar"}</span>
-              <Button size="sm" variant="outline" className="h-7 text-xs border-warning/40 hover:bg-warning/10"
-                style={{ color: "hsl(var(--warning))" }}
-                onClick={() => setAlertFilter(alertFilter === "sinAsignar" ? null : "sinAsignar")}>
-                {alertFilter === "sinAsignar" ? "Quitar filtro" : "Ver ahora"}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+      <SlaAlerts
+        vencidos={stats?.totalVencidos ?? 0}
+        sinAsignar={stats?.totalSinAsignar ?? 0}
+        filter={alertFilter}
+        onFilter={setAlertFilter}
+      />
 
       <div className={`grid gap-6 ${visibleCampanas.length > 1 ? "lg:grid-cols-2" : "grid-cols-1"}`}>
-        {(stats?.byCampaign ?? []).map((cs) => (
-          <Card key={cs.campanaId} className="border-0 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <FolderOpen className="h-4 w-4 text-primary" />
-                {cs.campanaNombre}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                <KpiMini label="Abiertos"     value={cs.openCount}        icon={<FolderOpen  className="h-4 w-4" />} />
-                <KpiMini label="Cerrados hoy" value={cs.closedTodayCount} icon={<CheckCircle className="h-4 w-4" />} />
-                <KpiMini label="Sin asignar"  value={cs.sinAsignar}       icon={<UserX       className="h-4 w-4" />} badge={cs.sinAsignar > 0 ? "destructive" : undefined} />
-                <KpiMini label="En riesgo"    value={cs.enRiesgo}         icon={<Clock       className="h-4 w-4" />} badge={cs.enRiesgo   > 0 ? "warning"     : undefined} />
-                <KpiMini label="Vencidos"     value={cs.vencidos}         icon={<ShieldAlert className="h-4 w-4" />} badge={cs.vencidos   > 0 ? "destructive" : undefined} />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {(stats?.byCampaign ?? []).map((cs) => <CampaignKpis key={cs.campanaId} cs={cs} />)}
       </div>
 
       {renovacionCampana && !isAgente && (
@@ -321,314 +173,9 @@ export default function Dashboard() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">Agentes Activos</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {agentsLoading ? (
-              <div className="p-4 space-y-3">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-10 w-full rounded" />)}</div>
-            ) : (
-              <div className="overflow-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-muted-foreground">
-                      <th className="px-4 py-2 text-left font-medium">Nombre</th>
-                      <th className="px-4 py-2 text-left font-medium">Campaña</th>
-                      <th className="px-4 py-2 text-center font-medium">Activos</th>
-                      <th className="px-4 py-2 text-center font-medium">Vencidos SLA</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {agentStats.map((a: any) => (
-                      <tr key={a.user_id} className="border-b last:border-0 hover:bg-muted/50">
-                        <td className="px-4 py-2.5 font-medium">{a.nombre}</td>
-                        <td className="px-4 py-2.5 text-muted-foreground text-xs">{a.campanaNames || "—"}</td>
-                        <td className="px-4 py-2.5 text-center">{a.casosActivos}</td>
-                        <td className="px-4 py-2.5 text-center">
-                          {a.casosVencidos > 0
-                            ? <Badge variant="destructive" className="text-xs">{a.casosVencidos}</Badge>
-                            : "0"}
-                        </td>
-                      </tr>
-                    ))}
-                    {agentStats.length === 0 && (
-                      <tr><td colSpan={4} className="py-8 text-center text-muted-foreground text-sm">Sin agentes</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">
-              Casos Recientes
-              {alertFilter && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="ml-2 h-6 gap-1 rounded-full px-2.5 text-xs font-normal"
-                  onClick={() => setAlertFilter(null)}
-                  aria-label={`Quitar filtro: ${alertFilter === "vencidos" ? "vencidos" : "sin asignar"}`}
-                >
-                  Filtro: {alertFilter === "vencidos" ? "Vencidos" : "Sin asignar"}
-                  <X className="h-3 w-3" aria-hidden="true" />
-                </Button>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="divide-y">
-              {recentCases.map((caso: any) => (
-                <RecentCaseRow key={caso.id} casoId={caso.id} linked={canOpenCases}>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">#{caso.id}</p>
-                    {caso.clientes?.nombre_contacto && (
-                      <p className="text-xs text-muted-foreground truncate">{caso.clientes.nombre_contacto}</p>
-                    )}
-                  </div>
-                  <div className="text-right flex items-center gap-2">
-                    <EstadoBadge nombre={caso.cat_estados?.nombre} />
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {timeAgo(caso.updated_at || caso.fecha_caso)}
-                    </span>
-                  </div>
-                </RecentCaseRow>
-              ))}
-              {recentCases.length === 0 && (
-                <p className="py-8 text-center text-sm text-muted-foreground">No hay casos</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <AgentsCard agents={agentStats} loading={agentsLoading} />
+        <RecentCasesCard cases={recentCases} filter={alertFilter} onClearFilter={() => setAlertFilter(null)} linked={canOpenCases} />
       </div>
     </div>
-  );
-}
-
-function RecentCaseRow({ casoId, linked, children }: { casoId: number; linked: boolean; children: React.ReactNode }) {
-  const className = "flex items-center justify-between gap-3 px-5 py-3";
-  if (!linked) return <div className={className}>{children}</div>;
-  return (
-    <Link
-      to={`/casos?caso=${casoId}`}
-      className={`${className} transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
-    >
-      {children}
-    </Link>
-  );
-}
-
-function KpiMini({ label, value, icon, badge }: {
-  label: string; value: number; icon: React.ReactNode; badge?: "destructive" | "warning";
-}) {
-  return (
-    <div className="rounded-lg bg-muted/50 p-3 text-center">
-      <div className="flex justify-center mb-1 text-muted-foreground">{icon}</div>
-      <p className="text-lg font-bold">
-        {value}
-        {badge && value > 0 && (
-          <span className={`ml-1 inline-block h-2 w-2 rounded-full ${
-            badge === "destructive" ? "bg-destructive" : "bg-warning"
-          }`} />
-        )}
-      </p>
-      <p className="text-[11px] text-muted-foreground leading-tight">{label}</p>
-    </div>
-  );
-}
-
-/* ─── Módulo financiero ───
- * Los totales por tramo se calculan en la base (financial_summary) sobre todos
- * los casos de la campaña; antes se descargaban los casos y la API los cortaba
- * en 1.000 filas.
- */
-function FinancialModule({
-  campana,
-  showPctRecuperado = true,
-}: {
-  campana: { id: string; nombre: string };
-  showPctRecuperado?: boolean;
-}) {
-  const [periodo, setPeriodo] = useState<Periodo>("mes");
-  const [activeStates, setActiveStates] = useState<Set<string>>(
-    new Set(["renovado", "pendiente"])
-  );
-
-  const { inicio, fin, diasEnMes } = useMemo(() => getPeriodRange(periodo), [periodo]);
-
-  const { data: financialRows = [], isLoading: financialLoading } = useQuery({
-    queryKey: ["financial-summary", campana.id, periodo, inicio, fin],
-    ...QUERY_RESILIENCE,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("financial_summary", {
-        p_campana_id: campana.id,
-        p_desde: new Date(inicio).toISOString(),
-        p_hasta: new Date(fin).toISOString(),
-        p_periodo: periodo,
-        p_tz: localTimeZone(),
-      });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  const financialData = useMemo(
-    () => buildFinancialChart(financialRows, periodo, diasEnMes),
-    [financialRows, periodo, diasEnMes],
-  );
-
-  const showRenovado  = activeStates.has("renovado");
-  const showPendiente = activeStates.has("pendiente");
-  const renovadoVisible  = showRenovado  ? financialData.renovado  : 0;
-  const pendienteVisible = showPendiente ? financialData.pendiente : 0;
-  const total = renovadoVisible + pendienteVisible;
-  const pctRecuperado =
-    total > 0
-      ? ((renovadoVisible / total) * 100).toFixed(1)
-      : showRenovado && financialData.renovado > 0
-        ? "100.0"
-        : "—";
-
-  const toggleState = (key: string) => {
-    setActiveStates((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  };
-
-  const periodoLabel: Record<Periodo, string> = {
-    dia: "hoy", semana: "esta semana", mes: "este mes", año: "este año",
-  };
-
-  const periodos: { key: Periodo; label: string }[] = [
-    { key: "dia", label: "Día" },
-    { key: "semana", label: "Semana" },
-    { key: "mes", label: "Mes" },
-    { key: "año", label: "Año" },
-  ];
-
-  return (
-    <Card className="border-0 shadow-sm">
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-success" />
-            Módulo Financiero — {campana.nombre}
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-lg border bg-muted/50 p-0.5">
-              {periodos.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  aria-pressed={periodo === p.key}
-                  onClick={() => setPeriodo(p.key)}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                    periodo === p.key
-                      ? "bg-card text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-1">
-              <button
-                type="button"
-                aria-pressed={showRenovado}
-                onClick={() => toggleState("renovado")}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                  showRenovado
-                    ? "bg-success/10 border-success text-success"
-                    : "border-border text-muted-foreground"
-                }`}
-              >
-                <span className="h-2 w-2 rounded-full bg-success" aria-hidden="true" />Renovado
-              </button>
-              <button
-                type="button"
-                aria-pressed={showPendiente}
-                onClick={() => toggleState("pendiente")}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                  showPendiente ? "bg-warning/15 border-warning" : "border-border text-muted-foreground"
-                }`}
-                style={showPendiente ? { color: "hsl(var(--warning))" } : {}}
-              >
-                <span className="h-2 w-2 rounded-full bg-[hsl(var(--chart-3))]" aria-hidden="true" />Pendiente
-              </button>
-            </div>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {financialLoading ? (
-          <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
-            </div>
-            <Skeleton className="h-72 w-full rounded-lg" />
-          </>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className={`rounded-lg p-3 text-center transition-opacity ${
-                showRenovado ? "bg-success/10" : "bg-muted/30 opacity-50"
-              }`}>
-                <p className="text-[11px] text-muted-foreground">Valor renovado</p>
-                <p className="text-lg font-bold text-success">
-                  {renovadoVisible ? formatCOP(renovadoVisible) : "—"}
-                </p>
-              </div>
-              <div className={`rounded-lg p-3 text-center transition-opacity ${
-                showPendiente ? "bg-warning/10" : "bg-muted/30 opacity-50"
-              }`}>
-                <p className="text-[11px] text-muted-foreground">Valor pendiente</p>
-                <p className="text-lg font-bold" style={{ color: "hsl(var(--warning))" }}>
-                  {pendienteVisible ? formatCOP(pendienteVisible) : "—"}
-                </p>
-              </div>
-              <div className="rounded-lg bg-muted/50 p-3 text-center">
-                <p className="text-[11px] text-muted-foreground">Total en gestión</p>
-                <p className="text-lg font-bold">{total ? formatCOP(total) : "—"}</p>
-              </div>
-              {showPctRecuperado && (
-                <div className="rounded-lg bg-muted/50 p-3 text-center">
-                  <p className="text-[11px] text-muted-foreground">% Recuperado</p>
-                  <p className="text-lg font-bold">
-                    {pctRecuperado}{pctRecuperado !== "—" ? "%" : ""}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={financialData.chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 11 }} width={72} tickFormatter={(v: number) => formatCOPCompact(v)} />
-                <Tooltip
-                  formatter={(value: number, name: string) => [formatCOP(value), name]}
-                  labelFormatter={(label) => `${label} — ${periodoLabel[periodo]}`}
-                />
-                {/* Texto de la leyenda en color de texto; el color de la serie solo en el marcador */}
-                <Legend formatter={(value) => <span className="text-foreground">{value}</span>} />
-                {showRenovado && (
-                  <Bar dataKey="renovado" name="Renovado" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
-                )}
-                {showPendiente && (
-                  <Bar dataKey="pendiente" name="Pendiente de pago" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
-                )}
-              </BarChart>
-            </ResponsiveContainer>
-          </>
-        )}
-      </CardContent>
-    </Card>
   );
 }

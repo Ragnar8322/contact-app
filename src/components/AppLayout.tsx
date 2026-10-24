@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
-import { LayoutDashboard, Users, FolderOpen, LogOut, Menu, Settings, ChevronDown, BarChart2, CalendarDays, Clock } from "lucide-react";
+import { LayoutDashboard, Users, FolderOpen, LogOut, Menu, Settings, ChevronDown, BarChart2, CalendarDays, Clock, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -42,7 +42,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const canSwitch = campanas.length > 1 || isAdmin;
 
   // Esperar a que los roles estén cargados antes de construir el menú
-  const navItems: { to: string; icon: any; label: string }[] = [];
+  const navItems: { to: string; icon: LucideIcon; label: string }[] = [];
 
   if (!profileLoading) {
     navItems.push({ to: "/", icon: LayoutDashboard, label: "Dashboard" });

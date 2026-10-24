@@ -1,44 +1,26 @@
 import { useState, useMemo, useEffect } from "react";
-import { EstadoBadge } from "@/components/cases/EstadoBadge";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
+import { Plus, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { RefetchBar, TableSkeletonRows } from "@/components/TableLoading";
-import { CaseIdButton } from "@/components/cases/CaseIdButton";
-import { useCases, useCaseById, useEstados, useTiposServicio, useAgentes, useUpdateCase, useInsertHistorial, useCaseHistory, CasesFilters } from "@/hooks/useCases";
-import { useSearchParams } from "react-router-dom";
+import { useCases, useCaseById, useEstados, useTiposServicio, useAgentes, type CasesFilters } from "@/hooks/useCases";
 import { useCampanasList } from "@/hooks/useCampanas";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Separator } from "@/components/ui/separator";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Eye, Lock, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, ArrowRightLeft, Users, Phone, Mail } from "lucide-react";
-import { toast } from "sonner";
-import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
-import { safeFormat } from "@/lib/date";
-import { Input } from "@/components/ui/input";
 import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
 import CasesFilterBar from "@/components/cases/CasesFilterBar";
-import CaseTransfer from "@/components/cases/CaseTransfer";
 import ProportionalAssignModal from "@/components/cases/ProportionalAssignModal";
+import { CasesTable } from "@/components/cases/CasesTable";
+import { CaseDetailSheet } from "@/components/cases/CaseDetailSheet";
 
-type SortField = "id" | "identificacion" | null;
-type SortDir = "asc" | "desc";
 type QuickFilter = "todos" | "activos" | "cerrados" | "transferidos";
 
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
-
-
 export default function Cases() {
-  const { user, profile, isAdmin, isGerente, isSupervisor, hasRole } = useAuth();
+  const { isGerente, hasRole } = useAuth();
   const { campanaActiva } = useCampana();
   const { data: estados } = useEstados();
   const { data: tiposServicio } = useTiposServicio();
@@ -66,7 +48,7 @@ export default function Cases() {
 
     if (!estados || estados.length === 0) return base;
 
-    const transferidoEstado = estados.find((e: any) => e.nombre === "Transferido");
+    const transferidoEstado = estados.find((e) => e.nombre === "Transferido");
     const transferidoId = transferidoEstado?.id;
 
     if (quickFilter === "todos") {
@@ -75,13 +57,13 @@ export default function Cases() {
       base.estadoIds = transferidoId ? [transferidoId] : [];
     } else if (quickFilter === "cerrados") {
       const closedIds = estados
-        .filter((e: any) => e.es_final && e.nombre !== "Transferido")
-        .map((e: any) => e.id);
+        .filter((e) => e.es_final && e.nombre !== "Transferido")
+        .map((e) => e.id);
       base.estadoIds = closedIds.length > 0 ? closedIds : undefined;
     } else {
       const activeIds = estados
-        .filter((e: any) => !e.es_final && e.nombre !== "Transferido")
-        .map((e: any) => e.id);
+        .filter((e) => !e.es_final && e.nombre !== "Transferido")
+        .map((e) => e.id);
       base.estadoIds = activeIds.length > 0 ? activeIds : undefined;
     }
 
@@ -96,9 +78,6 @@ export default function Cases() {
 
   const cases = paginatedResult?.data ?? [];
   const totalCount = paginatedResult?.totalCount ?? 0;
-  const totalPages = paginatedResult?.totalPages ?? 1;
-  const hasNextPage = paginatedResult?.hasNextPage ?? false;
-  const hasPrevPage = paginatedResult?.hasPrevPage ?? false;
 
   const { data: tabCounts } = useQuery({
     queryKey: ["casos-counts", campanaActiva?.id],
@@ -117,85 +96,18 @@ export default function Cases() {
   const cerradosCount     = tabCounts?.cerrados ?? null;
   const transferidosCount = tabCounts?.transferidos ?? null;
 
-  const showPageOverlay = isFetching && !isLoading;
-
-  const [sortField, setSortField] = useState<SortField>(null);
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortField(field);
-      setSortDir("asc");
-    }
-  };
-
-  const filteredCases = useMemo(() => {
-    let result = cases;
-    if (sortField) {
-      result = [...result].sort((a: any, b: any) => {
-        let valA: any, valB: any;
-        if (sortField === "id") { valA = a.id; valB = b.id; }
-        else if (sortField === "identificacion") { valA = a.clientes?.identificacion || ""; valB = b.clientes?.identificacion || ""; }
-        if (valA < valB) return sortDir === "asc" ? -1 : 1;
-        if (valA > valB) return sortDir === "asc" ? 1 : -1;
-        return 0;
-      });
-    }
-    return result;
-  }, [cases, sortField, sortDir]);
-
-  const updateCase = useUpdateCase();
-  const insertHistorial = useInsertHistorial();
-
   const [createOpen, setCreateOpen] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null);
-  const { data: history } = useCaseHistory(selectedCaseId);
 
   const { data: linkedCase } = useCaseById(casoParam);
   const selectedCase =
-    filteredCases?.find((c: any) => c.id === selectedCaseId) ||
-    cases?.find((c: any) => c.id === selectedCaseId) ||
+    cases.find((c) => c.id === selectedCaseId) ||
     (linkedCase?.id === selectedCaseId ? linkedCase : undefined);
-  const isTransferredCase = selectedCase?.cat_estados?.nombre === "Transferido";
 
-  // El destino viene de la columna transferido_a_caso_id (antes se leía del texto de la observación)
-  const transferInfo = isTransferredCase && selectedCase?.transferido_a_caso_id
-    ? {
-        newCaseId: selectedCase.transferido_a_caso_id as number,
-        targetCampana: (selectedCase.caso_destino?.campanas?.nombre as string | undefined) ?? null,
-      }
-    : null;
-
-  const [editEstado, setEditEstado] = useState(0);
-  const [originalEstado, setOriginalEstado] = useState(0);
-  const [editObservaciones, setEditObservaciones] = useState("");
-  const [obsError, setObsError] = useState("");
-  const [editValorDisplay, setEditValorDisplay] = useState("");
-  const [valorError, setValorError] = useState("");
-  const [detailObservacion, setDetailObservacion] = useState("");
-
-  const estadoChanged = editEstado !== originalEstado;
-  const isEnGestion = estados?.find(e => e.id === editEstado)?.nombre === "En gestión";
-  const selectedEstadoFinal = estados?.find(e => e.id === editEstado)?.es_final;
-
-  const openDetail = (caso: any) => {
-    setSelectedCaseId(caso.id);
-    setEditEstado(caso.estado_id);
-    setOriginalEstado(caso.estado_id);
-    setEditObservaciones("");
-    setObsError("");
-    setEditValorDisplay(caso.valor_pagar ? formatCOP(caso.valor_pagar) : "");
-    setValorError("");
-    setDetailObservacion("");
-  };
-
+  // Un enlace /casos?caso=123 abre ese caso
   useEffect(() => {
-    if (linkedCase && linkedCase.id !== selectedCaseId) openDetail(linkedCase);
-    // openDetail solo cambia estado local; abrir una vez por caso enlazado
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (linkedCase) setSelectedCaseId(linkedCase.id);
   }, [linkedCase]);
 
   const closeDetail = () => {
@@ -213,82 +125,10 @@ export default function Cases() {
     setSearchParams(next);
   };
 
-  const isRenovacionWeb = selectedCase?.cat_tipo_servicio?.nombre?.toLowerCase() === "renovación web";
-  const selectedEstadoNombre = estados?.find(e => e.id === editEstado)?.nombre;
-  const showValorPagar = isRenovacionWeb && (selectedEstadoNombre === "Renovado" || selectedEstadoNombre === "Pendiente de Pago");
-
-  const isCaseClosed = selectedCase?.cat_estados?.es_final === true;
-  const isReadOnly = isGerente || (isCaseClosed && !isAdmin);
-  const isFullyLocked = isTransferredCase || isGerente;
-
-  const validateObservaciones = (): boolean => {
-    if (!estadoChanged) return true;
-    if (isEnGestion) return true;
-    if (!editObservaciones.trim()) {
-      setObsError(isRenovacionWeb && selectedEstadoFinal ? "Las observaciones son obligatorias." : "Las observaciones de gestión son obligatorias para cambiar el estado.");
-      return false;
-    }
-    if (selectedEstadoFinal && !isRenovacionWeb && editObservaciones.trim().length < 30) {
-      setObsError("Para estados de cierre, las observaciones deben tener al menos 30 caracteres.");
-      return false;
-    }
-    setObsError("");
-    return true;
-  };
-
-  const handleUpdate = async () => {
-    if (!selectedCaseId || !user) return;
-    const observationText = isEnGestion ? detailObservacion.trim() : editObservaciones.trim();
-    const hasObservation = observationText.length > 0;
-
-    if (!estadoChanged && !hasObservation) { toast.info("No hay cambios para guardar."); return; }
-    if (estadoChanged && !validateObservaciones()) return;
-    if (estadoChanged && !isEnGestion && !editObservaciones.trim()) return;
-    if (showValorPagar) {
-      const val = parseCOPInput(editValorDisplay);
-      if (!val) { setValorError("El valor a pagar es obligatorio para este estado."); return; }
-      setValorError("");
-    }
-    try {
-      if (estadoChanged) {
-        const updates: any = { id: selectedCaseId, estado_id: editEstado, updated_by: user.id };
-        if (showValorPagar) updates.valor_pagar = parseCOPInput(editValorDisplay);
-        if (selectedEstadoFinal) {
-          updates.fecha_cierre = new Date().toISOString();
-          updates.observacion_cierre = observationText;
-        }
-        await updateCase.mutateAsync(updates);
-      }
-      const agenteName = profile?.nombre || user?.email || "";
-      await insertHistorial.mutateAsync({
-        caso_id: selectedCaseId,
-        estado_id: editEstado,
-        cambiado_por: user.id,
-        comentario: estadoChanged ? observationText || undefined : undefined,
-        observacion: hasObservation ? observationText : undefined,
-        agente_id: user.id,
-        agente_nombre: agenteName,
-        estado_nuevo: estados?.find(e => e.id === editEstado)?.nombre || undefined,
-      });
-      setOriginalEstado(editEstado);
-      setEditObservaciones("");
-      setObsError("");
-      setDetailObservacion("");
-      toast.success("Caso actualizado");
-    } catch (err: any) {
-      toast.error("Error: " + err.message);
-    }
-  };
-
-  const fromRecord = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
-  const toRecord = Math.min(page * pageSize, totalCount);
-
   const campanaName = (id: string | null) => {
     if (!id) return "—";
-    return allCampanas.find((c: any) => c.id === id)?.nombre || "—";
+    return allCampanas.find((c) => c.id === id)?.nombre || "—";
   };
-
-  const isTransferView = quickFilter === "transferidos";
 
   return (
     <div className="space-y-6">
@@ -353,337 +193,38 @@ export default function Cases() {
 
       <Card className="border-0 shadow-sm">
         <CardContent className="p-0 relative">
-          <RefetchBar active={showPageOverlay} />
-
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableHead field="id" label="ID" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                <TableHead>Cliente</TableHead>
-                {isTransferView ? (
-                  <>
-                    <TableHead>Campaña origen</TableHead>
-                    <TableHead>Campaña destino</TableHead>
-                    <TableHead>Fecha transferencia</TableHead>
-                    <TableHead>Nuevo caso #</TableHead>
-                    <TableHead>Transferido por</TableHead>
-                  </>
-                ) : (
-                  <>
-                    <SortableHead field="identificacion" label="NIT / Cédula" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Agente</TableHead>
-                    <TableHead>Valor a Pagar</TableHead>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead><span className="sr-only">Estado de edición</span></TableHead>
-                  </>
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableSkeletonRows columns={isTransferView ? 7 : 9} />
-              ) : filteredCases.length === 0 ? (
-                <TableRow><TableCell colSpan={isTransferView ? 7 : 9} className="text-center py-8 text-muted-foreground">No hay casos</TableCell></TableRow>
-              ) : filteredCases.map((caso: any) => (
-                <TableRow key={caso.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(caso)}>
-                  <TableCell><CaseIdButton id={caso.id} onOpen={() => openDetail(caso)} /></TableCell>
-                  <TableCell>{caso.clientes?.nombre_contacto || "-"}</TableCell>
-                  {isTransferView ? (
-                    <TransferColumns
-                      caso={caso}
-                      campanaName={campanaName}
-                      transferidoPor={agentesData?.find((a: any) => a.user_id === caso.updated_by)?.nombre}
-                    />
-                  ) : (
-                    <>
-                      <TableCell className="font-mono text-sm">{caso.clientes?.identificacion || "-"}</TableCell>
-                      <TableCell>{caso.cat_tipo_servicio?.nombre}</TableCell>
-                      <TableCell>
-                        <EstadoBadge nombre={caso.cat_estados?.nombre} />
-                      </TableCell>
-                      <TableCell>{caso.cat_agentes?.nombre || "-"}</TableCell>
-                      <TableCell>{formatCOP(caso.valor_pagar)}</TableCell>
-                      <TableCell>{safeFormat(caso.fecha_caso, "dd/MM/yyyy")}</TableCell>
-                      <TableCell>
-                        {caso.cat_estados?.es_final ? (
-                          <span title="Caso cerrado: solo lectura">
-                            <Lock className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                            <span className="sr-only">Cerrado, solo lectura</span>
-                          </span>
-                        ) : (
-                          <span title="Caso abierto">
-                            <Eye className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                            <span className="sr-only">Abierto</span>
-                          </span>
-                        )}
-                      </TableCell>
-                    </>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-
-          {totalCount > 0 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t px-4 py-3">
-              <p className="text-sm text-muted-foreground">
-                Mostrando {fromRecord}–{toRecord} de {totalCount} casos
-              </p>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">Por página:</span>
-                  <div className="flex rounded-md border bg-muted/50 p-0.5">
-                    {PAGE_SIZE_OPTIONS.map((size) => (
-                      <button
-                        key={size}
-                        type="button"
-                        aria-pressed={pageSize === size}
-                        onClick={() => { setPageSize(size); setPage(1); }}
-                        className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${pageSize === size ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                      >
-                        {size}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Button variant="outline" size="sm" className="h-8 px-2" disabled={!hasPrevPage} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                    <ChevronLeft className="h-4 w-4" />
-                    <span className="hidden sm:inline ml-1">Anterior</span>
-                  </Button>
-                  <span className="text-sm px-2 text-muted-foreground whitespace-nowrap">
-                    Página {page} de {totalPages}
-                  </span>
-                  <Button variant="outline" size="sm" className="h-8 px-2" disabled={!hasNextPage} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
-                    <span className="hidden sm:inline mr-1">Siguiente</span>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
+          <CasesTable
+            cases={cases}
+            isLoading={isLoading}
+            isRefetching={isFetching && !isLoading}
+            transferView={quickFilter === "transferidos"}
+            onOpen={(caso) => setSelectedCaseId(caso.id)}
+            campanaName={campanaName}
+            agenteName={(userId) => agentesData?.find((a) => a.user_id === userId)?.nombre}
+            pagination={{
+              page,
+              pageSize,
+              totalCount,
+              totalPages: paginatedResult?.totalPages ?? 1,
+              hasPrevPage: paginatedResult?.hasPrevPage ?? false,
+              hasNextPage: paginatedResult?.hasNextPage ?? false,
+              onPage: setPage,
+              onPageSize: (size) => { setPageSize(size); setPage(1); },
+            }}
+          />
         </CardContent>
       </Card>
 
-      {/* Detail Sheet */}
-      <Sheet open={!!selectedCaseId} onOpenChange={open => { if (!open) closeDetail(); }}>
-        <SheetContent className="w-full sm:max-w-lg overflow-auto">
-          <SheetHeader>
-            <SheetTitle>Caso #{selectedCase?.id}</SheetTitle>
-          </SheetHeader>
-          {selectedCase && (
-            <div className="mt-4 space-y-5">
-              {isTransferredCase && transferInfo && (
-                <Alert className="border-primary/50 bg-primary/5">
-                  <AlertDescription className="text-sm">
-                    <ArrowRightLeft className="inline h-4 w-4 mr-1" />
-                    Este caso fue transferido.
-                    {transferInfo.newCaseId && (
-                      <>
-                        {" "}Nuevo caso:{" "}
-                        <button
-                          type="button"
-                          onClick={() => openCaseById(Number(transferInfo.newCaseId))}
-                          className="font-semibold text-primary underline underline-offset-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          #{transferInfo.newCaseId}
-                        </button>
-                      </>
-                    )}
-                    {transferInfo.targetCampana && (
-                      <> en la campaña <strong>{transferInfo.targetCampana}</strong></>
-                    )}.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {(isReadOnly && !isTransferredCase) && (
-                <Alert className="border-warning/40 bg-warning/10 text-warning">
-                  <Lock className="h-4 w-4 !text-warning" aria-hidden="true" />
-                  <AlertDescription>
-                    Este caso está cerrado y no puede ser modificado. Si necesitas reabrirlo, contacta a un administrador.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-muted-foreground">Cliente:</span><p className="font-medium">{selectedCase.clientes?.nombre_contacto}</p></div>
-                <div><span className="text-muted-foreground">NIT / Cédula:</span><p className="font-medium font-mono">{selectedCase.clientes?.identificacion || "-"}</p></div>
-                <div><span className="text-muted-foreground">Tipo:</span><p className="font-medium">{selectedCase.cat_tipo_servicio?.nombre}</p></div>
-                <div><span className="text-muted-foreground">Agente:</span><p className="font-medium">{selectedCase.cat_agentes?.nombre}</p></div>
-                <div><span className="text-muted-foreground">Fecha:</span><p className="font-medium">{safeFormat(selectedCase.fecha_caso, "dd/MM/yyyy HH:mm")}</p></div>
-                {selectedCase.valor_pagar != null && selectedCase.valor_pagar > 0 && (
-                  <div><span className="text-muted-foreground">Valor a Pagar:</span><p className="font-medium">{formatCOP(selectedCase.valor_pagar)}</p></div>
-                )}
-              </div>
-              <div className="text-sm">
-                <span className="text-muted-foreground">Descripción:</span>
-                <p className="mt-1">{selectedCase.descripcion_inicial}</p>
-              </div>
-
-              <div className="text-sm space-y-1.5">
-                <span className="font-medium text-foreground">Datos de Contacto</span>
-                <div className="flex items-center gap-1.5">
-                  <Phone className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                  <span className="text-muted-foreground">Teléfonos:</span>
-                  {(() => {
-                    const phones = [selectedCase.clientes?.telefono, selectedCase.clientes?.celular].filter(Boolean);
-                    if (phones.length === 0) return <span className="text-muted-foreground italic">No registrado</span>;
-                    return phones.map((p, i) => (
-                      <span key={i}>
-                        {i > 0 && <span className="text-muted-foreground">, </span>}
-                        <a href={`tel:${p}`} className="text-primary hover:underline">{p}</a>
-                      </span>
-                    ));
-                  })()}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Mail className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                  <span className="text-muted-foreground">Correo:</span>
-                  {selectedCase.clientes?.correo ? (
-                    <a href={`mailto:${selectedCase.clientes.correo}`} className="text-primary hover:underline">{selectedCase.clientes.correo}</a>
-                  ) : (
-                    <span className="text-muted-foreground italic">No registrado</span>
-                  )}
-                </div>
-              </div>
-
-              <Separator />
-
-              {!isReadOnly && !isFullyLocked && (
-                <div className="space-y-3">
-                  <Label htmlFor="cases-cambiar-estado">Cambiar Estado</Label>
-                  <Select value={String(editEstado)} onValueChange={v => { setEditEstado(Number(v)); setObsError(""); setValorError(""); }}>
-                    <SelectTrigger id="cases-cambiar-estado"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {estados?.filter(e => e.nombre !== "Transferido").map(e => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-
-                  {estadoChanged && showValorPagar && (
-                    <div className="space-y-2">
-                      <Label htmlFor="cases-valor-a-pagar">Valor a Pagar *</Label>
-                      <Input id="cases-valor-a-pagar" placeholder="$ 0" value={editValorDisplay} onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }} />
-                      {valorError && <p className="text-sm text-destructive">{valorError}</p>}
-                    </div>
-                  )}
-
-                  {isEnGestion ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="cases-observaciones-opcional">Observaciones (opcional)</Label>
-                      <Textarea id="cases-observaciones-opcional"
-                        value={detailObservacion}
-                        onChange={e => { if (e.target.value.length <= 500) setDetailObservacion(e.target.value); }}
-                        rows={3}
-                        placeholder="Escribe una observación sobre esta gestión..."
-                        maxLength={500}
-                      />
-                      <p className="text-xs text-muted-foreground text-right">{detailObservacion.length} / 500</p>
-                    </div>
-                  ) : estadoChanged ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="cases-observaciones-de-gestion">
-                        Observaciones de gestión *
-                        {selectedEstadoFinal && !isRenovacionWeb && <span className="ml-1 text-xs text-muted-foreground">(mín. 30 caracteres)</span>}
-                      </Label>
-                      <Textarea id="cases-observaciones-de-gestion" value={editObservaciones} onChange={e => { setEditObservaciones(e.target.value); setObsError(""); }} rows={3} placeholder="Describe la gestión realizada..." />
-                      {selectedEstadoFinal && !isRenovacionWeb && (
-                        <p className="text-xs text-muted-foreground">{editObservaciones.trim().length}/30 caracteres</p>
-                      )}
-                      {obsError && <p className="text-sm text-destructive">{obsError}</p>}
-                    </div>
-                  ) : null}
-
-                  <Button
-                    onClick={handleUpdate}
-                    disabled={
-                      updateCase.isPending ||
-                      (!estadoChanged && !detailObservacion.trim()) ||
-                      (estadoChanged && !isEnGestion && !editObservaciones.trim())
-                    }
-                    className="w-full"
-                  >
-                    {updateCase.isPending ? "Guardando..." : "Actualizar Caso"}
-                  </Button>
-                </div>
-              )}
-
-              <Separator />
-
-              <div>
-                <h3 className="mb-3 text-sm font-semibold">Historial de gestiones</h3>
-                <div className="space-y-2">
-                  {history?.map((h: any) => {
-                    const estadoNombre = h.cat_estados?.nombre || h.estado_nuevo;
-                    return (
-                      <div key={h.id} className="rounded-lg bg-muted/50 p-3 text-sm">
-                        <div className="flex items-center justify-between">
-                          <EstadoBadge nombre={estadoNombre} />
-                          <span className="text-xs text-muted-foreground">
-                            {safeFormat(h.fecha_cambio || h.cambiado_en, "dd/MM/yyyy HH:mm")}
-                          </span>
-                        </div>
-                        {(h.agente_nombre || h.profiles?.nombre) && (
-                          <p className="text-xs text-muted-foreground mt-0.5">Por: {h.agente_nombre || h.profiles?.nombre}</p>
-                        )}
-                        {h.observacion && <p className="mt-1 text-muted-foreground">{h.observacion}</p>}
-                        {h.comentario && <p className="mt-1 text-muted-foreground">{h.comentario}</p>}
-                      </div>
-                    );
-                  })}
-                  {(!history || history.length === 0) && (
-                    <p className="text-sm text-muted-foreground">Sin historial</p>
-                  )}
-                </div>
-
-                {!isTransferredCase && !isGerente && (
-                  <CaseTransfer caso={selectedCase} onTransferred={() => setSelectedCaseId(null)} />
-                )}
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      <CaseDetailSheet
+        caso={selectedCase}
+        open={!!selectedCaseId}
+        onClose={closeDetail}
+        onOpenCase={openCaseById}
+        estados={estados ?? []}
+      />
 
       <ProportionalAssignModal open={assignModalOpen} onOpenChange={setAssignModalOpen} />
     </div>
   );
 }
 
-function TransferColumns({ caso, campanaName, transferidoPor }: { caso: any; campanaName: (id: string | null) => string; transferidoPor?: string }) {
-
-  return (
-    <>
-      <TableCell className="text-sm">{campanaName(caso.campana_id)}</TableCell>
-      <TableCell className="text-sm">{caso.caso_destino?.campanas?.nombre ?? "—"}</TableCell>
-      <TableCell className="text-sm">{safeFormat(caso.fecha_cierre, "dd/MM/yyyy HH:mm")}</TableCell>
-      <TableCell className="text-sm font-medium">{caso.transferido_a_caso_id ? `#${caso.transferido_a_caso_id}` : "—"}</TableCell>
-      <TableCell className="text-sm">{transferidoPor ?? "—"}</TableCell>
-    </>
-  );
-}
-
-function SortableHead({ field, label, sortField, sortDir, onSort }: {
-  field: Exclude<SortField, null>;
-  label: string;
-  sortField: SortField;
-  sortDir: SortDir;
-  onSort: (field: Exclude<SortField, null>) => void;
-}) {
-  const active = sortField === field;
-  const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
-  return (
-    <TableHead aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
-      <button
-        type="button"
-        onClick={() => onSort(field)}
-        className="inline-flex items-center gap-1 whitespace-nowrap rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {label}
-        <Icon className={`h-3 w-3 ${active ? "" : "opacity-50"}`} aria-hidden="true" />
-      </button>
-    </TableHead>
-  );
-}

@@ -19,36 +19,26 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
-    chunkSizeWarningLimit: 700,
+    // exceljs (~850 KB) es el chunk más grande; se carga solo al importar o exportar Excel
+    chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
+        // Solo se agrupan librerías que necesita la carga inicial. Las demás (recharts, jspdf,
+        // exceljs…) quedan en chunks automáticos que se descargan con la página que las usa.
         manualChunks(id) {
-          // Recharts + D3 van en vendor junto con React para evitar
-          // el error TDZ "Cannot access 'S' before initialization"
-          // causado por dependencias circulares entre chunks separados.
           if (
             id.includes("node_modules/react/") ||
             id.includes("node_modules/react-dom/") ||
+            id.includes("node_modules/scheduler/") ||
             id.includes("node_modules/react-router-dom/") ||
             id.includes("node_modules/react-router/") ||
-            id.includes("recharts") ||
-            id.includes("d3-") ||
-            id.includes("victory-")
+            id.includes("node_modules/@remix-run/router/")
           ) {
             return "vendor";
           }
-          // Radix UI → chunk de componentes UI
-          if (id.includes("@radix-ui")) {
-            return "radix-ui";
-          }
-          // Supabase → chunk separado
-          if (id.includes("@supabase")) {
-            return "supabase";
-          }
-          // date-fns → chunk separado
-          if (id.includes("date-fns")) {
-            return "date-fns";
-          }
+          if (id.includes("@radix-ui")) return "radix-ui";
+          if (id.includes("@supabase")) return "supabase";
+          if (id.includes("date-fns")) return "date-fns";
         },
       },
     },

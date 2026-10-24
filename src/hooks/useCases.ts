@@ -17,6 +17,15 @@ export interface CasesFilters {
   searchText?: string;
 }
 
+/**
+ * El parser de tipos de supabase-js no reconoce el embed por columna
+ * `caso_destino:transferido_a_caso_id(...)`, que PostgREST resuelve como el caso destino.
+ * (La sintaxis que sí reconoce, `casos!transferido_a_caso_id`, devuelve la relación inversa.)
+ */
+type ConDestino<T> = Omit<T, "caso_destino"> & {
+  caso_destino: { id: number; campanas: { nombre: string } | null } | null;
+};
+
 export interface PaginationParams {
   page?: number;
   pageSize?: number;
@@ -40,7 +49,7 @@ export function useCases(filters?: CasesFilters, pagination?: PaginationParams) 
     queryKey: ["casos", filters, page, pageSize, highestRole, user?.id],
     // Mantiene la página anterior visible mientras llega la nueva (búsqueda, filtros, paginación)
     placeholderData: keepPreviousData,
-    queryFn: async (): Promise<PaginatedResult<any>> => {
+    queryFn: async () => {
       let query = supabase
         .from("casos")
         .select("*, clientes!inner(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre), caso_destino:transferido_a_caso_id(id, campanas(nombre))", { count: "exact" })
@@ -89,13 +98,14 @@ export function useCases(filters?: CasesFilters, pagination?: PaginationParams) 
       const totalCount = count ?? 0;
       const totalPages = Math.ceil(totalCount / pageSize);
 
-      return {
-        data: data ?? [],
+      const result: PaginatedResult<ConDestino<NonNullable<typeof data>[number]>> = {
+        data: (data ?? []) as unknown as ConDestino<NonNullable<typeof data>[number]>[],
         totalCount,
         totalPages,
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1,
       };
+      return result;
     },
   });
 }
@@ -111,7 +121,7 @@ export function useCaseById(id: number | null) {
         .eq("id", id!)
         .single();
       if (error) throw error;
-      return data;
+      return data as unknown as ConDestino<typeof data>;
     },
   });
 }
@@ -211,3 +221,9 @@ export function useAgentes() {
     },
   });
 }
+
+/** Caso tal como lo traen useCases y useCaseById (con cliente, estado, tipo, agente y destino). */
+export type Caso = NonNullable<ReturnType<typeof useCaseById>["data"]>;
+export type CasoListado = NonNullable<ReturnType<typeof useCases>["data"]>["data"][number];
+export type CasoHistorial = NonNullable<ReturnType<typeof useCaseHistory>["data"]>[number];
+export type Estado = NonNullable<ReturnType<typeof useEstados>["data"]>[number];

@@ -4,8 +4,7 @@
  * largas se cortan sin aviso.
  */
 export async function fetchAllPages<T>(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  buildQuery: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: unknown }>,
+  buildQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
   pageSize = 1000
 ): Promise<T[]> {
   const results: T[] = [];
@@ -14,7 +13,7 @@ export async function fetchAllPages<T>(
     const { data, error } = await buildQuery(from, from + pageSize - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
-    results.push(...(data as T[]));
+    results.push(...data);
     if (data.length < pageSize) break;
     from += pageSize;
   }

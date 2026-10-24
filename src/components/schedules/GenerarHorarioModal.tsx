@@ -7,7 +7,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button }  from "@/components/ui/button";
 import { Label }   from "@/components/ui/label";
-import { Input }   from "@/components/ui/input";
 import { Switch }  from "@/components/ui/switch";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -97,16 +96,6 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
     const total = (fh * 60 + fm) - (ih * 60 + im) - parseInt(durAlmuerzo, 10) - 30;
     return total > 0 ? (total / 60).toFixed(1) : "—";
   })();
-
-  // Preview horas semanales estimadas (5 días L-V × horas_dia + 4h sábado)
-  // Nota: la RPC aplica tope de 42h, este preview es el bruto sin tope
-  const horasSemana = (() => {
-    const h = parseFloat(jornadaHoras);
-    if (isNaN(h)) return "—";
-    return ((h * 5) + 4).toFixed(1);
-  })();
-  // Horas reales tras aplicar tope de 42h (la RPC cortará el exceso)
-  const horasEfectivas = Math.min(parseFloat(horasSemana) || 0, 42).toFixed(1);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>

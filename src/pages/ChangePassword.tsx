@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { errorMessage } from "@/lib/errors";
 
 const passwordSchema = z
   .string()
@@ -49,15 +50,15 @@ export default function ChangePassword() {
 
       const { error: profileError } = await supabase
         .from("profiles")
-        .update({ must_change_password: false } as any)
+        .update({ must_change_password: false })
         .eq("user_id", user.id);
       if (profileError) throw profileError;
 
       await refreshProfile();
       toast.success("Contraseña actualizada exitosamente");
       navigate("/", { replace: true });
-    } catch (err: any) {
-      toast.error("Error: " + err.message);
+    } catch (err) {
+      toast.error("Error: " + errorMessage(err));
     } finally {
       setLoading(false);
     }

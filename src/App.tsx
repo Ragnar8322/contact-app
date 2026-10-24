@@ -1,15 +1,13 @@
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
-import { AuthProvider, useAuth, RoleName } from "@/contexts/AuthContext";
-import { CampanaProvider, useCampana } from "@/contexts/CampanaContext";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { CampanaProvider } from "@/contexts/CampanaContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import AppLayout from "@/components/AppLayout";
+import { AuthRoute, CampaignRoute, ChangePasswordRoute, LoadingScreen, ProtectedRoute, RoleRoute } from "@/components/routes/RouteGuards";
 import Login from "@/pages/Login";
-import ChangePassword from "@/pages/ChangePassword";
-import SelectCampaign from "@/pages/SelectCampaign";
 import NotFound from "@/pages/NotFound";
 
 const Dashboard  = lazy(() => import("@/pages/Dashboard"));
@@ -32,58 +30,6 @@ const queryClient = new QueryClient({
   },
 });
 
-function LoadingScreen() {
-  return (
-    <div className="flex h-screen items-center justify-center text-muted-foreground" role="status" aria-live="polite">
-      Cargando...
-    </div>
-  );
-}
-
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading, mustChangePassword } = useAuth();
-  const { loading: campLoading, needsSelection, noCampaigns } = useCampana();
-
-  if (loading || campLoading) return <LoadingScreen />;
-  if (!session) return <Navigate to="/login" replace />;
-  if (mustChangePassword) return <Navigate to="/cambiar-contrasena" replace />;
-  if (noCampaigns || needsSelection) return <Navigate to="/seleccionar-campana" replace />;
-  return <AppLayout>{children}</AppLayout>;
-}
-
-// Espera profileLoading para no redirigir mientras los roles aún se están cargando
-function RoleRoute({ children, roles }: { children: React.ReactNode; roles: RoleName[] }) {
-  const { hasRole, loading, profileLoading } = useAuth();
-  if (loading || profileLoading) return <LoadingScreen />;
-  if (!hasRole(roles)) return <Navigate to="/" replace />;
-  return <>{children}</>;
-}
-
-function CampaignRoute() {
-  const { session, loading, mustChangePassword } = useAuth();
-  const { loading: campLoading, needsSelection, noCampaigns, campanaActiva } = useCampana();
-
-  if (loading || campLoading) return <LoadingScreen />;
-  if (!session) return <Navigate to="/login" replace />;
-  if (mustChangePassword) return <Navigate to="/cambiar-contrasena" replace />;
-  if (!noCampaigns && !needsSelection && campanaActiva) return <Navigate to="/" replace />;
-  return <SelectCampaign />;
-}
-
-function AuthRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
-  if (session) return <Navigate to="/" replace />;
-  return <>{children}</>;
-}
-
-function ChangePasswordRoute() {
-  const { session, loading, mustChangePassword } = useAuth();
-  if (loading) return <LoadingScreen />;
-  if (!session) return <Navigate to="/login" replace />;
-  if (!mustChangePassword) return <Navigate to="/" replace />;
-  return <ChangePassword />;
-}
 
 const App = () => (
   <ErrorBoundary>

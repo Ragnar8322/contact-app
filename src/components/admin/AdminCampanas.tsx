@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { EstadoBadge } from "@/components/cases/EstadoBadge";
-import { useAllProfiles } from "@/hooks/useAdmin";
+import { useAllProfiles, type AdminProfile } from "@/hooks/useAdmin";
 import { useCampanasList, usePerfilCampanas, useAssignCampana, useUnassignCampana } from "@/hooks/useCampanas";
 import { useAllCases, useAdminUpdateCase } from "@/hooks/useAdmin";
 import { useEstados, useAgentes, useInsertHistorial } from "@/hooks/useCases";
@@ -13,20 +13,16 @@ import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 
 // Devuelve true si el perfil tiene alguno de los roles indicados
-function hasAnyRole(p: any, roleNames: string[]): boolean {
-  const primaryRole = (p.user_roles as any)?.name;
+function hasAnyRole(p: AdminProfile, roleNames: string[]): boolean {
+  const primaryRole = p.user_roles?.name;
   if (primaryRole && roleNames.includes(primaryRole)) return true;
-  const assignments: any[] = p.role_assignments || [];
-  return assignments.some(
-    (r: any) =>
-      (r.role_name && roleNames.includes(r.role_name)) ||
-      (r.name && roleNames.includes(r.name))
-  );
+  return p.role_assignments.some((r) => roleNames.includes(r.role_name));
 }
 
-function getPrimaryRoleLabel(p: any): "supervisor" | "agent" {
+function getPrimaryRoleLabel(p: AdminProfile): "supervisor" | "agent" {
   if (hasAnyRole(p, ["supervisor"])) return "supervisor";
   return "agent";
 }
@@ -50,7 +46,7 @@ export default function AdminCampanas() {
   const updateCase = useAdminUpdateCase();
   const insertHistorial = useInsertHistorial();
 
-  const assignableUsers = (profiles || []).filter((p: any) =>
+  const assignableUsers = (profiles || []).filter((p) =>
     hasAnyRole(p, ["agent", "supervisor"])
   );
 
@@ -66,12 +62,12 @@ export default function AdminCampanas() {
         await assign.mutateAsync({ user_id: userId, campana_id: campanaId });
         toast.success("Campaña asignada");
       }
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(errorMessage(err));
     }
   };
 
-  const filteredCases = allCases.filter((c: any) => {
+  const filteredCases = allCases.filter((c) => {
     if (filterCampana && filterCampana !== "all" && c.campana_id !== filterCampana) return false;
     return true;
   });
@@ -79,18 +75,16 @@ export default function AdminCampanas() {
   const handleCaseReassign = async (casoId: number, field: "campana_id" | "agente_id", value: string) => {
     if (!user) return;
     try {
-      const updates: any = { id: casoId, updated_by: user.id };
-      updates[field] = value;
-      await updateCase.mutateAsync(updates);
+      await updateCase.mutateAsync({ id: casoId, updated_by: user.id, [field]: value });
       await insertHistorial.mutateAsync({
         caso_id: casoId,
-        estado_id: allCases?.find((c: any) => c.id === casoId)?.estado_id || 0,
+        estado_id: allCases?.find((c) => c.id === casoId)?.estado_id || 0,
         cambiado_por: user.id,
         comentario: "Reasignado por administrador",
       });
       toast.success("Caso reasignado");
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(errorMessage(err));
     }
   };
 
@@ -113,7 +107,7 @@ export default function AdminCampanas() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {assignableUsers.map((u: any) => {
+              {assignableUsers.map((u) => {
                 const roleLabel = getPrimaryRoleLabel(u);
                 return (
                   <TableRow key={u.user_id}>
@@ -197,7 +191,7 @@ export default function AdminCampanas() {
             <TableBody>
               {filteredCases.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No hay casos</TableCell></TableRow>
-              ) : filteredCases.slice(0, 50).map((caso: any) => (
+              ) : filteredCases.slice(0, 50).map((caso) => (
                 <TableRow key={caso.id}>
                   <TableCell className="font-medium">#{caso.id}</TableCell>
                   <TableCell>{caso.clientes?.nombre_contacto || "-"}</TableCell>

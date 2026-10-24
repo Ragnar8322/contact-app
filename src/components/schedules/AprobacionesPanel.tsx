@@ -15,6 +15,7 @@ import {
   SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/errors";
 
 type FiltroEstado = "todos" | EstadoNovedad;
 
@@ -40,7 +41,7 @@ export default function AprobacionesPanel() {
           toast.success(estado === "aprobado" ? "Novedad aprobada" : "Novedad rechazada", { description: estado === "aprobado" ? "El agente la verá aprobada en Mi Horario." : "La solicitud fue rechazada." });
         },
         onError: (e) => {
-          toast.error("Error", { description: (e as Error).message });
+          toast.error("Error", { description: errorMessage(e) });
         },
       }
     );

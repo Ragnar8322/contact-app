@@ -5,7 +5,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  { ignores: ["dist", "coverage"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -19,11 +19,17 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+      "react-refresh/only-export-components": ["warn", {
+        allowConstantExport: true,
+        // Hooks y variantes que viven a propósito junto a su componente (contextos y shadcn/ui)
+        allowExportNames: [
+          "useAuth", "useCampana", "useFormField", "useSidebar", "toast",
+          "badgeVariants", "buttonVariants", "toggleVariants", "navigationMenuTriggerStyle",
+        ],
+      }],
+      // Las variables sin usar las verifica TypeScript (noUnusedLocals / noUnusedParameters)
       "@typescript-eslint/no-unused-vars": "off",
-      // Temporal: warning mientras se elimina any progresivamente (Fase 3)
-      // Cambiar a "error" cuando se completen los tipos de dominio
-      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-explicit-any": "error",
     },
   },
 );

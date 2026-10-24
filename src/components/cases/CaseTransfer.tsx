@@ -9,9 +9,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Separator } from "@/components/ui/separator";
 import { ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 
 interface CaseTransferProps {
-  caso: any;
+  caso: { id: number; campana_id: string | null; cat_estados: { nombre: string; es_final: boolean } | null };
   onTransferred: () => void;
 }
 
@@ -28,9 +29,9 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
   const isDisabled = isClosed || isTransferred;
 
   const currentCampanaId = caso.campana_id;
-  const currentCampana = campanas?.find((c: any) => c.id === currentCampanaId);
-  const targetCampana = campanas?.find((c: any) => c.id === targetCampanaId);
-  const otherCampanas = campanas?.filter((c: any) => c.id !== currentCampanaId) || [];
+  const currentCampana = campanas?.find((c) => c.id === currentCampanaId);
+  const targetCampana = campanas?.find((c) => c.id === targetCampanaId);
+  const otherCampanas = campanas?.filter((c) => c.id !== currentCampanaId) || [];
 
   // Toda la transferencia ocurre en la base en una sola transacción (transfer_case):
   // cierra el caso, crea el nuevo en la campaña destino asignado al supervisor
@@ -54,7 +55,7 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
       setConfirmOpen(false);
       onTransferred();
     } catch (err) {
-      toast.error("No se pudo transferir", { description: (err as Error).message });
+      toast.error("No se pudo transferir", { description: errorMessage(err) });
     } finally {
       setTransferring(false);
     }
@@ -85,7 +86,7 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
               <SelectValue placeholder="Seleccionar campaña destino" />
             </SelectTrigger>
             <SelectContent>
-              {otherCampanas.map((c: any) => (
+              {otherCampanas.map((c) => (
                 <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
               ))}
             </SelectContent>
