@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { EstadoBadge } from "@/components/cases/EstadoBadge";
+import { CaseIdButton } from "@/components/cases/CaseIdButton";
+import { TableSkeletonRows } from "@/components/TableLoading";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAllCases, useAdminUpdateCase } from "@/hooks/useAdmin";
 import { useEstados, useTiposServicio, useAgentes, useInsertHistorial } from "@/hooks/useCases";
@@ -11,8 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { Eye, Lock, ChevronLeft, ChevronRight } from "lucide-react";
-import { getEstadoInlineStyle } from "@/lib/estadoColors";
+import { Eye, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -147,9 +149,9 @@ export default function AdminCases() {
         <CardContent className="p-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
-              <Label className="text-xs">Estado</Label>
+              <Label htmlFor="admin-cases-estado" className="text-xs">Estado</Label>
               <Select value={filterEstado} onValueChange={handleFilterChange(setFilterEstado)}>
-                <SelectTrigger className="h-8"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectTrigger id="admin-cases-estado" className="h-8"><SelectValue placeholder="Todos" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
                   {estados?.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}
@@ -157,9 +159,9 @@ export default function AdminCases() {
               </Select>
             </div>
             <div>
-              <Label className="text-xs">Agente</Label>
+              <Label htmlFor="admin-cases-agente" className="text-xs">Agente</Label>
               <Select value={filterAgente} onValueChange={handleFilterChange(setFilterAgente)}>
-                <SelectTrigger className="h-8"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectTrigger id="admin-cases-agente" className="h-8"><SelectValue placeholder="Todos" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
                   {agentes?.map(a => <SelectItem key={a.user_id} value={a.user_id}>{a.nombre}</SelectItem>)}
@@ -167,12 +169,12 @@ export default function AdminCases() {
               </Select>
             </div>
             <div>
-              <Label className="text-xs">Desde</Label>
-              <Input type="date" className="h-8" value={filterFrom} onChange={e => { setFilterFrom(e.target.value); setPage(0); }} />
+              <Label htmlFor="admin-cases-desde" className="text-xs">Desde</Label>
+              <Input id="admin-cases-desde" type="date" className="h-8" value={filterFrom} onChange={e => { setFilterFrom(e.target.value); setPage(0); }} />
             </div>
             <div>
-              <Label className="text-xs">Hasta</Label>
-              <Input type="date" className="h-8" value={filterTo} onChange={e => { setFilterTo(e.target.value); setPage(0); }} />
+              <Label htmlFor="admin-cases-hasta" className="text-xs">Hasta</Label>
+              <Input id="admin-cases-hasta" type="date" className="h-8" value={filterTo} onChange={e => { setFilterTo(e.target.value); setPage(0); }} />
             </div>
           </div>
         </CardContent>
@@ -195,28 +197,21 @@ export default function AdminCases() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8">Cargando...</TableCell></TableRow>
+                <TableSkeletonRows columns={8} />
               ) : !cases?.length ? (
                 <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No hay casos</TableCell></TableRow>
               ) : cases.map((caso: any) => (
                 <TableRow key={caso.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(caso)}>
-                  <TableCell className="font-medium">#{caso.id}</TableCell>
+                  <TableCell><CaseIdButton id={caso.id} onOpen={() => openDetail(caso)} /></TableCell>
                   <TableCell>{caso.clientes?.nombre_contacto || "-"}</TableCell>
                   <TableCell>{caso.cat_tipo_servicio?.nombre}</TableCell>
                   <TableCell>
-                    <span
-                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
-                      style={getEstadoInlineStyle(caso.cat_estados?.nombre)}
-                    >
-                      {caso.cat_estados?.es_final && <Lock className="h-3 w-3" />}
-                      {caso.cat_estados?.nombre === "Transferido" && "🔄 "}
-                      {caso.cat_estados?.nombre}
-                    </span>
+                    <EstadoBadge nombre={caso.cat_estados?.nombre} showLock={!!caso.cat_estados?.es_final} />
                   </TableCell>
                   <TableCell>{caso.cat_agentes?.nombre || "-"}</TableCell>
                   <TableCell>{formatCOP(caso.valor_pagar)}</TableCell>
                   <TableCell>{format(new Date(caso.fecha_caso), "dd/MM/yyyy", { locale: es })}</TableCell>
-                  <TableCell><Eye className="h-4 w-4 text-muted-foreground" /></TableCell>
+                  <TableCell><Eye className="h-4 w-4 text-muted-foreground" aria-hidden="true" /></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -270,30 +265,30 @@ export default function AdminCases() {
 
               <div className="space-y-3">
                 <div>
-                  <Label>Estado</Label>
+                  <Label htmlFor="admin-cases-estado-2">Estado</Label>
                   <Select value={String(editEstado)} onValueChange={v => { setEditEstado(Number(v)); setObsError(""); }}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="admin-cases-estado-2"><SelectValue /></SelectTrigger>
                     <SelectContent>{estados?.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Agente</Label>
+                  <Label htmlFor="admin-cases-agente-2">Agente</Label>
                   <Select value={editAgente} onValueChange={setEditAgente}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="admin-cases-agente-2"><SelectValue /></SelectTrigger>
                     <SelectContent>{agentes?.map(a => <SelectItem key={a.user_id} value={a.user_id}>{a.nombre}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Tipo de Servicio</Label>
+                  <Label htmlFor="admin-cases-tipo-de-servicio">Tipo de Servicio</Label>
                   <Select value={String(editTipo)} onValueChange={v => setEditTipo(Number(v))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="admin-cases-tipo-de-servicio"><SelectValue /></SelectTrigger>
                     <SelectContent>{tipos?.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.nombre}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 {estadoChanged && showValorPagar && (
                   <div className="space-y-2">
-                    <Label>Valor a Pagar *</Label>
-                    <Input
+                    <Label htmlFor="admin-cases-valor-a-pagar">Valor a Pagar *</Label>
+                    <Input id="admin-cases-valor-a-pagar"
                       placeholder="$ 0"
                       value={editValorDisplay}
                       onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }}
@@ -304,11 +299,11 @@ export default function AdminCases() {
 
                 {estadoChanged && (
                   <div className="space-y-2">
-                    <Label>
+                    <Label htmlFor="admin-cases-observaciones-de-gestion">
                       Observaciones de gestión *
                       {selectedEstadoFinal && !isEditRenovacion && <span className="ml-1 text-xs text-muted-foreground">(mín. 30 caracteres)</span>}
                     </Label>
-                    <Textarea
+                    <Textarea id="admin-cases-observaciones-de-gestion"
                       value={editObservaciones}
                       onChange={e => { setEditObservaciones(e.target.value); setObsError(""); }}
                       rows={3}
@@ -334,13 +329,7 @@ export default function AdminCases() {
                   {history?.map((h: any) => (
                     <div key={h.id} className="rounded-lg bg-muted p-3 text-sm">
                       <div className="flex items-center justify-between">
-                        <span
-                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                          style={getEstadoInlineStyle(h.cat_estados?.nombre)}
-                        >
-                          {h.cat_estados?.nombre === "Transferido" && "🔄 "}
-                          {h.cat_estados?.nombre}
-                        </span>
+                        <EstadoBadge nombre={h.cat_estados?.nombre} />
                         <span className="text-xs text-muted-foreground">{format(new Date(h.cambiado_en), "dd/MM/yyyy HH:mm", { locale: es })}</span>
                       </div>
                       {h.profiles?.nombre && (

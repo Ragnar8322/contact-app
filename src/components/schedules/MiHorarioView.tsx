@@ -1,13 +1,16 @@
-// Vista reducida para el agente: su turno de la semana actual + novedades propias.
+// Vista reducida para el agente: sus turnos por semana (publicada) + novedades propias.
 import { useState } from "react";
 import { AlertCircle, Clock, CalendarDays, Plus, CheckCircle2, XCircle, Hourglass } from "lucide-react";
 import { useCurrentSchedule, useMyShifts, useScheduleNovedades } from "@/hooks/useSchedules";
 import {
   formatHoras,
+  getWeekStart,
+  toISODate,
   ACTIVIDAD_COLORS,
   TipoActividad,
   NOVEDAD_LABELS,
   EstadoNovedad,
+  actividadLabel,
 } from "@/types/schedules";
 import { cn } from "@/lib/utils";
 import { Badge }     from "@/components/ui/badge";
@@ -16,6 +19,7 @@ import { Skeleton }  from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import SolicitarNovedadModal from "./SolicitarNovedadModal";
+import SemanaNav from "./SemanaNav";
 
 const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
@@ -27,8 +31,14 @@ const ESTADO_CONFIG: Record<EstadoNovedad, { label: string; icon: React.ReactNod
 
 export default function MiHorarioView() {
   const [showModal, setShowModal] = useState(false);
+  const [refDate, setRefDate] = useState(() => getWeekStart(new Date()));
+  const semanaInicio = toISODate(refDate);
+  const hoy = toISODate(new Date());
+  const isCurrentWeek = semanaInicio === toISODate(getWeekStart(new Date()));
+  const moverSemana = (dias: number) =>
+    setRefDate((d) => { const n = new Date(d); n.setDate(n.getDate() + dias); return n; });
 
-  const { data: schedule, isLoading: loadingSched, isError: errorSched } = useCurrentSchedule();
+  const { data: schedule, isLoading: loadingSched, isError: errorSched } = useCurrentSchedule(refDate);
   const {
     data: shifts,
     isLoading: loadingShifts,
@@ -42,6 +52,22 @@ export default function MiHorarioView() {
 
   const isLoading = loadingSched || loadingShifts || loadingNovedades;
 
+  return (
+    <div className="space-y-4">
+      <SemanaNav
+        semanaInicio={semanaInicio}
+        schedule={schedule ?? null}
+        onPrev={() => moverSemana(-7)}
+        onNext={() => moverSemana(7)}
+        onToday={() => setRefDate(getWeekStart(new Date()))}
+        isCurrentWeek={isCurrentWeek}
+      />
+      {renderWeekBody()}
+    </div>
+  );
+
+  // Función (no componente) para no remontar el modal en cada render
+  function renderWeekBody() {
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -65,7 +91,11 @@ export default function MiHorarioView() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3 text-muted-foreground">
         <CalendarDays className="h-10 w-10 opacity-30" />
-        <p className="text-sm">No hay semana programada para esta semana.</p>
+        <p className="text-sm text-center">
+          {isCurrentWeek
+            ? "Tu horario de esta semana aún no ha sido publicado."
+            : "El horario de esta semana aún no ha sido publicado."}
+        </p>
       </div>
     );
   }
@@ -103,27 +133,38 @@ export default function MiHorarioView() {
       <div className="space-y-3">
         {DIAS.map((dia, i) => {
           const s = shiftByDay.get(i);
+          const fecha = new Date(semanaInicio + "T12:00:00");
+          fecha.setDate(fecha.getDate() + i);
+          const esHoy = toISODate(fecha) === hoy;
+          const diaLabel = (
+            <span className="w-28 text-sm">
+              <span className="font-semibold">{dia}</span>{" "}
+              <span className="text-xs opacity-90">{fecha.getDate()}</span>
+              {esHoy && <Badge className="ml-1.5 px-1.5 py-0 text-[10px]">Hoy</Badge>}
+            </span>
+          );
+          const hoyRing = esHoy && "ring-2 ring-primary ring-offset-1";
           if (!s) {
             return (
-              <div key={dia} className="flex items-center gap-3 rounded-lg border px-4 py-3 opacity-40">
-                <Clock className="h-4 w-4" />
-                <span className="w-24 text-sm font-medium">{dia}</span>
-                <span className="text-xs text-muted-foreground">Descanso / Sin turno</span>
+              <div key={dia} aria-current={esHoy ? "date" : undefined} className={cn("flex items-center gap-3 rounded-lg border border-dashed bg-muted/40 px-4 py-3 text-muted-foreground", hoyRing)}>
+                <Clock className="h-4 w-4" aria-hidden="true" />
+                {diaLabel}
+                <span className="text-xs">Descanso / Sin turno</span>
               </div>
             );
           }
           const colorClass = ACTIVIDAD_COLORS[s.tipo_actividad as TipoActividad] ?? "bg-gray-100 text-gray-700";
           return (
-            <div key={dia} className={cn("flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3", colorClass)}>
-              <span className="w-24 text-sm font-semibold">{dia}</span>
-              <Badge variant="outline" className="text-xs border-current">{s.tipo_actividad}</Badge>
+            <div key={dia} aria-current={esHoy ? "date" : undefined} className={cn("flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3", colorClass, hoyRing)}>
+              {diaLabel}
+              <Badge variant="outline" className="text-xs border-current">{actividadLabel(s.tipo_actividad)}</Badge>
               {s.hora_inicio && s.hora_fin && (
                 <span className="text-xs">
                   {s.hora_inicio.slice(0, 5)} – {s.hora_fin.slice(0, 5)}
                 </span>
               )}
               {s.hora_almuerzo && (
-                <span className="text-xs opacity-70">
+                <span className="text-xs opacity-90">
                   Almuerzo {s.hora_almuerzo.slice(0, 5)} ({s.duracion_almuerzo} min)
                 </span>
               )}
@@ -194,4 +235,5 @@ export default function MiHorarioView() {
       )}
     </div>
   );
+  }
 }

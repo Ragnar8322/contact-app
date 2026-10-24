@@ -269,7 +269,7 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-indigo-600" />
+            <Users className="h-5 w-5 text-primary" aria-hidden="true" />
             Asignar Casos
           </DialogTitle>
           <DialogDescription>Distribuye casos entre los agentes de la campaña.</DialogDescription>
@@ -278,9 +278,9 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
         <div className="space-y-5">
           {/* Modo */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wide">¿Qué casos asignar?</Label>
+            <Label htmlFor="proportional-assign-modal-que-casos-asignar" className="text-xs text-muted-foreground uppercase tracking-wide">¿Qué casos asignar?</Label>
             <Select value={mode} onValueChange={(v) => setMode(v as AssignMode)}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger id="proportional-assign-modal-que-casos-asignar" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -299,13 +299,15 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
               {/* ── DROPDOWN CASOS ────────────────────────────────── */}
               <div className="space-y-1.5" ref={casosRef}>
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Casos a asignar</Label>
+                  <Label id="assign-casos-label" className="text-xs text-muted-foreground uppercase tracking-wide">Casos a asignar</Label>
                   <Badge variant={selectedCasoIds.size > 0 ? "default" : "secondary"} className="text-xs">
                     {selectedCasoIds.size} / {casos.length}
                   </Badge>
                 </div>
                 <button
                   type="button"
+                  id="assign-casos-trigger"
+                  aria-labelledby="assign-casos-label assign-casos-trigger"
                   onClick={() => setCasosOpen(o => !o)}
                   className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm hover:bg-accent transition-colors"
                 >
@@ -341,13 +343,15 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
               {/* ── DROPDOWN AGENTES ──────────────────────────────── */}
               <div className="space-y-1.5" ref={agentsRef}>
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Agentes</Label>
+                  <Label id="assign-agentes-label" className="text-xs text-muted-foreground uppercase tracking-wide">Agentes</Label>
                   <Badge variant={selectedAgentIds.size > 0 ? "default" : "secondary"} className="text-xs">
                     {selectedAgentIds.size} / {agents.length}
                   </Badge>
                 </div>
                 <button
                   type="button"
+                  id="assign-agentes-trigger"
+                  aria-labelledby="assign-agentes-label assign-agentes-trigger"
                   onClick={() => setAgentsOpen(o => !o)}
                   className="w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm hover:bg-accent transition-colors"
                 >
@@ -388,7 +392,6 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
           <Button
             onClick={handleConfirm}
             disabled={submitting || loading || selectedCasoIds.size === 0 || selectedAgentIds.size === 0}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white"
           >
             {submitting
               ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Asignando...</>

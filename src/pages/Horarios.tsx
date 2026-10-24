@@ -2,6 +2,7 @@
 // Página /horarios — admin | supervisor | gerente
 // ============================================================
 import { useState, useCallback } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
 import {
@@ -15,7 +16,7 @@ import {
 } from "@/hooks/useSchedules";
 import { getWeekStart, getWeekEnd, toISODate } from "@/types/schedules";
 import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import SemanaNav           from "@/components/schedules/SemanaNav";
 import SemanaGrid          from "@/components/schedules/SemanaGrid";
 import CoverageBar         from "@/components/schedules/CoverageBar";
@@ -32,8 +33,6 @@ export default function Horarios() {
   const { isAdmin, isSupervisor } = useAuth();
   const { campanaActiva } = useCampana();
   const campanaId = campanaActiva?.id ?? null;
-
-  const { toast } = useToast();
   const qc = useQueryClient();
 
   const [refDate, setRefDate] = useState(() => getWeekStart(new Date()));
@@ -68,62 +67,64 @@ export default function Horarios() {
     setRefDate(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n; });
     setCoberturaDiaIdx(0);
   }
+  function semanaActual() {
+    setRefDate(getWeekStart(new Date()));
+    setCoberturaDiaIdx(0);
+  }
+  const isCurrentWeek = semanaInicio === toISODate(getWeekStart(new Date()));
 
   const handleCrearSemana = useCallback(() => {
     if (!campanaId) {
-      toast({ title: "Error", description: "No hay campaña activa.", variant: "destructive" });
+      toast.error("Error", { description: "No hay campaña activa." });
       return;
     }
     crearSemana(
       { campana_id: campanaId, semana_inicio: semanaInicio, semana_fin: semanaFin },
       {
-        onSuccess: () => toast({ title: "Semana creada ✅" }),
-        onError:   (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+        onSuccess: () => toast.success("Semana creada"),
+        onError:   (err: Error) => toast.error("Error", { description: err.message }),
       }
     );
-  }, [campanaId, semanaInicio, semanaFin, toast, crearSemana]);
+  }, [campanaId, semanaInicio, semanaFin, crearSemana]);
 
   const handlePublicar = useCallback(() => {
     if (!schedule) return;
     publicarSemana({ scheduleId: schedule.id, estado: "publicado" }, {
-      onSuccess: () => toast({ title: "Semana publicada 📢" }),
-      onError:   (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+      onSuccess: () => toast.success("Semana publicada"),
+      onError:   (err: Error) => toast.error("Error", { description: err.message }),
     });
-  }, [schedule, publicarSemana, toast]);
+  }, [schedule, publicarSemana]);
 
   const handleDespublicar = useCallback(() => {
     if (!schedule) return;
     publicarSemana({ scheduleId: schedule.id, estado: "borrador" }, {
-      onSuccess: () => toast({ title: "Semana regresada a borrador 🔓" }),
-      onError:   (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+      onSuccess: () => toast.success("Semana regresada a borrador"),
+      onError:   (err: Error) => toast.error("Error", { description: err.message }),
     });
-  }, [schedule, publicarSemana, toast]);
+  }, [schedule, publicarSemana]);
 
+  const [confirmLimpiar, setConfirmLimpiar] = useState(false);
   const handleLimpiar = useCallback(() => {
     if (!schedule) return;
-    if (!confirm("¿Estás seguro de que deseas eliminar TODOS los turnos de esta semana? Esta acción no se puede deshacer.")) {
-      return;
-    }
     limpiarSemana(schedule.id, {
       onSuccess: (count) => {
-        toast({ title: "Semana limpia 🧹", description: `Se eliminaron ${count} turnos.` });
+        toast.success("Semana limpia", { description: `Se eliminaron ${count} turnos.` });
         qc.invalidateQueries({ queryKey: ["schedule_shifts", schedule.id] });
       },
-      onError: (err: Error) => toast({ title: "Error al limpiar", description: err.message, variant: "destructive" }),
+      onError: (err: Error) => toast.error("Error al limpiar", { description: err.message }),
     });
-  }, [schedule, limpiarSemana, toast, qc]);
+  }, [schedule, limpiarSemana, qc]);
 
   const handleCopiar = useCallback(() => {
     if (!schedule) return;
     copiarSemana(schedule.id, {
       onSuccess: (count) =>
-        toast({
-          title: count > 0 ? `${count} turnos copiados ✅` : "Sin semana anterior",
-          description: count === 0 ? "No existe una semana anterior para copiar." : undefined,
-        }),
-      onError: (err: Error) => toast({ title: "Error al copiar", description: err.message, variant: "destructive" }),
+        count > 0
+          ? toast.success(`${count} turnos copiados`)
+          : toast.info("Sin semana anterior", { description: "No existe una semana anterior para copiar." }),
+      onError: (err: Error) => toast.error("Error al copiar", { description: err.message }),
     });
-  }, [schedule, copiarSemana, toast]);
+  }, [schedule, copiarSemana]);
 
   // [B7] Invalidar queries tras guardar un turno
   const handleShiftSaved = useCallback(() => {
@@ -137,8 +138,8 @@ export default function Horarios() {
       {/* Cabecera */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Módulo Horarios</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Horarios</h1>
+          <p className="text-muted-foreground">
             Gestión de turnos semanales
             {campanaActiva ? ` — ${campanaActiva.nombre}` : ""}
           </p>
@@ -160,7 +161,7 @@ export default function Horarios() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={handleLimpiar}
+                  onClick={() => setConfirmLimpiar(true)}
                   disabled={limpiando}
                   className="text-destructive hover:bg-destructive/10"
                   title="Elimina todos los turnos programados en esta semana"
@@ -186,7 +187,6 @@ export default function Horarios() {
                   size="sm"
                   variant="outline"
                   onClick={() => setShowGenerarModal(true)}
-                  className="border-violet-400 text-violet-600 hover:bg-violet-50"
                   title="Genera turnos automáticamente con día libre rotativo y almuerzo escalonado"
                 >
                   <Sparkles className="mr-1 h-4 w-4" />
@@ -208,7 +208,6 @@ export default function Horarios() {
                 variant="outline"
                 onClick={handleDespublicar}
                 disabled={publicando}
-                className="text-amber-600 hover:bg-amber-50"
                 title="Regresa la semana a estado borrador para permitir ediciones"
               >
                 <Unlock className="mr-1 h-4 w-4" />
@@ -221,9 +220,12 @@ export default function Horarios() {
 
       {/* Navegación de semana */}
       <SemanaNav
+        semanaInicio={semanaInicio}
         schedule={schedule ?? null}
         onPrev={prevSemana}
         onNext={nextSemana}
+        onToday={semanaActual}
+        isCurrentWeek={isCurrentWeek}
       />
 
       {/* Grilla */}
@@ -274,6 +276,15 @@ export default function Horarios() {
           <AprobacionesPanel />
         </>
       )}
+
+      <ConfirmDialog
+        open={confirmLimpiar}
+        onOpenChange={setConfirmLimpiar}
+        title="¿Eliminar todos los turnos de esta semana?"
+        description="Se borrarán los turnos de todos los agentes de esta semana en borrador. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar turnos"
+        onConfirm={() => { setConfirmLimpiar(false); handleLimpiar(); }}
+      />
 
       {/* Modal generación inteligente */}
       {showGenerarModal && schedule && (

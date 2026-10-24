@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useEstados, useTiposServicio } from "@/hooks/useCases";
 import { useCreateEstado, useUpdateEstado, useCreateTipoServicio, useUpdateTipoServicio, useDeleteTipoServicio } from "@/hooks/useAdmin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -75,8 +76,8 @@ function EstadosSection() {
                 <TableCell><Checkbox checked={newFinal} onCheckedChange={v => setNewFinal(!!v)} /></TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleAdd}><Check className="h-4 w-4" /></Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setAdding(false)}><X className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleAdd} aria-label="Guardar"><Check className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setAdding(false)} aria-label="Cancelar"><X className="h-4 w-4" /></Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -90,16 +91,16 @@ function EstadosSection() {
                   {editId === e.id ? <Input value={editData.nombre} onChange={ev => setEditData(d => ({ ...d, nombre: ev.target.value }))} className="h-8" /> : e.nombre}
                 </TableCell>
                 <TableCell>
-                  {editId === e.id ? <Checkbox checked={editData.es_final} onCheckedChange={v => setEditData(d => ({ ...d, es_final: !!v }))} /> : (e.es_final ? "✓" : "")}
+                  {editId === e.id ? <Checkbox checked={editData.es_final} onCheckedChange={v => setEditData(d => ({ ...d, es_final: !!v }))} /> : (e.es_final ? <Check className="h-4 w-4 text-success" aria-label="Es estado final" /> : null)}
                 </TableCell>
                 <TableCell>
                   {editId === e.id ? (
                     <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={saveEdit}><Check className="h-4 w-4" /></Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditId(null)}><X className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={saveEdit} aria-label="Guardar"><Check className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditId(null)} aria-label="Cancelar"><X className="h-4 w-4" /></Button>
                     </div>
                   ) : (
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(e)}><Pencil className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(e)} aria-label="Editar"><Pencil className="h-4 w-4" /></Button>
                   )}
                 </TableCell>
               </TableRow>
@@ -141,6 +142,8 @@ function TiposServicioSection() {
     } catch (err: any) { toast.error(err.message); }
   };
 
+  const [toDelete, setToDelete] = useState<{ id: number; nombre: string } | null>(null);
+
   const handleDelete = async (id: number) => {
     try {
       await deleteTipo.mutateAsync(id);
@@ -170,8 +173,8 @@ function TiposServicioSection() {
                 <TableCell><Input value={newNombre} onChange={e => setNewNombre(e.target.value)} className="h-8" placeholder="Nombre..." /></TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleAdd}><Check className="h-4 w-4" /></Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setAdding(false)}><X className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleAdd} aria-label="Guardar"><Check className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setAdding(false)} aria-label="Cancelar"><X className="h-4 w-4" /></Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -187,13 +190,13 @@ function TiposServicioSection() {
                 <TableCell>
                   {editId === t.id ? (
                     <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={saveEdit}><Check className="h-4 w-4" /></Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditId(null)}><X className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={saveEdit} aria-label="Guardar"><Check className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditId(null)} aria-label="Cancelar"><X className="h-4 w-4" /></Button>
                     </div>
                   ) : (
                     <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditId(t.id); setEditNombre(t.nombre); }}><Pencil className="h-4 w-4" /></Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(t.id)}><Trash2 className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditId(t.id); setEditNombre(t.nombre); }} aria-label="Editar"><Pencil className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setToDelete({ id: t.id, nombre: t.nombre })} aria-label={`Eliminar ${t.nombre}`}><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   )}
                 </TableCell>
@@ -202,6 +205,14 @@ function TiposServicioSection() {
           </TableBody>
         </Table>
       </CardContent>
+      <ConfirmDialog
+        open={!!toDelete}
+        onOpenChange={(open) => { if (!open) setToDelete(null); }}
+        title={`¿Eliminar "${toDelete?.nombre ?? ""}"?`}
+        description="El tipo de servicio dejará de estar disponible al crear casos. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={() => { if (toDelete) handleDelete(toDelete.id); setToDelete(null); }}
+      />
     </Card>
   );
 }

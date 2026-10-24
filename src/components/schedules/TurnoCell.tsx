@@ -1,7 +1,7 @@
 // Celda individual de la grilla: muestra hora inicio-fin, tipo, almuerzo y novedades.
 // v2: renderiza sub-bloques de almuerzo (variable) y bloque de novedad por horas.
 import { cn } from "@/lib/utils";
-import { ACTIVIDAD_COLORS, TipoActividad, ScheduleShift } from "@/types/schedules";
+import { ACTIVIDAD_COLORS, TipoActividad, ScheduleShift, actividadLabel } from "@/types/schedules";
 import { Utensils, Clock } from "lucide-react";
 
 interface Props {
@@ -14,20 +14,50 @@ interface Props {
     tipo: string;
   } | null;
   onClick?: (shift?: ScheduleShift) => void;
+  /** Agente y día de la celda, para lectores de pantalla (p. ej. "Ana Pérez, lunes 16 mar") */
+  label?: string;
 }
 
-export default function TurnoCell({ shift, editable = false, novedadHoras, onClick }: Props) {
+/** Botón cuando la celda es editable (Tab + Enter/Espacio); div cuando es solo lectura. */
+function CellShell({ editable, label, onActivate, className, children }: {
+  editable: boolean;
+  label: string;
+  onActivate: () => void;
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (!editable) return <div className={className}>{children}</div>;
+  return (
+    <button
+      type="button"
+      onClick={onActivate}
+      aria-label={label}
+      className={cn(
+        className,
+        "w-full text-left cursor-pointer transition-[opacity,transform] duration-100 hover:opacity-80 active:scale-[0.97]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+        "motion-reduce:transition-none motion-reduce:active:scale-100"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+export default function TurnoCell({ shift, editable = false, novedadHoras, onClick, label = "" }: Props) {
   if (!shift) {
     return (
-      <div
-        onClick={() => editable && onClick?.(undefined)}
+      <CellShell
+        editable={editable}
+        label={`Asignar turno: ${label}`}
+        onActivate={() => onClick?.(undefined)}
         className={cn(
           "flex h-16 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground",
-          editable && "cursor-pointer hover:bg-accent/50 transition-colors"
+          editable && "justify-center text-center hover:bg-accent"
         )}
       >
         {editable ? "+ Asignar" : "—"}
-      </div>
+      </CellShell>
     );
   }
 
@@ -51,25 +81,26 @@ export default function TurnoCell({ shift, editable = false, novedadHoras, onCli
   }
 
   return (
-    <div
-      onClick={() => editable && onClick?.(shift)}
+    <CellShell
+      editable={editable}
+      label={`Editar turno: ${label}, ${actividadLabel(shift.tipo_actividad)}`}
+      onActivate={() => onClick?.(shift)}
       className={cn(
         "flex min-h-16 flex-col justify-start rounded-md px-2 py-1 text-xs gap-0.5",
-        colorClass ?? "bg-gray-100 text-gray-700",
-        editable && "cursor-pointer hover:opacity-80 transition-opacity"
+        colorClass ?? "bg-gray-100 text-gray-700"
       )}
     >
       {/* Actividad + horas */}
-      <span className="font-semibold truncate">{shift.tipo_actividad}</span>
+      <span className="font-semibold truncate">{actividadLabel(shift.tipo_actividad)}</span>
       {shift.hora_inicio && shift.hora_fin && (
-        <span className="opacity-80">
+        <span className="opacity-90">
           {shift.hora_inicio.slice(0, 5)} – {shift.hora_fin.slice(0, 5)}
         </span>
       )}
 
       {/* Almuerzo variable */}
       {shift.hora_almuerzo && shift.duracion_almuerzo > 0 && (
-        <span className="flex items-center gap-0.5 opacity-60 text-[10px]">
+        <span className="flex items-center gap-0.5 opacity-90 text-[11px]">
           <Utensils className="h-2.5 w-2.5 shrink-0" />
           {shift.hora_almuerzo.slice(0, 5)} ({shift.duracion_almuerzo}m)
         </span>
@@ -84,8 +115,8 @@ export default function TurnoCell({ shift, editable = false, novedadHoras, onCli
       )}
 
       {shift.horas_dia != null && shift.horas_dia > 0 && (
-        <span className="opacity-70 mt-auto">{shift.horas_dia}h</span>
+        <span className="opacity-90 mt-auto">{shift.horas_dia}h</span>
       )}
-    </div>
+    </CellShell>
   );
 }

@@ -17,7 +17,7 @@ import {
   SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Badge }    from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useCreateNovedad } from "@/hooks/useSchedules";
 import { useAuth }  from "@/contexts/AuthContext";
 import {
@@ -49,7 +49,6 @@ interface Props {
 }
 
 export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Props) {
-  const { toast }  = useToast();
   const { user }   = useAuth();
   const { mutate: crear, isPending } = useCreateNovedad();
 
@@ -81,7 +80,7 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
 
   function handleSubmit() {
     if (!fecha) {
-      toast({ title: "Selecciona una fecha", variant: "destructive" }); return;
+      toast.error("Selecciona una fecha"); return;
     }
     if (!user?.id) return;
 
@@ -98,14 +97,11 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
       },
       {
         onSuccess: () => {
-          toast({
-            title: "Novedad enviada",
-            description: "Tu solicitud quedó en estado pendiente. El supervisor la revisará.",
-          });
+          toast.success("Novedad enviada", { description: "Tu solicitud quedó en estado pendiente. El supervisor la revisará." });
           onClose();
         },
         onError: (e) => {
-          toast({ title: "Error al enviar", description: (e as Error).message, variant: "destructive" });
+          toast.error("Error al enviar", { description: (e as Error).message });
         },
       }
     );
@@ -128,7 +124,7 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
 
           {/* Tipo de novedad */}
           <div className="space-y-1">
-            <Label>Tipo de novedad</Label>
+            <Label htmlFor="solicitar-novedad-modal-tipo-de-novedad">Tipo de novedad</Label>
             <Select
               value={tipo}
               onValueChange={(v) => {
@@ -138,7 +134,7 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
                 }
               }}
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="solicitar-novedad-modal-tipo-de-novedad"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {TIPOS_NOVEDAD.map((t) => (
                   <SelectItem key={t} value={t}>{NOVEDAD_LABELS[t]}</SelectItem>
@@ -149,8 +145,8 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
 
           {/* Fecha */}
           <div className="space-y-1">
-            <Label>Fecha</Label>
-            <Input
+            <Label htmlFor="solicitar-novedad-modal-fecha">Fecha</Label>
+            <Input id="solicitar-novedad-modal-fecha"
               type="date"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
@@ -176,9 +172,9 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label>Hora inicio</Label>
+                  <Label htmlFor="solicitar-novedad-modal-hora-inicio">Hora inicio</Label>
                   <Select value={horaInicio} onValueChange={setHoraInicio}>
-                    <SelectTrigger>
+                    <SelectTrigger id="solicitar-novedad-modal-hora-inicio">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="max-h-56">
@@ -189,9 +185,9 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label>Hora fin</Label>
+                  <Label htmlFor="solicitar-novedad-modal-hora-fin">Hora fin</Label>
                   <Select value={horaFin} onValueChange={setHoraFin}>
-                    <SelectTrigger>
+                    <SelectTrigger id="solicitar-novedad-modal-hora-fin">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="max-h-56">
@@ -219,8 +215,8 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
 
           {/* Descripción */}
           <div className="space-y-1">
-            <Label>Descripción (opcional)</Label>
-            <Textarea
+            <Label htmlFor="solicitar-novedad-modal-descripcion-opcional">Descripción (opcional)</Label>
+            <Textarea id="solicitar-novedad-modal-descripcion-opcional"
               rows={2}
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}

@@ -9,7 +9,7 @@ import { NOVEDAD_LABELS, EstadoNovedad } from "@/types/schedules";
 import { Button }   from "@/components/ui/button";
 import { Badge }    from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue,
@@ -25,7 +25,6 @@ const ESTADO_BADGE: Record<EstadoNovedad, string> = {
 };
 
 export default function AprobacionesPanel() {
-  const { toast } = useToast();
   const [filtro, setFiltro] = useState<FiltroEstado>("pendiente");
 
   const { data: novedades, isLoading, refetch, isFetching } =
@@ -38,15 +37,10 @@ export default function AprobacionesPanel() {
       { novedadId, estado },
       {
         onSuccess: () => {
-          toast({
-            title: estado === "aprobado" ? "Novedad aprobada" : "Novedad rechazada",
-            description: estado === "aprobado"
-              ? "El agente será notificado."
-              : "La solicitud fue rechazada.",
-          });
+          toast.success(estado === "aprobado" ? "Novedad aprobada" : "Novedad rechazada", { description: estado === "aprobado" ? "El agente la verá aprobada en Mi Horario." : "La solicitud fue rechazada." });
         },
         onError: (e) => {
-          toast({ title: "Error", description: (e as Error).message, variant: "destructive" });
+          toast.error("Error", { description: (e as Error).message });
         },
       }
     );
@@ -79,7 +73,7 @@ export default function AprobacionesPanel() {
             onClick={() => refetch()}
             disabled={isFetching}
             title="Actualizar"
-          >
+           aria-label="Actualizar">
             <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
           </Button>
         </div>

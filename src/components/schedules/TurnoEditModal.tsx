@@ -12,9 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { ScheduleShift, TipoActividad } from "@/types/schedules";
+import { ScheduleShift, TipoActividad, actividadLabel } from "@/types/schedules";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
 
 const ACTIVIDADES: TipoActividad[] = [
@@ -53,7 +53,6 @@ export default function TurnoEditModal({
   onClose,
   onSaved,
 }: Props) {
-  const { toast } = useToast();
   const { isAdmin, isSupervisor } = useAuth();
   const qc = useQueryClient();
 
@@ -111,11 +110,7 @@ export default function TurnoEditModal({
 
   async function handleSave() {
     if (horasInvalidas) {
-      toast({
-        title: "Rango de horas inválido",
-        description: "La hora de fin debe ser mayor que la hora de inicio más el almuerzo.",
-        variant: "destructive",
-      });
+      toast.error("Rango de horas inválido", { description: "La hora de fin debe ser mayor que la hora de inicio más el almuerzo." });
       return;
     }
 
@@ -139,9 +134,9 @@ export default function TurnoEditModal({
 
     setSaving(false);
     if (error) {
-      toast({ title: "Error al guardar", description: error.message, variant: "destructive" });
+      toast.error("Error al guardar", { description: error.message });
     } else {
-      toast({ title: "Turno guardado" });
+      toast.success("Turno guardado");
       qc.invalidateQueries({ queryKey: ["schedule_shifts", scheduleId] });
       onSaved();
     }
@@ -164,12 +159,12 @@ export default function TurnoEditModal({
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label>Hora inicio</Label>
-                  <Input type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} />
+                  <Label htmlFor="turno-edit-modal-hora-inicio">Hora inicio</Label>
+                  <Input id="turno-edit-modal-hora-inicio" type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                  <Label>Hora fin</Label>
-                  <Input
+                  <Label htmlFor="turno-edit-modal-hora-fin">Hora fin</Label>
+                  <Input id="turno-edit-modal-hora-fin"
                     type="time"
                     value={horaFin}
                     onChange={(e) => setHoraFin(e.target.value)}
@@ -180,12 +175,12 @@ export default function TurnoEditModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label>Inicio almuerzo</Label>
-                  <Input type="time" value={horaAlmuerzo} onChange={(e) => setHoraAlmuerzo(e.target.value)} />
+                  <Label htmlFor="turno-edit-modal-inicio-almuerzo">Inicio almuerzo</Label>
+                  <Input id="turno-edit-modal-inicio-almuerzo" type="time" value={horaAlmuerzo} onChange={(e) => setHoraAlmuerzo(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                  <Label>Duración almuerzo (min)</Label>
-                  <Input
+                  <Label htmlFor="turno-edit-modal-duracion-almuerzo-min">Duración almuerzo (min)</Label>
+                  <Input id="turno-edit-modal-duracion-almuerzo-min"
                     type="number" min={0} max={120} step={15}
                     value={durAlmuerzo}
                     onChange={(e) => {
@@ -199,12 +194,12 @@ export default function TurnoEditModal({
           )}
 
           <div className="space-y-1">
-            <Label>Tipo de actividad</Label>
+            <Label htmlFor="turno-edit-modal-tipo-de-actividad">Tipo de actividad</Label>
             <Select value={actividad} onValueChange={(v) => setActividad(v as TipoActividad)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="turno-edit-modal-tipo-de-actividad"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {ACTIVIDADES.map((a) => (
-                  <SelectItem key={a} value={a}>{a}</SelectItem>
+                  <SelectItem key={a} value={a}>{actividadLabel(a)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -250,8 +245,8 @@ export default function TurnoEditModal({
           )}
 
           <div className="space-y-1">
-            <Label>Observación (opcional)</Label>
-            <Textarea
+            <Label htmlFor="turno-edit-modal-observacion-opcional">Observación (opcional)</Label>
+            <Textarea id="turno-edit-modal-observacion-opcional"
               rows={2}
               value={observacion}
               onChange={(e) => setObservacion(e.target.value)}

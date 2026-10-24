@@ -16,14 +16,14 @@ const passwordSchema = z
   .regex(/[A-Z]/, "Debe incluir al menos una mayúscula")
   .regex(/[a-z]/, "Debe incluir al menos una minúscula")
   .regex(/[0-9]/, "Debe incluir al menos un número")
-  .regex(/[!@#$%^&*(),.?":{}|<>]/, "Debe incluir al menos un carácter especial");
+  .regex(/[^A-Za-z0-9]/, "Debe incluir al menos un carácter especial");
 
 const rules = [
   { label: "Mínimo 8 caracteres", test: (v: string) => v.length >= 8 },
   { label: "Al menos una mayúscula (A–Z)", test: (v: string) => /[A-Z]/.test(v) },
   { label: "Al menos una minúscula (a–z)", test: (v: string) => /[a-z]/.test(v) },
   { label: "Al menos un número (0–9)", test: (v: string) => /[0-9]/.test(v) },
-  { label: "Al menos un carácter especial (!, @, #, $, etc.)", test: (v: string) => /[!@#$%^&*(),.?":{}|<>]/.test(v) },
+  { label: "Al menos un carácter especial (!, @, #, -, _, etc.)", test: (v: string) => /[^A-Za-z0-9]/.test(v) },
 ];
 
 export default function ChangePassword() {
@@ -80,17 +80,17 @@ export default function ChangePassword() {
             <p className="font-semibold flex items-center gap-2 text-foreground">
               <Shield className="h-4 w-4" /> Recomendaciones para tu contraseña:
             </p>
-            <ul className="space-y-1 ml-1">
+            <ul className="space-y-1 ml-1" aria-live="polite">
               {rules.map((r) => {
                 const pass = r.test(password);
                 return (
                   <li key={r.label} className="flex items-center gap-2">
                     {touched ? (
-                      pass ? <Check className="h-3.5 w-3.5 text-primary" /> : <X className="h-3.5 w-3.5 text-destructive" />
+                      pass ? <Check className="h-3.5 w-3.5 text-success" aria-label="Cumple" /> : <X className="h-3.5 w-3.5 text-destructive" aria-label="No cumple" />
                     ) : (
                       <span className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 inline-block" />
                     )}
-                    <span className={touched ? (pass ? "text-primary" : "text-destructive") : "text-muted-foreground"}>
+                    <span className={touched ? (pass ? "text-success" : "text-destructive") : "text-muted-foreground"}>
                       {r.label}
                     </span>
                   </li>
@@ -112,15 +112,9 @@ export default function ChangePassword() {
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setTouched(true); }}
                 placeholder="••••••••"
+                autoComplete="new-password"
                 required
               />
-              {touched && !zodResult.success && (
-                <div className="space-y-1">
-                  {zodResult.error.errors.map((err, i) => (
-                    <p key={i} className="text-xs text-destructive">{err.message}</p>
-                  ))}
-                </div>
-              )}
             </div>
 
             <div className="space-y-2">
@@ -128,6 +122,7 @@ export default function ChangePassword() {
               <Input
                 id="confirm-password"
                 type="password"
+                autoComplete="new-password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 placeholder="••••••••"

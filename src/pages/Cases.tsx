@@ -1,9 +1,14 @@
 import { useState, useMemo, useEffect } from "react";
+import { EstadoBadge } from "@/components/cases/EstadoBadge";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
-import { useCases, useEstados, useTiposServicio, useAgentes, useUpdateCase, useInsertHistorial, useCaseHistory, CasesFilters } from "@/hooks/useCases";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { RefetchBar, TableSkeletonRows } from "@/components/TableLoading";
+import { CaseIdButton } from "@/components/cases/CaseIdButton";
+import { useCases, useCaseById, useEstados, useTiposServicio, useAgentes, useUpdateCase, useInsertHistorial, useCaseHistory, CasesFilters } from "@/hooks/useCases";
+import { useSearchParams } from "react-router-dom";
 import { useCampanasList } from "@/hooks/useCampanas";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,11 +20,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Eye, Lock, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, ArrowRightLeft, Users } from "lucide-react";
+import { Plus, Eye, Lock, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, ArrowRightLeft, Users, Phone, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
 import { safeFormat } from "@/lib/date";
-import { getEstadoInlineStyle } from "@/lib/estadoColors";
 import { Input } from "@/components/ui/input";
 import UnifiedCaseForm from "@/components/cases/UnifiedCaseForm";
 import CasesFilterBar from "@/components/cases/CasesFilterBar";
@@ -41,8 +45,14 @@ export default function Cases() {
   const { data: agentesData } = useAgentes();
   const { data: allCampanas = [] } = useCampanasList();
 
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>("activos");
-  const [searchText, setSearchText] = useState("");
+  // Enlaces entrantes: /casos?caso=123 abre ese caso; /casos?buscar=900123 llega con la búsqueda aplicada
+  const [searchParams, setSearchParams] = useSearchParams();
+  const buscarParam = searchParams.get("buscar") ?? "";
+  const casoParam = Number(searchParams.get("caso")) || null;
+
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(buscarParam ? "todos" : "activos");
+  const [searchText, setSearchText] = useState(buscarParam);
+  const debouncedSearch = useDebouncedValue(searchText);
   const [filters, setFilters] = useState<CasesFilters>({});
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -51,7 +61,7 @@ export default function Cases() {
     const base: CasesFilters = {
       ...filters,
       campanaId: campanaActiva?.id,
-      searchText: searchText.trim() || undefined,
+      searchText: debouncedSearch.trim() || undefined,
     };
 
     if (!estados || estados.length === 0) return base;
@@ -76,7 +86,7 @@ export default function Cases() {
     }
 
     return base;
-  }, [filters, campanaActiva, estados, quickFilter, searchText]);
+  }, [filters, campanaActiva, estados, quickFilter, debouncedSearch]);
 
   useEffect(() => {
     setPage(1);
@@ -144,7 +154,11 @@ export default function Cases() {
   const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null);
   const { data: history } = useCaseHistory(selectedCaseId);
 
-  const selectedCase = filteredCases?.find((c: any) => c.id === selectedCaseId) || cases?.find((c: any) => c.id === selectedCaseId);
+  const { data: linkedCase } = useCaseById(casoParam);
+  const selectedCase =
+    filteredCases?.find((c: any) => c.id === selectedCaseId) ||
+    cases?.find((c: any) => c.id === selectedCaseId) ||
+    (linkedCase?.id === selectedCaseId ? linkedCase : undefined);
   const isTransferredCase = selectedCase?.cat_estados?.nombre === "Transferido";
 
   const transferInfo = useMemo(() => {
@@ -179,6 +193,27 @@ export default function Cases() {
     setEditValorDisplay(caso.valor_pagar ? formatCOP(caso.valor_pagar) : "");
     setValorError("");
     setDetailObservacion("");
+  };
+
+  useEffect(() => {
+    if (linkedCase && linkedCase.id !== selectedCaseId) openDetail(linkedCase);
+    // openDetail solo cambia estado local; abrir una vez por caso enlazado
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedCase]);
+
+  const closeDetail = () => {
+    setSelectedCaseId(null);
+    if (searchParams.has("caso")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("caso");
+      setSearchParams(next, { replace: true });
+    }
+  };
+
+  const openCaseById = (id: number) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("caso", String(id));
+    setSearchParams(next);
   };
 
   const isRenovacionWeb = selectedCase?.cat_tipo_servicio?.nombre?.toLowerCase() === "renovación web";
@@ -268,10 +303,7 @@ export default function Cases() {
         {!isGerente && (
           <div className="flex gap-2">
             {hasRole(["admin", "supervisor"]) && (
-              <Button
-                onClick={() => setAssignModalOpen(true)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white border-0 shadow-sm"
-              >
+              <Button variant="outline" onClick={() => setAssignModalOpen(true)}>
                 <Users className="mr-2 h-4 w-4" />
                 Asignar Casos
               </Button>
@@ -296,6 +328,8 @@ export default function Cases() {
         ]).map((tab) => (
           <button
             key={tab.key}
+            type="button"
+            aria-pressed={quickFilter === tab.key}
             onClick={() => setQuickFilter(tab.key)}
             className={`px-4 py-2 text-sm font-medium rounded-full border transition-colors ${
               quickFilter === tab.key
@@ -322,18 +356,12 @@ export default function Cases() {
 
       <Card className="border-0 shadow-sm">
         <CardContent className="p-0 relative">
-          {showPageOverlay && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-[1px] rounded-lg">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            </div>
-          )}
+          <RefetchBar active={showPageOverlay} />
 
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("id")}>
-                  <span className="inline-flex items-center gap-1">ID <ArrowUpDown className="h-3 w-3" /></span>
-                </TableHead>
+                <SortableHead field="id" label="ID" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                 <TableHead>Cliente</TableHead>
                 {isTransferView ? (
                   <>
@@ -345,51 +373,53 @@ export default function Cases() {
                   </>
                 ) : (
                   <>
-                    <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("identificacion")}>
-                      <span className="inline-flex items-center gap-1">NIT / Cédula <ArrowUpDown className="h-3 w-3" /></span>
-                    </TableHead>
+                    <SortableHead field="identificacion" label="NIT / Cédula" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                     <TableHead>Tipo</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead>Agente</TableHead>
                     <TableHead>Valor a Pagar</TableHead>
                     <TableHead>Fecha</TableHead>
-                    <TableHead></TableHead>
+                    <TableHead><span className="sr-only">Estado de edición</span></TableHead>
                   </>
                 )}
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={isTransferView ? 7 : 9} className="text-center py-8">Cargando...</TableCell></TableRow>
+                <TableSkeletonRows columns={isTransferView ? 7 : 9} />
               ) : filteredCases.length === 0 ? (
                 <TableRow><TableCell colSpan={isTransferView ? 7 : 9} className="text-center py-8 text-muted-foreground">No hay casos</TableCell></TableRow>
               ) : filteredCases.map((caso: any) => (
                 <TableRow key={caso.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openDetail(caso)}>
-                  <TableCell className="font-medium">#{caso.id}</TableCell>
+                  <TableCell><CaseIdButton id={caso.id} onOpen={() => openDetail(caso)} /></TableCell>
                   <TableCell>{caso.clientes?.nombre_contacto || "-"}</TableCell>
                   {isTransferView ? (
-                    <TransferColumns caso={caso} campanaName={campanaName} />
+                    <TransferColumns
+                      caso={caso}
+                      campanaName={campanaName}
+                      transferidoPor={agentesData?.find((a: any) => a.user_id === caso.updated_by)?.nombre}
+                    />
                   ) : (
                     <>
                       <TableCell className="font-mono text-sm">{caso.clientes?.identificacion || "-"}</TableCell>
                       <TableCell>{caso.cat_tipo_servicio?.nombre}</TableCell>
                       <TableCell>
-                        <span
-                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                          style={getEstadoInlineStyle(caso.cat_estados?.nombre)}
-                        >
-                          {caso.cat_estados?.nombre === "Transferido" && "🔄 "}
-                          {caso.cat_estados?.nombre}
-                        </span>
+                        <EstadoBadge nombre={caso.cat_estados?.nombre} />
                       </TableCell>
                       <TableCell>{caso.cat_agentes?.nombre || "-"}</TableCell>
                       <TableCell>{formatCOP(caso.valor_pagar)}</TableCell>
                       <TableCell>{safeFormat(caso.fecha_caso, "dd/MM/yyyy")}</TableCell>
                       <TableCell>
                         {caso.cat_estados?.es_final ? (
-                          <Lock className="h-4 w-4 text-muted-foreground" />
+                          <span title="Caso cerrado: solo lectura">
+                            <Lock className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                            <span className="sr-only">Cerrado, solo lectura</span>
+                          </span>
                         ) : (
-                          <Eye className="h-4 w-4 text-muted-foreground" />
+                          <span title="Caso abierto">
+                            <Eye className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                            <span className="sr-only">Abierto</span>
+                          </span>
                         )}
                       </TableCell>
                     </>
@@ -411,6 +441,8 @@ export default function Cases() {
                     {PAGE_SIZE_OPTIONS.map((size) => (
                       <button
                         key={size}
+                        type="button"
+                        aria-pressed={pageSize === size}
                         onClick={() => { setPageSize(size); setPage(1); }}
                         className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${pageSize === size ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                       >
@@ -439,7 +471,7 @@ export default function Cases() {
       </Card>
 
       {/* Detail Sheet */}
-      <Sheet open={!!selectedCaseId} onOpenChange={open => { if (!open) setSelectedCaseId(null); }}>
+      <Sheet open={!!selectedCaseId} onOpenChange={open => { if (!open) closeDetail(); }}>
         <SheetContent className="w-full sm:max-w-lg overflow-auto">
           <SheetHeader>
             <SheetTitle>Caso #{selectedCase?.id}</SheetTitle>
@@ -452,7 +484,16 @@ export default function Cases() {
                     <ArrowRightLeft className="inline h-4 w-4 mr-1" />
                     Este caso fue transferido.
                     {transferInfo.newCaseId && (
-                      <> Ver nuevo caso <strong>#{transferInfo.newCaseId}</strong></>
+                      <>
+                        {" "}Nuevo caso:{" "}
+                        <button
+                          type="button"
+                          onClick={() => openCaseById(Number(transferInfo.newCaseId))}
+                          className="font-semibold text-primary underline underline-offset-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          #{transferInfo.newCaseId}
+                        </button>
+                      </>
                     )}
                     {transferInfo.targetCampana && (
                       <> en la campaña <strong>{transferInfo.targetCampana}</strong></>
@@ -462,9 +503,10 @@ export default function Cases() {
               )}
 
               {(isReadOnly && !isTransferredCase) && (
-                <Alert className="border-amber-500/50 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                <Alert className="border-warning/40 bg-warning/10 text-warning">
+                  <Lock className="h-4 w-4 !text-warning" aria-hidden="true" />
                   <AlertDescription>
-                    ⚠️ Este caso está cerrado y no puede ser modificado. Si necesitas reabrirlo, contacta a un administrador.
+                    Este caso está cerrado y no puede ser modificado. Si necesitas reabrirlo, contacta a un administrador.
                   </AlertDescription>
                 </Alert>
               )}
@@ -487,11 +529,11 @@ export default function Cases() {
               <div className="text-sm space-y-1.5">
                 <span className="font-medium text-foreground">Datos de Contacto</span>
                 <div className="flex items-center gap-1.5">
-                  <span>📞</span>
+                  <Phone className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                   <span className="text-muted-foreground">Teléfonos:</span>
                   {(() => {
                     const phones = [selectedCase.clientes?.telefono, selectedCase.clientes?.celular].filter(Boolean);
-                    if (phones.length === 0) return <span className="text-muted-foreground/60 italic">No registrado</span>;
+                    if (phones.length === 0) return <span className="text-muted-foreground italic">No registrado</span>;
                     return phones.map((p, i) => (
                       <span key={i}>
                         {i > 0 && <span className="text-muted-foreground">, </span>}
@@ -501,12 +543,12 @@ export default function Cases() {
                   })()}
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span>✉️</span>
+                  <Mail className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                   <span className="text-muted-foreground">Correo:</span>
                   {selectedCase.clientes?.correo ? (
                     <a href={`mailto:${selectedCase.clientes.correo}`} className="text-primary hover:underline">{selectedCase.clientes.correo}</a>
                   ) : (
-                    <span className="text-muted-foreground/60 italic">No registrado</span>
+                    <span className="text-muted-foreground italic">No registrado</span>
                   )}
                 </div>
               </div>
@@ -515,9 +557,9 @@ export default function Cases() {
 
               {!isReadOnly && !isFullyLocked && (
                 <div className="space-y-3">
-                  <Label>Cambiar Estado</Label>
+                  <Label htmlFor="cases-cambiar-estado">Cambiar Estado</Label>
                   <Select value={String(editEstado)} onValueChange={v => { setEditEstado(Number(v)); setObsError(""); setValorError(""); }}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="cases-cambiar-estado"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {estados?.filter(e => e.nombre !== "Transferido").map(e => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}
                     </SelectContent>
@@ -525,16 +567,16 @@ export default function Cases() {
 
                   {estadoChanged && showValorPagar && (
                     <div className="space-y-2">
-                      <Label>Valor a Pagar *</Label>
-                      <Input placeholder="$ 0" value={editValorDisplay} onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }} />
+                      <Label htmlFor="cases-valor-a-pagar">Valor a Pagar *</Label>
+                      <Input id="cases-valor-a-pagar" placeholder="$ 0" value={editValorDisplay} onChange={e => { setEditValorDisplay(formatCOPInput(e.target.value)); setValorError(""); }} />
                       {valorError && <p className="text-sm text-destructive">{valorError}</p>}
                     </div>
                   )}
 
                   {isEnGestion ? (
                     <div className="space-y-2">
-                      <Label>Observaciones (opcional)</Label>
-                      <Textarea
+                      <Label htmlFor="cases-observaciones-opcional">Observaciones (opcional)</Label>
+                      <Textarea id="cases-observaciones-opcional"
                         value={detailObservacion}
                         onChange={e => { if (e.target.value.length <= 500) setDetailObservacion(e.target.value); }}
                         rows={3}
@@ -545,11 +587,11 @@ export default function Cases() {
                     </div>
                   ) : estadoChanged ? (
                     <div className="space-y-2">
-                      <Label>
+                      <Label htmlFor="cases-observaciones-de-gestion">
                         Observaciones de gestión *
                         {selectedEstadoFinal && !isRenovacionWeb && <span className="ml-1 text-xs text-muted-foreground">(mín. 30 caracteres)</span>}
                       </Label>
-                      <Textarea value={editObservaciones} onChange={e => { setEditObservaciones(e.target.value); setObsError(""); }} rows={3} placeholder="Describe la gestión realizada..." />
+                      <Textarea id="cases-observaciones-de-gestion" value={editObservaciones} onChange={e => { setEditObservaciones(e.target.value); setObsError(""); }} rows={3} placeholder="Describe la gestión realizada..." />
                       {selectedEstadoFinal && !isRenovacionWeb && (
                         <p className="text-xs text-muted-foreground">{editObservaciones.trim().length}/30 caracteres</p>
                       )}
@@ -581,13 +623,7 @@ export default function Cases() {
                     return (
                       <div key={h.id} className="rounded-lg bg-muted/50 p-3 text-sm">
                         <div className="flex items-center justify-between">
-                          <span
-                            className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                            style={getEstadoInlineStyle(estadoNombre)}
-                          >
-                            {estadoNombre === "Transferido" && "🔄 "}
-                            {estadoNombre}
-                          </span>
+                          <EstadoBadge nombre={estadoNombre} />
                           <span className="text-xs text-muted-foreground">
                             {safeFormat(h.fecha_cambio || h.cambiado_en, "dd/MM/yyyy HH:mm")}
                           </span>
@@ -619,7 +655,7 @@ export default function Cases() {
   );
 }
 
-function TransferColumns({ caso, campanaName }: { caso: any; campanaName: (id: string | null) => string }) {
+function TransferColumns({ caso, campanaName, transferidoPor }: { caso: any; campanaName: (id: string | null) => string; transferidoPor?: string }) {
   const obs = (caso.observacion_cierre || "") as string;
   const caseMatch = obs.match(/Nuevo caso #(\d+)/);
   const campMatch = obs.match(/Transferido a campaña: ([^.]+)/);
@@ -630,14 +666,30 @@ function TransferColumns({ caso, campanaName }: { caso: any; campanaName: (id: s
       <TableCell className="text-sm">{campMatch ? campMatch[1] : "—"}</TableCell>
       <TableCell className="text-sm">{safeFormat(caso.fecha_cierre, "dd/MM/yyyy HH:mm")}</TableCell>
       <TableCell className="text-sm font-medium">{caseMatch ? `#${caseMatch[1]}` : "—"}</TableCell>
-      <TableCell className="text-sm text-muted-foreground">
-        <span
-          className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
-          style={getEstadoInlineStyle("Transferido")}
-        >
-          🔄 Transferido
-        </span>
-      </TableCell>
+      <TableCell className="text-sm">{transferidoPor ?? "—"}</TableCell>
     </>
+  );
+}
+
+function SortableHead({ field, label, sortField, sortDir, onSort }: {
+  field: Exclude<SortField, null>;
+  label: string;
+  sortField: SortField;
+  sortDir: SortDir;
+  onSort: (field: Exclude<SortField, null>) => void;
+}) {
+  const active = sortField === field;
+  const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <TableHead aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className="inline-flex items-center gap-1 whitespace-nowrap rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {label}
+        <Icon className={`h-3 w-3 ${active ? "" : "opacity-50"}`} aria-hidden="true" />
+      </button>
+    </TableHead>
   );
 }

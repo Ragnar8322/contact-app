@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { roleLabel } from "@/lib/roleUtils";
 import { useAllProfiles, useUpdateProfile, useInviteUser, useRoles, useSaveRoleAssignments, useResetPassword } from "@/hooks/useAdmin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,7 +18,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Check, X, KeyRound, Shield, Copy } from "lucide-react";
+import { Plus, Pencil, Check, X, KeyRound, Shield, Copy, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
@@ -34,7 +35,7 @@ const ROLE_COLORS: Record<string, string> = {
   admin: "bg-destructive/10 text-destructive border-destructive/20",
   supervisor: "bg-primary/10 text-primary border-primary/20",
   agent: "bg-secondary text-secondary-foreground border-secondary",
-  gerente: "bg-accent text-accent-foreground border-accent",
+  gerente: "bg-success/10 text-success border-success/20",
 };
 
 function RoleBadges({ assignments, fallbackRole }: {
@@ -48,8 +49,8 @@ function RoleBadges({ assignments, fallbackRole }: {
   return (
     <div className="flex flex-wrap gap-1">
       {rolesToShow.map((role, i) => (
-        <Badge key={i} variant="outline" className={cn("text-xs capitalize", ROLE_COLORS[role] || "")}>
-          {role}
+        <Badge key={i} variant="outline" className={cn("text-xs", ROLE_COLORS[role] || "")}>
+          {roleLabel(role)}
         </Badge>
       ))}
     </div>
@@ -73,7 +74,7 @@ function RoleCheckboxes({ roles, selected, onChange }: {
               else onChange(selected.filter(id => id !== r.id));
             }}
           />
-          <Label htmlFor={`role-${r.id}`} className="capitalize cursor-pointer">{r.name}</Label>
+          <Label htmlFor={`role-${r.id}`} className="cursor-pointer">{roleLabel(r.name)}</Label>
         </div>
       ))}
     </div>
@@ -98,7 +99,7 @@ function CredencialesDialog({
     <AlertDialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
-          <AlertDialogTitle>✅ Usuario creado exitosamente</AlertDialogTitle>
+          <AlertDialogTitle className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-success" aria-hidden="true" />Usuario creado</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-4 pt-2">
               <p className="text-sm text-muted-foreground">
@@ -122,14 +123,15 @@ function CredencialesDialog({
                         navigator.clipboard.writeText(password);
                         toast.success("Contraseña copiada al portapapeles");
                       }}
-                    >
+                     aria-label="Copiar">
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
               </div>
-              <p className="text-xs text-amber-600 dark:text-amber-400">
-                ⚠️ El usuario deberá cambiar esta contraseña al iniciar sesión por primera vez.
+              <p className="flex items-start gap-1.5 text-xs text-warning">
+                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                El usuario deberá cambiar esta contraseña al iniciar sesión por primera vez.
               </p>
             </div>
           </AlertDialogDescription>
@@ -263,28 +265,30 @@ export default function AdminProfiles() {
                 </DialogHeader>
                 <form onSubmit={handleInvite} className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Email *</Label>
-                    <Input type="email" required value={inviteForm.email}
+                    <Label htmlFor="admin-profiles-email">Email *</Label>
+                    <Input id="admin-profiles-email" type="email" required value={inviteForm.email}
                       onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Nombre</Label>
-                    <Input value={inviteForm.nombre}
+                    <Label htmlFor="admin-profiles-nombre">Nombre</Label>
+                    <Input id="admin-profiles-nombre" value={inviteForm.nombre}
                       onChange={e => setInviteForm(f => ({ ...f, nombre: e.target.value }))} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Teléfono</Label>
-                    <Input value={inviteForm.telefono}
+                    <Label htmlFor="admin-profiles-telefono">Teléfono</Label>
+                    <Input id="admin-profiles-telefono" value={inviteForm.telefono}
                       onChange={e => setInviteForm(f => ({ ...f, telefono: e.target.value }))} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Roles *</Label>
+                    <p id="admin-profiles-roles" className="text-sm font-medium leading-none">Roles *</p>
                     {roles && (
-                      <RoleCheckboxes
-                        roles={roles}
-                        selected={inviteForm.selectedRoleIds}
-                        onChange={(ids) => setInviteForm(f => ({ ...f, selectedRoleIds: ids }))}
-                      />
+                      <div role="group" aria-labelledby="admin-profiles-roles">
+                        <RoleCheckboxes
+                          roles={roles}
+                          selected={inviteForm.selectedRoleIds}
+                          onChange={(ids) => setInviteForm(f => ({ ...f, selectedRoleIds: ids }))}
+                        />
+                      </div>
                     )}
                     {inviteForm.selectedRoleIds.length === 0 && (
                       <p className="text-xs text-destructive">Selecciona al menos un rol</p>
@@ -335,21 +339,21 @@ export default function AdminProfiles() {
                   <TableCell>
                     {editId === p.user_id ? (
                       <div className="flex gap-1">
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={saveEdit} disabled={editData.selectedRoleIds.length === 0}>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={saveEdit} disabled={editData.selectedRoleIds.length === 0} aria-label="Guardar">
                           <Check className="h-4 w-4" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditId(null)}>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditId(null)} aria-label="Cancelar">
                           <X className="h-4 w-4" />
                         </Button>
                       </div>
                     ) : (
                       <div className="flex gap-1">
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(p)} title="Editar">
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(p)} title="Editar" aria-label="Editar">
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost" className="h-7 w-7" title="Marcar para cambio de contraseña">
+                            <Button size="icon" variant="ghost" className="h-7 w-7" title="Marcar para cambio de contraseña" aria-label="Marcar para cambio de contraseña">
                               <KeyRound className="h-4 w-4" />
                             </Button>
                           </AlertDialogTrigger>
@@ -367,7 +371,7 @@ export default function AdminProfiles() {
                           </AlertDialogContent>
                         </AlertDialog>
                         <Button size="icon" variant="ghost" className="h-7 w-7" title="Establecer contraseña temporal"
-                          onClick={() => { setTempPwdUser({ user_id: p.user_id, nombre: p.nombre }); setTempPwd(""); setTempPwdConfirm(""); }}>
+                          onClick={() => { setTempPwdUser({ user_id: p.user_id, nombre: p.nombre }); setTempPwd(""); setTempPwdConfirm(""); }} aria-label="Establecer contraseña temporal">
                           <Shield className="h-4 w-4" />
                         </Button>
                       </div>
@@ -397,8 +401,8 @@ export default function AdminProfiles() {
           </DialogHeader>
           <form onSubmit={handleSetTempPassword} className="space-y-4">
             <div className="space-y-2">
-              <Label>Nueva contraseña temporal</Label>
-              <Input type="password" value={tempPwd} onChange={e => setTempPwd(e.target.value)} placeholder="••••••••" required />
+              <Label htmlFor="admin-profiles-nueva-contrasena-temporal">Nueva contraseña temporal</Label>
+              <Input id="admin-profiles-nueva-contrasena-temporal" type="password" value={tempPwd} onChange={e => setTempPwd(e.target.value)} placeholder="••••••••" required />
               {tempPwd && !tempPwdValid.success && (
                 <div className="space-y-1">
                   {tempPwdValid.error!.errors.map((err, i) => (
@@ -408,8 +412,8 @@ export default function AdminProfiles() {
               )}
             </div>
             <div className="space-y-2">
-              <Label>Confirmar contraseña</Label>
-              <Input type="password" value={tempPwdConfirm} onChange={e => setTempPwdConfirm(e.target.value)} placeholder="••••••••" required />
+              <Label htmlFor="admin-profiles-confirmar-contrasena">Confirmar contraseña</Label>
+              <Input id="admin-profiles-confirmar-contrasena" type="password" value={tempPwdConfirm} onChange={e => setTempPwdConfirm(e.target.value)} placeholder="••••••••" required />
               {tempPwdMismatch && <p className="text-xs text-destructive">Las contraseñas no coinciden</p>}
             </div>
             <DialogFooter>
