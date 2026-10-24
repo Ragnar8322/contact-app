@@ -816,6 +816,39 @@ export type Database = {
         Args: { _dest_schedule_id: string }
         Returns: number
       }
+      dashboard_agent_stats: {
+        Args: { p_campana_ids: string[] }
+        Returns: {
+          activos: number
+          agente_id: string
+          vencidos: number
+        }[]
+      }
+      dashboard_stats: {
+        Args: { p_campana_ids: string[]; p_tz?: string }
+        Returns: {
+          abiertos: number
+          campana_id: string
+          cerrados_hoy: number
+          en_riesgo: number
+          sin_asignar: number
+          vencidos: number
+        }[]
+      }
+      financial_summary: {
+        Args: {
+          p_campana_id: string
+          p_desde: string
+          p_hasta: string
+          p_periodo: string
+          p_tz?: string
+        }
+        Returns: {
+          pendiente: number
+          renovado: number
+          tramo: number
+        }[]
+      }
       generate_schedule:
         | {
             Args: {
@@ -862,6 +895,14 @@ export type Database = {
       }
       process_staging_casos: { Args: { p_campana_id?: string }; Returns: Json }
       reset_schedule_shifts: { Args: { _schedule_id: string }; Returns: number }
+      sla_vigente: {
+        Args: { p_campana_ids: string[] }
+        Returns: {
+          campana_id: string
+          horas_riesgo: number
+          horas_vencido: number
+        }[]
+      }
       unpublish_schedule: { Args: { _schedule_id: string }; Returns: boolean }
     }
     Enums: {

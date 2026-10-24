@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { toISODate } from "@/types/schedules";
 
 export interface CampaignStats {
   campanaId: string;
@@ -29,71 +28,96 @@ export const QUERY_RESILIENCE = {
   refetchOnMount: true,       // BUG FIX: siempre re-fetcha al montar
 };
 
-export function useDashboardStats(
-  campanaIds: string[],
-  campanaNombres: Record<string, string>,
-  slaConfigs: Record<string, { horas_riesgo: number; horas_vencido: number }>
-) {
+/** Zona horaria del navegador, para que "cerrados hoy" use el día local del usuario. */
+export function localTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Bogota";
+}
+
+/**
+ * Indicadores por campaña calculados en la base de datos (dashboard_stats).
+ * Antes se descargaban todos los casos y se contaban aquí, pero la API corta
+ * en 1.000 filas: con 10.625 casos el Dashboard mostraba 267 abiertos de 1.121.
+ */
+export function useDashboardStats(campanaIds: string[], campanaNombres: Record<string, string>) {
   return useQuery({
-    queryKey: ["dashboard-stats-v2", campanaIds],
+    queryKey: ["dashboard-stats-v3", campanaIds],
     enabled: campanaIds.length > 0,
     ...QUERY_RESILIENCE,
     queryFn: async () => {
-      // BUG FIX: se añade updated_at al select para ordenar casos recientes
-      // por fecha de actualización real, no solo por fecha_caso
-      const { data: allCases, error } = await supabase
-        .from("casos")
-        .select(
-          "id, estado_id, agente_id, fecha_caso, fecha_cierre, campana_id, valor_pagar, updated_at, cat_estados(nombre, es_final), clientes(nombre_contacto)"
-        )
-        .in("campana_id", campanaIds)
-        .order("updated_at", { ascending: false }); // Casos más recientes primero
-
+      const { data, error } = await supabase.rpc("dashboard_stats", {
+        p_campana_ids: campanaIds,
+        p_tz: localTimeZone(),
+      });
       if (error) throw error;
 
-      const today = toISODate(new Date());
-      const now = Date.now();
-
-      const statsByCampaign: CampaignStats[] = campanaIds.map((cid) => {
-        const cases = (allCases || []).filter((c: any) => c.campana_id === cid);
-        const config = slaConfigs[cid] || { horas_riesgo: 2, horas_vencido: 6 };
-
-        const openCases = cases.filter(
-          (c: any) => !c.cat_estados?.es_final && c.cat_estados?.nombre !== "Transferido"
-        );
-        const closedToday = cases.filter(
-          (c: any) =>
-            c.cat_estados?.es_final &&
-            c.cat_estados?.nombre !== "Transferido" &&
-            !!c.fecha_cierre && toISODate(new Date(c.fecha_cierre)) === today
-        );
-        const sinAsignar = openCases.filter((c: any) => !c.agente_id);
-
-        let enRiesgo = 0;
-        let vencidos = 0;
-        openCases.forEach((c: any) => {
-          const hours = (now - new Date(c.fecha_caso).getTime()) / (1000 * 60 * 60);
-          if (hours >= config.horas_vencido) vencidos++;
-          else if (hours >= config.horas_riesgo) enRiesgo++;
-        });
-
+      const byId = new Map((data ?? []).map((r) => [r.campana_id, r]));
+      const byCampaign: CampaignStats[] = campanaIds.map((cid) => {
+        const r = byId.get(cid);
         return {
           campanaId: cid,
           campanaNombre: campanaNombres[cid] || cid,
-          openCount: openCases.length,
-          closedTodayCount: closedToday.length,
-          sinAsignar: sinAsignar.length,
-          enRiesgo,
-          vencidos,
+          openCount: r?.abiertos ?? 0,
+          closedTodayCount: r?.cerrados_hoy ?? 0,
+          sinAsignar: r?.sin_asignar ?? 0,
+          enRiesgo: r?.en_riesgo ?? 0,
+          vencidos: r?.vencidos ?? 0,
         };
       });
 
       return {
-        byCampaign: statsByCampaign,
-        allCases: allCases || [],
-        totalVencidos: statsByCampaign.reduce((s, c) => s + c.vencidos, 0),
-        totalSinAsignar: statsByCampaign.reduce((s, c) => s + c.sinAsignar, 0),
+        byCampaign,
+        totalVencidos: byCampaign.reduce((s, c) => s + c.vencidos, 0),
+        totalSinAsignar: byCampaign.reduce((s, c) => s + c.sinAsignar, 0),
       };
+    },
+  });
+}
+
+/** Casos activos y vencidos por agente (dashboard_agent_stats). */
+export function useDashboardAgentStats(campanaIds: string[]) {
+  return useQuery({
+    queryKey: ["dashboard-agent-stats", campanaIds],
+    enabled: campanaIds.length > 0,
+    ...QUERY_RESILIENCE,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("dashboard_agent_stats", { p_campana_ids: campanaIds });
+      if (error) throw error;
+      const map: Record<string, { activos: number; vencidos: number }> = {};
+      (data ?? []).forEach((r) => { map[r.agente_id] = { activos: r.activos, vencidos: r.vencidos }; });
+      return map;
+    },
+  });
+}
+
+export type RecentCasesFilter = "vencidos" | "sinAsignar" | null;
+
+/**
+ * Los 10 casos actualizados más recientemente de la campaña, con el filtro
+ * de la alerta aplicado en la consulta (antes se filtraba sobre 1.000 filas).
+ */
+export function useRecentCases(campanaId: string | null | undefined, filter: RecentCasesFilter, horasVencido: number) {
+  return useQuery({
+    queryKey: ["dashboard-recent-cases", campanaId, filter, horasVencido],
+    enabled: !!campanaId,
+    ...QUERY_RESILIENCE,
+    queryFn: async () => {
+      let query = supabase
+        .from("casos")
+        .select("id, agente_id, fecha_caso, updated_at, cat_estados!inner(nombre, es_final), clientes(nombre_contacto)")
+        .eq("campana_id", campanaId!)
+        .order("updated_at", { ascending: false, nullsFirst: false })
+        .limit(10);
+
+      if (filter === "vencidos") {
+        const limite = new Date(Date.now() - horasVencido * 3600_000).toISOString();
+        query = query.eq("cat_estados.es_final", false).lte("fecha_caso", limite);
+      } else if (filter === "sinAsignar") {
+        query = query.eq("cat_estados.es_final", false).is("agente_id", null);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
     },
   });
 }
