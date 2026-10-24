@@ -233,7 +233,7 @@ export default function AdminProfiles() {
     e.preventDefault();
     if (!tempPwdUser) return;
     const v = passwordSchema.safeParse(tempPwd);
-    if (!v.success) { toast.error(v.error.errors[0].message); return; }
+    if (!v.success) { toast.error(v.error.issues[0].message); return; }
     if (tempPwd !== tempPwdConfirm) { toast.error("Las contraseñas no coinciden"); return; }
     try {
       await resetPassword.mutateAsync({ user_id: tempPwdUser.user_id, action: "set_temp_password", temp_password: tempPwd });
@@ -406,7 +406,7 @@ export default function AdminProfiles() {
               <Input id="admin-profiles-nueva-contrasena-temporal" type="password" value={tempPwd} onChange={e => setTempPwd(e.target.value)} placeholder="••••••••" required />
               {tempPwd && !tempPwdValid.success && (
                 <div className="space-y-1">
-                  {tempPwdValid.error!.errors.map((err, i) => (
+                  {tempPwdValid.error!.issues.map((err, i) => (
                     <p key={i} className="text-xs text-destructive">{errorMessage(err)}</p>
                   ))}
                 </div>

@@ -3,13 +3,14 @@ import { ArrowRightLeft, Lock, Mail, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCaseHistory, useInsertHistorial, useUpdateCase, type Caso, type Estado } from "@/hooks/useCases";
+import { useCampanasList } from "@/hooks/useCampanas";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { EstadoBadge } from "@/components/cases/EstadoBadge";
 import CaseTransfer from "@/components/cases/CaseTransfer";
@@ -20,19 +21,30 @@ import { errorMessage } from "@/lib/errors";
 interface Props {
   caso: Caso | undefined;
   open: boolean;
+  /** El caso pedido no existe o el usuario no tiene acceso (por ejemplo, el destino de una transferencia) */
+  noDisponible?: boolean;
   onClose: () => void;
   /** Abre otro caso (enlace al caso destino de una transferencia) */
   onOpenCase: (id: number) => void;
   estados: Estado[];
 }
 
-export function CaseDetailSheet({ caso, open, onClose, onOpenCase, estados }: Props) {
+export function CaseDetailSheet({ caso, open, noDisponible, onClose, onOpenCase, estados }: Props) {
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <SheetContent className="w-full sm:max-w-lg overflow-auto">
         <SheetHeader>
-          <SheetTitle>Caso #{caso?.id}</SheetTitle>
+          <SheetTitle>{caso ? `Caso #${caso.id}` : "Caso"}</SheetTitle>
+          <SheetDescription className="sr-only">Datos del cliente, gestión e historial del caso</SheetDescription>
         </SheetHeader>
+        {!caso && noDisponible && (
+          <Alert className="mt-4">
+            <Lock className="h-4 w-4" aria-hidden="true" />
+            <AlertDescription>
+              No tienes acceso a este caso. Si lo transferiste, quedó asignado al supervisor de la campaña destino.
+            </AlertDescription>
+          </Alert>
+        )}
         {/* key: al cambiar de caso, el formulario de gestión vuelve a su estado inicial */}
         {caso && <CaseDetail key={caso.id} caso={caso} estados={estados} onOpenCase={onOpenCase} onTransferred={onClose} />}
       </SheetContent>
@@ -87,7 +99,8 @@ function CaseHistory({ casoId }: { casoId: number }) {
             </div>
             {autor && <p className="text-xs text-muted-foreground mt-0.5">Por: {autor}</p>}
             {h.observacion && <p className="mt-1 text-muted-foreground">{h.observacion}</p>}
-            {h.comentario && <p className="mt-1 text-muted-foreground">{h.comentario}</p>}
+            {/* Al cambiar de estado se guarda el mismo texto como comentario y como observación */}
+            {h.comentario && h.comentario !== h.observacion && <p className="mt-1 text-muted-foreground">{h.comentario}</p>}
           </div>
         );
       })}
@@ -116,10 +129,17 @@ function CaseDetail({ caso, estados, onOpenCase, onTransferred }: {
   const [valorError, setValorError] = useState("");
   const [detailObservacion, setDetailObservacion] = useState("");
 
+  const { data: campanas = [] } = useCampanasList();
   const isTransferredCase = caso.cat_estados?.nombre === "Transferido";
-  // El destino viene de la columna transferido_a_caso_id (antes se leía del texto de la observación)
+  // El destino viene de las columnas transferido_a_* (antes se leía del texto de la observación).
+  // Quien transfirió no puede leer el caso nuevo, así que la campaña sale de transferido_a_campana_id.
   const transferInfo = isTransferredCase && caso.transferido_a_caso_id
-    ? { newCaseId: caso.transferido_a_caso_id, targetCampana: caso.caso_destino?.campanas?.nombre ?? null }
+    ? {
+        newCaseId: caso.transferido_a_caso_id,
+        targetCampana: caso.caso_destino?.campanas?.nombre
+          ?? campanas.find((c) => c.id === caso.transferido_a_campana_id)?.nombre
+          ?? null,
+      }
     : null;
 
   const estadoSeleccionado = estados.find((e) => e.id === editEstado);

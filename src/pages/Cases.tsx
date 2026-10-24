@@ -100,15 +100,18 @@ export default function Cases() {
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null);
 
-  const { data: linkedCase } = useCaseById(casoParam);
-  const selectedCase =
-    cases.find((c) => c.id === selectedCaseId) ||
-    (linkedCase?.id === selectedCaseId ? linkedCase : undefined);
-
   // Un enlace /casos?caso=123 abre ese caso
   useEffect(() => {
-    if (linkedCase) setSelectedCaseId(linkedCase.id);
-  }, [linkedCase]);
+    if (casoParam) setSelectedCaseId(casoParam);
+  }, [casoParam]);
+
+  // El caso abierto se toma de la página visible; si no está ahí (enlace directo, o un caso
+  // que salió de la lista al cerrarlo), se trae por id
+  const enLista = cases.find((c) => c.id === selectedCaseId);
+  const { data: casoPorId, isError: errorPorId } = useCaseById(selectedCaseId && !enLista ? selectedCaseId : null);
+  const selectedCase = enLista ?? (casoPorId?.id === selectedCaseId ? casoPorId : undefined);
+  // No existe o no hay acceso (por ejemplo, el caso destino de una transferencia)
+  const noDisponible = !!selectedCaseId && !selectedCase && errorPorId;
 
   const closeDetail = () => {
     setSelectedCaseId(null);
@@ -218,6 +221,7 @@ export default function Cases() {
       <CaseDetailSheet
         caso={selectedCase}
         open={!!selectedCaseId}
+        noDisponible={noDisponible}
         onClose={closeDetail}
         onOpenCase={openCaseById}
         estados={estados ?? []}

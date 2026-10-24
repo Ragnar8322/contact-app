@@ -62,7 +62,7 @@ const App = () => (
                       </RoleRoute>
                     </ProtectedRoute>
                   } />
-                  <Route path="/ajustes" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                  <Route path="/ajustes" element={<ProtectedRoute><RoleRoute roles={["admin"]}><Settings /></RoleRoute></ProtectedRoute>} />
 
                   {/* Módulo Horarios — admin / supervisor / gerente */}
                   <Route path="/horarios" element={

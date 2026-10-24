@@ -1,5 +1,4 @@
-import { useAuth } from "@/contexts/AuthContext";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdminProfiles from "@/components/admin/AdminProfiles";
 import AdminCases from "@/components/admin/AdminCases";
@@ -12,15 +11,12 @@ import AdminImportCasos from "@/components/admin/AdminImportCasos";
 const TABS = ["profiles", "cases", "clients", "catalogs", "campanas", "auditoria", "importar"] as const;
 type Tab = typeof TABS[number];
 
+// Solo admin: la ruta va dentro de RoleRoute, que espera a que carguen los roles
 export default function Settings() {
-  const { isAdmin, loading } = useAuth();
   // La pestaña vive en la URL: sobrevive a recargas y se puede enlazar (/ajustes?tab=campanas)
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const tab: Tab = TABS.includes(tabParam as Tab) ? (tabParam as Tab) : "profiles";
-
-  if (loading) return <div className="flex items-center justify-center py-12 text-muted-foreground">Cargando...</div>;
-  if (!isAdmin) return <Navigate to="/" replace />;
 
   return (
     <div className="space-y-6">

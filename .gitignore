@@ -43,3 +43,7 @@ coverage
 # Estado local de la CLI de Supabase
 supabase/.branches
 supabase/.env
+
+# Resultados de Playwright
+playwright-report
+test-results
