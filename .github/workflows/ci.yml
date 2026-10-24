@@ -45,6 +45,10 @@ jobs:
   database:
     name: Base de datos (migraciones, pgTAP y tipos)
     runs-on: ubuntu-latest
+    env:
+      # Las imágenes de Supabase se bajan de GitHub Container Registry: el registro
+      # por defecto (public.ecr.aws) limita las descargas anónimas y cortaba el CI.
+      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
 
     steps:
       - name: Checkout
