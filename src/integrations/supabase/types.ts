@@ -400,33 +400,6 @@ export type Database = {
           },
         ]
       }
-      perfiles: {
-        Row: {
-          activo: boolean
-          creado_en: string | null
-          id: string
-          nombre: string | null
-          rol: Database["public"]["Enums"]["rol_usuario"]
-          username: string | null
-        }
-        Insert: {
-          activo?: boolean
-          creado_en?: string | null
-          id: string
-          nombre?: string | null
-          rol?: Database["public"]["Enums"]["rol_usuario"]
-          username?: string | null
-        }
-        Update: {
-          activo?: boolean
-          creado_en?: string | null
-          id?: string
-          nombre?: string | null
-          rol?: Database["public"]["Enums"]["rol_usuario"]
-          username?: string | null
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           created_at: string | null
@@ -948,6 +921,11 @@ export type Database = {
       parse_monto_cop: { Args: { p: string }; Returns: number }
       process_staging_casos: { Args: { p_campana_id?: string }; Returns: Json }
       reset_schedule_shifts: { Args: { _schedule_id: string }; Returns: number }
+      rol_prioridad: { Args: { p_nombre: string }; Returns: number }
+      set_user_roles: {
+        Args: { p_role_ids: number[]; p_user_id: string }
+        Returns: undefined
+      }
       sla_vigente: {
         Args: { p_campana_ids: string[] }
         Returns: {
@@ -970,7 +948,7 @@ export type Database = {
       unpublish_schedule: { Args: { _schedule_id: string }; Returns: boolean }
     }
     Enums: {
-      rol_usuario: "agente" | "supervisor" | "admin"
+      [_ in never]: never
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1100,8 +1078,6 @@ export const Constants = {
     Enums: {},
   },
   public: {
-    Enums: {
-      rol_usuario: ["agente", "supervisor", "admin"],
-    },
+    Enums: {},
   },
 } as const

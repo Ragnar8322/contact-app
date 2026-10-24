@@ -39,3 +39,7 @@ supabase/.temp
 
 # Reportes de cobertura
 coverage
+
+# Estado local de la CLI de Supabase
+supabase/.branches
+supabase/.env
