@@ -41,3 +41,35 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
+  database:
+    name: Base de datos (migraciones, pgTAP y tipos)
+    runs-on: ubuntu-latest
+    env:
+      # Las imágenes de Supabase se bajan de GitHub Container Registry: el registro
+      # por defecto (public.ecr.aws) limita las descargas anónimas y cortaba el CI.
+      SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      # Solo Postgres: aplica supabase/migrations y supabase/seed.sql desde cero.
+      # Si una migración no reconstruye la base, este paso falla.
+      - name: Construir la base desde las migraciones
+        run: >
+          supabase start
+          -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      - name: Pruebas de permisos y funciones (pgTAP)
+        run: supabase test db
+
+      - name: Tipos de TypeScript al día con el esquema
+        run: |
+          supabase gen types typescript --local > /tmp/types.ts
+          node scripts/check-db-types.mjs /tmp/types.ts

@@ -86,19 +86,11 @@ export function useUpdateProfile() {
 export function useSaveRoleAssignments() {
   const qc = useQueryClient();
   return useMutation({
+    // set_user_roles reemplaza las asignaciones en una transacción y sincroniza profiles.role_id.
+    // Antes: borrar todo y luego insertar; si fallaba la inserción, el usuario quedaba sin rol.
     mutationFn: async ({ user_id, role_ids }: { user_id: string; role_ids: number[] }) => {
-      const { error: deleteError } = await supabase
-        .from("user_role_assignments")
-        .delete()
-        .eq("user_id", user_id);
-      if (deleteError) throw deleteError;
-
-      if (role_ids.length > 0) {
-        const { error: insertError } = await supabase
-          .from("user_role_assignments")
-          .insert(role_ids.map(role_id => ({ user_id, role_id })));
-        if (insertError) throw insertError;
-      }
+      const { error } = await supabase.rpc("set_user_roles", { p_user_id: user_id, p_role_ids: role_ids });
+      if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-profiles"] }),
   });
