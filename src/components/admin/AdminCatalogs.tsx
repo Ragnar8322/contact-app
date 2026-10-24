@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useEstados, useTiposServicio } from "@/hooks/useCases";
+import { useEstados, useTiposServicio, type Estado } from "@/hooks/useCases";
 import { useCreateEstado, useUpdateEstado, useCreateTipoServicio, useUpdateTipoServicio, useDeleteTipoServicio } from "@/hooks/useAdmin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Pencil, Check, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 
 export default function AdminCatalogs() {
   return (
@@ -38,10 +39,10 @@ function EstadosSection() {
       setAdding(false);
       setNewNombre("");
       setNewFinal(false);
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err) { toast.error(errorMessage(err)); }
   };
 
-  const startEdit = (e: any) => { setEditId(e.id); setEditData({ nombre: e.nombre, es_final: e.es_final }); };
+  const startEdit = (e: Estado) => { setEditId(e.id); setEditData({ nombre: e.nombre, es_final: e.es_final }); };
 
   const saveEdit = async () => {
     if (!editId) return;
@@ -49,7 +50,7 @@ function EstadosSection() {
       await updateEstado.mutateAsync({ id: editId, ...editData });
       toast.success("Estado actualizado");
       setEditId(null);
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err) { toast.error(errorMessage(err)); }
   };
 
   return (
@@ -130,7 +131,7 @@ function TiposServicioSection() {
       toast.success("Tipo creado");
       setAdding(false);
       setNewNombre("");
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err) { toast.error(errorMessage(err)); }
   };
 
   const saveEdit = async () => {
@@ -139,7 +140,7 @@ function TiposServicioSection() {
       await updateTipo.mutateAsync({ id: editId, nombre: editNombre });
       toast.success("Tipo actualizado");
       setEditId(null);
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err) { toast.error(errorMessage(err)); }
   };
 
   const [toDelete, setToDelete] = useState<{ id: number; nombre: string } | null>(null);
@@ -148,7 +149,7 @@ function TiposServicioSection() {
     try {
       await deleteTipo.mutateAsync(id);
       toast.success("Tipo eliminado");
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err) { toast.error(errorMessage(err)); }
   };
 
   return (

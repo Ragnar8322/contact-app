@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllPages } from "@/lib/fetchAllPages";
@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Users, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/errors";
 
 interface Props {
   open: boolean;
@@ -54,11 +55,6 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const activeEstadoIds = estados
-    ?.filter((e: any) => !e.es_final && e.nombre !== "Transferido")
-    .map((e: any) => e.id) ?? [];
-  const registradoEstadoId = estados?.find((e: any) => e.nombre === "Registrado")?.id ?? null;
-
   // Cerrar dropdowns al hacer click fuera
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -69,25 +65,25 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (!open || !campanaActiva?.id || !estados || estados.length === 0) return;
-    loadData();
-  }, [open, campanaActiva?.id, mode, estados]);
-
   // Reset selecciones al cambiar modo
   useEffect(() => {
     setSelectedCasoIds(new Set());
     setSelectedAgentIds(new Set());
   }, [mode]);
 
-  async function loadData() {
-    if (!campanaActiva?.id || !estados || estados.length === 0) return;
+  const campanaId = campanaActiva?.id;
+  const loadData = useCallback(async () => {
+    if (!campanaId || !estados || estados.length === 0) return;
+    const activeEstadoIds = estados
+      .filter((e) => !e.es_final && e.nombre !== "Transferido")
+      .map((e) => e.id);
+    const registradoEstadoId = estados.find((e) => e.nombre === "Registrado")?.id ?? null;
     setLoading(true);
     try {
       // Agentes de la campaña con su carga actual (una sola consulta; antes una por agente
       // y leyendo tablas que un supervisor no puede ver)
       const { data: candidatos, error: candErr } = await supabase.rpc("assignment_candidates", {
-        p_campana_id: campanaActiva.id,
+        p_campana_id: campanaId,
       });
       if (candErr) throw candErr;
       const agentList: AgentItem[] = (candidatos ?? []).map((a) => ({
@@ -100,14 +96,14 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
         toast.error("No se encontró el estado 'Registrado'.");
         return;
       }
-      const estadoIds = mode === "registrado" ? [registradoEstadoId!] : activeEstadoIds;
+      const estadoIds = mode === "registrado" && registradoEstadoId ? [registradoEstadoId] : activeEstadoIds;
 
       // Todos los casos, paginados (la API corta en 1.000 filas)
       const casosData = await fetchAllPages<{ id: number; clientes: { nombre_contacto: string; razon_social: string | null } | null }>(
         (from, to) => supabase
           .from("casos")
           .select("id, clientes(nombre_contacto, razon_social)")
-          .eq("campana_id", campanaActiva.id)
+          .eq("campana_id", campanaId)
           .in("estado_id", estadoIds)
           .order("id", { ascending: false })
           .range(from, to)
@@ -119,11 +115,15 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
       setCasos(items);
       setSelectedCasoIds(new Set(items.map((c) => c.id)));
     } catch (err) {
-      toast.error("Error al cargar datos", { description: (err as Error).message });
+      toast.error("Error al cargar datos", { description: errorMessage(err) });
     } finally {
       setLoading(false);
     }
-  }
+  }, [campanaId, estados, mode]);
+
+  useEffect(() => {
+    if (open) loadData();
+  }, [open, loadData]);
 
   function toggleCaso(id: number) {
     setSelectedCasoIds(prev => {
@@ -189,7 +189,7 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
       qc.invalidateQueries({ queryKey: ["casos-counts"] });
       onOpenChange(false);
     } catch (err) {
-      toast.error("No se pudo asignar", { description: (err as Error).message });
+      toast.error("No se pudo asignar", { description: errorMessage(err) });
     } finally {
       setSubmitting(false);
     }

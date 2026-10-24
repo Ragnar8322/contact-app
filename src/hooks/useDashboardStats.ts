@@ -121,3 +121,45 @@ export function useRecentCases(campanaId: string | null | undefined, filter: Rec
     },
   });
 }
+
+/** Agentes (rol agent) con sus nombres de perfil y las campañas de cada uno. */
+export function useDashboardAgents() {
+  const agents = useQuery({
+    queryKey: ["dashboard-agents"],
+    ...QUERY_RESILIENCE,
+    queryFn: async () => {
+      const { data: roleRow, error: roleErr } = await supabase
+        .from("user_roles")
+        .select("id")
+        .eq("name", "agent")
+        .single();
+      if (roleErr || !roleRow) return [];
+      const { data: assignments, error: assignErr } = await supabase
+        .from("user_role_assignments")
+        .select("user_id")
+        .eq("role_id", roleRow.id);
+      if (assignErr) throw assignErr;
+      const userIds = (assignments ?? []).map((a) => a.user_id);
+      if (userIds.length === 0) return [];
+      const { data: profiles, error: profErr } = await supabase
+        .from("profiles")
+        .select("user_id, nombre")
+        .in("user_id", userIds)
+        .order("nombre");
+      if (profErr) throw profErr;
+      return profiles ?? [];
+    },
+  });
+
+  const campanas = useQuery({
+    queryKey: ["dashboard-agent-campanas"],
+    ...QUERY_RESILIENCE,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("perfil_campanas").select("user_id, campana_id");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  return { agents, campanas };
+}

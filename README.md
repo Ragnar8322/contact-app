@@ -47,10 +47,23 @@ Usuarios de prueba (contraseña `Demo1234!`):
 |---|---|
 | `npm run dev` | Servidor de desarrollo |
 | `npm test` | Pruebas del frontend (Vitest) |
-| `npm run lint` | ESLint |
-| `npm run typecheck` | Verificación de tipos de TypeScript |
+| `npm run lint` | ESLint (falla con cualquier advertencia) |
+| `npm run typecheck` | Verificación de tipos de TypeScript (`strict`) |
 | `npm run build` | Build de producción |
+| `npm run check:bundle` | Verifica que ningún archivo de la carga inicial supere 300 KB comprimido (después de `build`) |
 | `supabase test db` | Pruebas de la base de datos (permisos y funciones, pgTAP) |
+
+## Convenciones del código
+
+- TypeScript en modo `strict` y `any` prohibido por lint. Los tipos de las filas salen de
+  `src/integrations/supabase/types.ts` o del `select` de cada consulta.
+- Las páginas (`src/pages`) solo componen: ninguna supera 400 líneas (lo verifica una prueba).
+  Las consultas van en `src/hooks`, los cálculos en `src/lib` y las secciones en `src/components/<módulo>`.
+- Reportes PDF y Excel en `src/lib/reports/`. Excel se lee y escribe con ExcelJS, que se descarga
+  solo al importar o exportar.
+- Los errores de Supabase son objetos con `message`, no instancias de `Error`: para mostrarlos usa
+  `errorMessage(err)` de `src/lib/errors.ts`.
+- Pruebas de hooks con el Supabase simulado de `src/test/helpers/fakeSupabase.ts`.
 
 ## Cambios en la base de datos
 

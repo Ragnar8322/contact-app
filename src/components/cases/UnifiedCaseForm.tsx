@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CheckCircle2, Info, Loader2, ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 
 const clienteSchema = z.object({
   identificacion: z.string().min(1, "La identificación es obligatoria"),
@@ -164,8 +165,8 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
       queryClient.invalidateQueries({ queryKey: ["casos"] });
       queryClient.invalidateQueries({ queryKey: ["clientes"] });
       onSuccess();
-    } catch (err: any) {
-      toast.error("Error: " + err.message);
+    } catch (err) {
+      toast.error("Error: " + errorMessage(err));
     } finally {
       setSaving(false);
     }

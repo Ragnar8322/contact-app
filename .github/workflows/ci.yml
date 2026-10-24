@@ -42,6 +42,9 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
 
+      - name: Tamaño de la carga inicial
+        run: npm run check:bundle
+
   database:
     name: Base de datos (migraciones, pgTAP y tipos)
     runs-on: ubuntu-latest

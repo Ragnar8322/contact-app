@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
       .eq("user_id", caller.id)
       .maybeSingle();
 
-    if ((profile?.user_roles as any)?.name !== "admin") {
+    if ((profile?.user_roles as { name?: string } | null)?.name !== "admin") {
       return new Response(JSON.stringify({ error: "Admin only" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

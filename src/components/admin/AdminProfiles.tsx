@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { roleLabel } from "@/lib/roleUtils";
-import { useAllProfiles, useUpdateProfile, useInviteUser, useRoles, useSaveRoleAssignments, useResetPassword } from "@/hooks/useAdmin";
+import { useAllProfiles, useUpdateProfile, useInviteUser, useRoles, useSaveRoleAssignments, useResetPassword, type AdminProfile } from "@/hooks/useAdmin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { Plus, Pencil, Check, X, KeyRound, Shield, Copy, CheckCircle2, AlertTria
 import { toast } from "sonner";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/errors";
 
 const passwordSchema = z
   .string()
@@ -169,9 +170,9 @@ export default function AdminProfiles() {
   const [tempPwd, setTempPwd] = useState("");
   const [tempPwdConfirm, setTempPwdConfirm] = useState("");
 
-  const startEdit = (p: any) => {
+  const startEdit = (p: AdminProfile) => {
     setEditId(p.user_id);
-    const existing = p.role_assignments?.map((a: any) => a.role_id) || [];
+    const existing = p.role_assignments?.map((a) => a.role_id) || [];
     setEditData({
       nombre: p.nombre,
       telefono: p.telefono || "",
@@ -186,7 +187,7 @@ export default function AdminProfiles() {
       await saveRoleAssignments.mutateAsync({ user_id: editId, role_ids: editData.selectedRoleIds });
       toast.success("Perfil actualizado");
       setEditId(null);
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err) { toast.error(errorMessage(err)); }
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -215,8 +216,8 @@ export default function AdminProfiles() {
       // 4. Abrir diálogo de credenciales (completamente separado)
       setCredencialesOpen(true);
 
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(errorMessage(err));
     }
   };
 
@@ -225,7 +226,7 @@ export default function AdminProfiles() {
       await resetPassword.mutateAsync({ user_id: userId, action: "force_change" });
       toast.success(`${nombre} deberá cambiar su contraseña en el próximo inicio de sesión.`);
       refetch();
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err) { toast.error(errorMessage(err)); }
   };
 
   const handleSetTempPassword = async (e: React.FormEvent) => {
@@ -241,7 +242,7 @@ export default function AdminProfiles() {
       setTempPwd("");
       setTempPwdConfirm("");
       refetch();
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err) { toast.error(errorMessage(err)); }
   };
 
   const tempPwdValid = passwordSchema.safeParse(tempPwd);
@@ -316,7 +317,7 @@ export default function AdminProfiles() {
             <TableBody>
               {isLoading ? (
                 <TableRow><TableCell colSpan={5} className="text-center py-8">Cargando...</TableCell></TableRow>
-              ) : profiles?.map((p: any) => (
+              ) : profiles?.map((p) => (
                 <TableRow key={p.user_id}>
                   <TableCell>
                     {editId === p.user_id
@@ -332,7 +333,7 @@ export default function AdminProfiles() {
                     {editId === p.user_id ? (
                       roles && <RoleCheckboxes roles={roles} selected={editData.selectedRoleIds} onChange={(ids) => setEditData(d => ({ ...d, selectedRoleIds: ids }))} />
                     ) : (
-                      <RoleBadges assignments={p.role_assignments || []} fallbackRole={(p.user_roles as any)?.name} />
+                      <RoleBadges assignments={p.role_assignments || []} fallbackRole={p.user_roles?.name} />
                     )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground font-mono">{p.user_id.slice(0, 8)}…</TableCell>
@@ -406,7 +407,7 @@ export default function AdminProfiles() {
               {tempPwd && !tempPwdValid.success && (
                 <div className="space-y-1">
                   {tempPwdValid.error!.errors.map((err, i) => (
-                    <p key={i} className="text-xs text-destructive">{err.message}</p>
+                    <p key={i} className="text-xs text-destructive">{errorMessage(err)}</p>
                   ))}
                 </div>
               )}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { Tables } from "@/integrations/supabase/types";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients, useCreateClient, useUpdateClient } from "@/hooks/useClients";
@@ -14,6 +15,7 @@ import { toast } from "sonner";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { RefetchBar, TableSkeletonRows } from "@/components/TableLoading";
 import { TablePagination } from "@/components/TablePagination";
+import { errorMessage } from "@/lib/errors";
 
 const PAGE_SIZE = 25;
 
@@ -55,12 +57,12 @@ export default function Clients() {
       toast.success("Cliente creado exitosamente");
       setCreateOpen(false);
       setForm({ ...emptyForm });
-    } catch (err: any) {
-      toast.error("Error: " + err.message);
+    } catch (err) {
+      toast.error("Error: " + errorMessage(err));
     }
   };
 
-  const openEdit = (client: any) => {
+  const openEdit = (client: Tables<"clientes">) => {
     setEditId(client.id);
     setEditForm({
       identificacion: client.identificacion || "",
@@ -90,8 +92,8 @@ export default function Clients() {
       });
       toast.success("Cliente actualizado correctamente.");
       setEditOpen(false);
-    } catch (err: any) {
-      toast.error("Error al actualizar: " + err.message);
+    } catch (err) {
+      toast.error("Error al actualizar: " + errorMessage(err));
     }
   };
 

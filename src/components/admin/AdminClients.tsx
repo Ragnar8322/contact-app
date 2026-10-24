@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { Tables } from "@/integrations/supabase/types";
 import { useClients, useCreateClient } from "@/hooks/useClients";
 import { useUpdateClient } from "@/hooks/useAdmin";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import { toast } from "sonner";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { RefetchBar, TableSkeletonRows } from "@/components/TableLoading";
 import { TablePagination } from "@/components/TablePagination";
+import { errorMessage } from "@/lib/errors";
 
 const PAGE_SIZE = 25;
 
@@ -38,12 +40,12 @@ export default function AdminClients() {
       toast.success("Cliente creado");
       setCreateOpen(false);
       setForm({ identificacion: "", nombre_contacto: "", tipo_cliente: "Persona", razon_social: "", telefono: "", celular: "", correo: "" });
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(errorMessage(err));
     }
   };
 
-  const startEdit = (c: any) => {
+  const startEdit = (c: Tables<"clientes">) => {
     setEditId(c.id);
     setEditData({ nombre_contacto: c.nombre_contacto, telefono: c.telefono || "", celular: c.celular || "", correo: c.correo || "", tipo_cliente: c.tipo_cliente });
   };
@@ -54,8 +56,8 @@ export default function AdminClients() {
       await updateClient.mutateAsync({ id: editId, ...editData });
       toast.success("Cliente actualizado");
       setEditId(null);
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err) {
+      toast.error(errorMessage(err));
     }
   };
 
@@ -135,7 +137,7 @@ export default function AdminClients() {
                 <TableSkeletonRows columns={7} />
               ) : !clients?.length ? (
                 <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No hay clientes</TableCell></TableRow>
-              ) : clients.map((c: any) => (
+              ) : clients.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.id}</TableCell>
                   <TableCell>{c.identificacion}</TableCell>

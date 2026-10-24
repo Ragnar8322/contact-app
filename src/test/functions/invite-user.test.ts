@@ -6,21 +6,14 @@ import { describe, it, expect } from "vitest";
 describe("invite-user edge function — smoke tests", () => {
   const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL ?? "http://localhost:54321"}/functions/v1/invite-user`;
 
-  it("rechaza sin Authorization header (401)", async () => {
+  // Llama a la función real: solo con `supabase functions serve` corriendo y TEST_EDGE_FUNCTIONS=1
+  it.skipIf(!process.env.TEST_EDGE_FUNCTIONS)("rechaza sin Authorization header (401)", async () => {
     const res = await fetch(FUNCTION_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: "test@test.com", role_id: 1 }),
-    }).catch(() => null);
-
-    // En entorno de test sin Supabase local, la conexión falla — es esperado
-    // En CI con Supabase local corriendo, debe retornar 401
-    if (res) {
-      expect([401, 403]).toContain(res.status);
-    } else {
-      // Sin servidor local: verificamos que la URL tiene el formato correcto
-      expect(FUNCTION_URL).toContain("/functions/v1/invite-user");
-    }
+    });
+    expect([401, 403]).toContain(res.status);
   });
 
   it("la URL de la función tiene el formato correcto", () => {

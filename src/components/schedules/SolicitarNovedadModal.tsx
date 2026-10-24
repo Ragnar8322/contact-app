@@ -28,6 +28,7 @@ import {
   toISODate,
 } from "@/types/schedules";
 import { ClipboardList, Clock } from "lucide-react";
+import { errorMessage } from "@/lib/errors";
 
 const TIPOS_NOVEDAD: TipoNovedad[] = [
   "permiso_horas",
@@ -101,7 +102,7 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
           onClose();
         },
         onError: (e) => {
-          toast.error("Error al enviar", { description: (e as Error).message });
+          toast.error("Error al enviar", { description: errorMessage(e) });
         },
       }
     );

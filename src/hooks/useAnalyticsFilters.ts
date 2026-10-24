@@ -60,7 +60,7 @@ export function useAnalyticsFilters() {
         .select("user_id")
         .eq("role_id", roleRow.id);
       if (assignErr) throw assignErr;
-      const userIds = (assignments ?? []).map((a: any) => a.user_id);
+      const userIds = (assignments ?? []).map((a) => a.user_id);
       if (userIds.length === 0) return [];
 
       // Obtener nombres actualizados desde profiles
@@ -90,15 +90,15 @@ export function useAnalyticsFilters() {
   });
 
   const campanaOptions: FilterOption[] = useMemo(() =>
-    (campanas ?? []).map((c: any) => ({ value: c.id, label: c.activa ? c.nombre : `${c.nombre} (inactiva)` })),
+    (campanas ?? []).map((c) => ({ value: c.id, label: c.activa ? c.nombre : `${c.nombre} (inactiva)` })),
   [campanas]);
 
   const agenteOptions: FilterOption[] = useMemo(() =>
-    (agentes ?? []).map((a: any) => ({ value: a.user_id, label: a.nombre })),
+    (agentes ?? []).map((a) => ({ value: a.user_id, label: a.nombre })),
   [agentes]);
 
   const estadoOptions: FilterOption[] = useMemo(() =>
-    (estados ?? []).map((e: any) => ({ value: String(e.id), label: e.nombre })),
+    (estados ?? []).map((e) => ({ value: String(e.id), label: e.nombre })),
   [estados]);
 
   // Contar filtros activos distintos al default
@@ -131,19 +131,19 @@ export function useAnalyticsFilters() {
   const getFilterSummary = (): string => {
     const parts: string[] = [];
     if (appliedFilters.campanaId) {
-      const c = campanas?.find((c: any) => c.id === appliedFilters.campanaId);
+      const c = campanas?.find((c) => c.id === appliedFilters.campanaId);
       parts.push(`Campaña: ${c?.nombre ?? "Seleccionada"}`);
     } else {
       parts.push("Campaña: Todas");
     }
     if (appliedFilters.agenteId) {
-      const a = agentes?.find((a: any) => a.user_id === appliedFilters.agenteId);
+      const a = agentes?.find((a) => a.user_id === appliedFilters.agenteId);
       parts.push(`Agente: ${a?.nombre ?? "Seleccionado"}`);
     } else {
       parts.push("Agente: Todos");
     }
     if (appliedFilters.estadoId) {
-      const e = estados?.find((e: any) => e.id === appliedFilters.estadoId);
+      const e = estados?.find((e) => e.id === appliedFilters.estadoId);
       parts.push(`Estado: ${e?.nombre ?? "Seleccionado"}`);
     } else {
       parts.push("Estado: Todos");
