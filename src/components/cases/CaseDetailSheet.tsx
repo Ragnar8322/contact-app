@@ -14,6 +14,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Textarea } from "@/components/ui/textarea";
 import { EstadoBadge } from "@/components/cases/EstadoBadge";
 import CaseTransfer from "@/components/cases/CaseTransfer";
+import { CaseAssignment } from "@/components/cases/CaseAssignment";
 import { formatCOP, formatCOPInput, parseCOPInput } from "@/lib/currency";
 import { safeFormat } from "@/lib/date";
 import { errorMessage } from "@/lib/errors";
@@ -259,6 +260,8 @@ function CaseDetail({ caso, estados, onOpenCase, onTransferred }: {
       </div>
 
       <ContactInfo cliente={caso.clientes} />
+
+      {isAdmin && !isTransferredCase && <CaseAssignment key={`${caso.agente_id}-${caso.tipo_servicio_id}`} caso={caso} />}
 
       <Separator />
 

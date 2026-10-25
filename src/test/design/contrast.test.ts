@@ -4,11 +4,14 @@ import { resolve } from "node:path";
 
 const css = readFileSync(resolve(__dirname, "../../index.css"), "utf8");
 
-// Lee los tokens HSL del tema claro (:root) y verifica contraste WCAG AA (4.5:1 texto normal).
-const root = css.slice(css.indexOf(":root"), css.indexOf(".dark"));
-function token(name: string): [number, number, number] {
-  const m = root.match(new RegExp(`--${name}:\\s*([\\d.]+)\\s+([\\d.]+)%\\s+([\\d.]+)%`));
-  if (!m) throw new Error(`Token --${name} no encontrado`);
+// Lee los tokens HSL de cada tema y verifica contraste WCAG AA (4.5:1 texto normal).
+const bloques = {
+  claro: css.slice(css.indexOf(":root"), css.indexOf(".dark")),
+  oscuro: css.slice(css.indexOf(".dark {"), css.indexOf("}", css.indexOf(".dark {"))),
+};
+function token(tema: keyof typeof bloques, name: string): [number, number, number] {
+  const m = bloques[tema].match(new RegExp(`--${name}:\\s*([\\d.]+)\\s+([\\d.]+)%\\s+([\\d.]+)%`));
+  if (!m) throw new Error(`Token --${name} no encontrado en el tema ${tema}`);
   return [Number(m[1]), Number(m[2]), Number(m[3])];
 }
 
@@ -31,29 +34,32 @@ function ratio(a: [number, number, number], b: [number, number, number]) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-const rgb = (name: string) => hslToRgb(token(name));
-const WHITE: [number, number, number] = [1, 1, 1];
+describe.each(["claro", "oscuro"] as const)("contraste del tema %s (WCAG AA ≥ 4.5:1)", (tema) => {
+  const rgb = (name: string) => hslToRgb(token(tema, name));
 
-describe("contraste del tema claro (WCAG AA ≥ 4.5:1)", () => {
   it.each([
+    ["foreground", "background"],
+    ["foreground", "card"],
     ["muted-foreground", "background"],
     ["muted-foreground", "card"],
     ["muted-foreground", "muted"],
-    ["foreground", "background"],
-    ["accent-foreground", "accent"],
     ["secondary-foreground", "secondary"],
   ])("texto %s sobre %s", (fg, bg) => {
     expect(ratio(rgb(fg), rgb(bg))).toBeGreaterThanOrEqual(4.5);
   });
 
-  it.each(["primary", "destructive", "warning", "success"])("texto blanco sobre %s", (bg) => {
-    expect(ratio(WHITE, rgb(bg))).toBeGreaterThanOrEqual(4.5);
+  it.each(["primary", "destructive", "warning", "success", "info", "accent"])("texto %s-foreground sobre %s", (name) => {
+    expect(ratio(rgb(`${name}-foreground`), rgb(name))).toBeGreaterThanOrEqual(4.5);
   });
 
   // Alertas y KPI usan el color como texto sobre su propio tinte (p. ej. bg-warning/10)
   it.each(["warning", "success", "destructive", "primary"])("texto %s sobre fondo tintado al 10%%", (name) => {
     const tinted = blend(rgb(name), rgb("background"), 0.1);
     expect(ratio(rgb(name), tinted)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(["warning", "success", "destructive", "primary"])("texto %s sobre las tarjetas", (name) => {
+    expect(ratio(rgb(name), rgb("card"))).toBeGreaterThanOrEqual(4.5);
   });
 });
 

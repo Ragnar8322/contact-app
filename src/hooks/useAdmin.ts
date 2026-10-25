@@ -234,17 +234,4 @@ export function useDeleteTipoServicio() {
   });
 }
 
-// ── Update Client ──
-export function useUpdateClient() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, ...values }: { id: number; identificacion?: string; nombre_contacto?: string; tipo_cliente?: string; razon_social?: string; telefono?: string; celular?: string; correo?: string }) => {
-      const { error } = await supabase.from("clientes").update(values).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["clientes"] }),
-  });
-}
-
 export type AdminProfile = NonNullable<ReturnType<typeof useAllProfiles>["data"]>[number];
-export type AdminCase = NonNullable<NonNullable<ReturnType<typeof useAllCases>["data"]>["data"]>[number];

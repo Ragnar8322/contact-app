@@ -36,7 +36,7 @@ export function AgentPerformanceTable({ agentes }: { agentes: RendimientoAgente[
                 <TableCell className="text-right">{formatNumber(agent.gestiones)}</TableCell>
                 <TableCell className="text-right">{formatNumber(agent.renovados)}</TableCell>
                 <TableCell className="text-right">
-                  <span className={cn(agent.tasaRenovacion >= 50 ? "text-success" : agent.tasaRenovacion >= 25 ? "text-warning" : "text-red-600")}>
+                  <span className={cn(agent.tasaRenovacion >= 50 ? "text-success" : agent.tasaRenovacion >= 25 ? "text-warning" : "text-destructive")}>
                     {`${agent.tasaRenovacion.toFixed(1)}%`}
                   </span>
                 </TableCell>

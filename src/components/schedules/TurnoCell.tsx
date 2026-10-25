@@ -87,7 +87,7 @@ export default function TurnoCell({ shift, editable = false, novedadHoras, onCli
       onActivate={() => onClick?.(shift)}
       className={cn(
         "flex min-h-16 flex-col justify-start rounded-md px-2 py-1 text-xs gap-0.5",
-        colorClass ?? "bg-gray-100 text-gray-700"
+        colorClass ?? "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
       )}
     >
       {/* Actividad + horas */}

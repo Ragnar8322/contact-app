@@ -27,7 +27,9 @@ const emptyForm = {
 export default function Clients() {
   const [searchParams] = useSearchParams();
   const { hasRole } = useAuth();
+  // El gerente solo consulta: no abre casos ni crea o edita clientes (la base también lo impide)
   const canOpenCases = hasRole(["admin", "supervisor", "agent"]);
+  const canEdit = canOpenCases;
   const [search, setSearch] = useState(searchParams.get("buscar") || "");
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebouncedValue(search);
@@ -104,15 +106,17 @@ export default function Clients() {
           <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
           <p className="text-muted-foreground">Gestión de clientes del contact center</p>
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" />Crear Cliente</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>Nuevo Cliente</DialogTitle></DialogHeader>
-            <ClientForm form={form} setForm={setForm} onSubmit={handleCreate} isPending={createClient.isPending} submitLabel="Crear Cliente" pendingLabel="Creando..." />
-          </DialogContent>
-        </Dialog>
+        {canEdit && (
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="mr-2 h-4 w-4" />Crear Cliente</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader><DialogTitle>Nuevo Cliente</DialogTitle></DialogHeader>
+              <ClientForm form={form} setForm={setForm} onSubmit={handleCreate} isPending={createClient.isPending} submitLabel="Crear Cliente" pendingLabel="Creando..." />
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <Card className="border-0 shadow-sm">
@@ -158,9 +162,11 @@ export default function Clients() {
                           </Link>
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(c)} title="Editar cliente" aria-label={`Editar ${c.nombre_contacto}`}>
-                        <Pencil className="h-4 w-4" aria-hidden="true" />
-                      </Button>
+                      {canEdit && (
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(c)} title="Editar cliente" aria-label={`Editar ${c.nombre_contacto}`}>
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
