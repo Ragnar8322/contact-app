@@ -47,3 +47,6 @@ supabase/.env
 # Resultados de Playwright
 playwright-report
 test-results
+
+# Parches recibidos para aplicar con git am
+*.patch
