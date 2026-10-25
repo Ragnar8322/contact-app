@@ -11,6 +11,20 @@ test.describe("acceso por rol", () => {
     await expect(page).toHaveURL(/\/login$/);
   });
 
+  test("la pantalla de inicio lleva el nombre de la plataforma y el panel de marca", async ({ page }) => {
+    await page.goto("/login");
+    await expect(page).toHaveTitle("Conecta Renovación");
+    await expect(page.getByText("La renovación mercantil, gestionada en un solo lugar.")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Inicia sesión" })).toBeVisible();
+  });
+
+  test("en celular el formulario queda a la vista y el panel de marca se oculta", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/login");
+    await expect(page.getByText("La renovación mercantil, gestionada en un solo lugar.")).toBeHidden();
+    await expect(page.getByRole("button", { name: "Iniciar sesión" })).toBeInViewport();
+  });
+
   const menus = {
     admin: { ve: ["Dashboard", "Clientes", "Casos", "Analítica", "Horarios", "Administración"], noVe: ["Mi Horario"] },
     supervisor: { ve: ["Dashboard", "Clientes", "Casos", "Analítica", "Horarios"], noVe: ["Administración", "Mi Horario"] },

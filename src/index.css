@@ -59,6 +59,10 @@
     --chart-3: 39 89% 52%;
     --chart-4: 280 60% 55%;
     --chart-5: 1 76% 50%;
+
+    /* Panel de marca del inicio de sesión */
+    --brand-panel: 235 52% 15%;
+    --brand-panel-foreground: 0 0% 100%;
   }
 
   .dark {
@@ -103,6 +107,8 @@
     --sidebar-accent-foreground: 224 10% 90%;
     --sidebar-border: 231 20% 15%;
     --sidebar-ring: 229 85% 70%;
+    --brand-panel: 232 35% 12%;
+    --brand-panel-foreground: 224 20% 92%;
   }
 }
 
@@ -135,5 +141,30 @@
   }
   .recharts-tooltip-cursor {
     fill: hsl(var(--muted));
+  }
+}
+
+/* Tarjetas del inicio de sesión: inclinación fija (--giro) y, si el usuario no pidió reducir el
+   movimiento, entrada escalonada y una flotación suave (4 px, ±0,6°) con ciclos distintos para
+   que no se muevan al unísono. La entrada usa `translate` y la flotación `transform`, así no se
+   pisan entre sí. Los navegadores detienen estas animaciones cuando la pestaña no está visible. */
+@layer components {
+  .tarjeta-flotante {
+    transform: rotate(var(--giro, 0deg));
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .tarjeta-flotante {
+      animation:
+        tarjeta-aparecer 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) var(--retraso, 0ms) both,
+        tarjeta-flotar var(--ciclo, 7s) ease-in-out calc(var(--retraso, 0ms) + 600ms) infinite;
+    }
+  }
+  @keyframes tarjeta-aparecer {
+    from { opacity: 0; translate: 0 12px; }
+    to { opacity: 1; translate: 0 0; }
+  }
+  @keyframes tarjeta-flotar {
+    0%, 100% { transform: translateY(0) rotate(var(--giro, 0deg)); }
+    50% { transform: translateY(-4px) rotate(calc(var(--giro, 0deg) + 0.6deg)); }
   }
 }

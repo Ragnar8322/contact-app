@@ -1,6 +1,6 @@
 # contact-app
 
-Sistema de gestión de casos, clientes, campañas y horarios para el contact center.
+**Conecta Renovación**: sistema de gestión de casos, clientes, campañas y horarios del contact center de la Cámara de Comercio de Barranquilla.
 
 Stack: React + Vite + TypeScript + Supabase + React Query + Tailwind CSS
 

@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import type { AnalyticsData } from "@/lib/analytics";
 import type { ReportMeta } from "./types";
+import { APP_NAME } from "@/lib/constants";
 
 type RGB = [number, number, number];
 
@@ -61,7 +62,7 @@ export async function exportAnalyticsPdf(data: AnalyticsData, meta: ReportMeta, 
   setColor(KV.blanco);
   pdf.setFontSize(8);
   pdf.setFont("helvetica", "normal");
-  pdf.text("Contact Center · Sistema de Gestión", M, 26);
+  pdf.text(`${APP_NAME} · Sistema de Gestión`, M, 26);
 
   setDraw(KV.cian);
   pdf.setLineWidth(0.5);
@@ -155,7 +156,7 @@ export async function exportAnalyticsPdf(data: AnalyticsData, meta: ReportMeta, 
     setColor(KV.cian);
     pdf.setFontSize(7);
     pdf.setFont("helvetica", "normal");
-    pdf.text("Cámara de Comercio de Barranquilla · Contact Center", M, H - 3.5);
+    pdf.text(`Cámara de Comercio de Barranquilla · ${APP_NAME}`, M, H - 3.5);
     setColor(KV.blanco);
     pdf.text(`Página ${pageNum} de ${total}`, W - M, H - 3.5, { align: "right" });
   };
@@ -229,7 +230,7 @@ export async function exportAnalyticsPdf(data: AnalyticsData, meta: ReportMeta, 
   pdf.text("Nota del período", M + 6, y + 7);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(8);
-  const nota = `Informe generado automáticamente por el sistema Contact Center de la Cámara de Comercio de Barranquilla. Datos correspondientes al período ${periodoStr}. Para consultas adicionales dirigirse al área de Contact Center.`;
+  const nota = `Informe generado automáticamente por la plataforma ${APP_NAME} de la Cámara de Comercio de Barranquilla. Datos correspondientes al período ${periodoStr}. Para consultas adicionales dirigirse al área de Contact Center.`;
   setColor(KV.gris);
   pdf.text(pdf.splitTextToSize(nota, CW - 10), M + 6, y + 14);
 
