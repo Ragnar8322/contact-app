@@ -4,103 +4,105 @@
 
 @layer base {
   :root {
-    --background: 220 20% 97%;
-    --foreground: 220 30% 10%;
+    /* Paleta alineada con Conecta 360 (indigo/azul violáceo) para una identidad visual
+       consistente entre las plataformas de la Cámara de Comercio de Barranquilla. */
+    --background: 224 34% 97%;
+    --foreground: 235 52% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 30% 10%;
+    --card-foreground: 235 52% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 30% 10%;
+    --popover-foreground: 235 52% 15%;
 
-    --primary: 215 80% 44%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 231 56% 44%;
+    --primary-foreground: 0 0% 99%;
 
-    --secondary: 215 25% 92%;
-    --secondary-foreground: 215 30% 25%;
+    --secondary: 224 84% 94%;
+    --secondary-foreground: 231 56% 44%;
 
-    --muted: 220 15% 94%;
-    --muted-foreground: 220 12% 44%;
+    --muted: 224 44% 96%;
+    --muted-foreground: 225 17% 42%;
 
     /* Resaltado sutil para hover/foco en menús y botones fantasma */
-    --accent: 215 30% 93%;
-    --accent-foreground: 220 30% 15%;
+    --accent: 224 84% 94%;
+    --accent-foreground: 231 56% 44%;
 
-    --destructive: 0 72% 44%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 1 76% 41%;
+    --destructive-foreground: 0 0% 99%;
 
-    --border: 220 15% 90%;
-    --input: 220 15% 90%;
-    --ring: 215 80% 44%;
+    --border: 224 26% 91%;
+    --input: 224 24% 86%;
+    --ring: 229 61% 56%;
 
-    --radius: 0.625rem;
+    --radius: 0.75rem;
 
-    --sidebar-background: 220 30% 12%;
-    --sidebar-foreground: 220 10% 85%;
-    --sidebar-primary: 215 80% 55%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 25% 18%;
-    --sidebar-accent-foreground: 220 10% 90%;
-    --sidebar-border: 220 20% 20%;
-    --sidebar-ring: 215 80% 55%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 225 25% 29%;
+    --sidebar-primary: 231 56% 44%;
+    --sidebar-primary-foreground: 0 0% 99%;
+    --sidebar-accent: 224 84% 94%;
+    --sidebar-accent-foreground: 231 56% 44%;
+    --sidebar-border: 224 26% 91%;
+    --sidebar-ring: 229 61% 56%;
 
     /* warning/success/destructive cumplen 4.5:1 como texto y con texto blanco encima */
-    --warning: 28 95% 31%;
+    --warning: 33 90% 29%;
     --warning-foreground: 0 0% 100%;
-    --success: 152 70% 26%;
+    --success: 168 100% 20%;
     --success-foreground: 0 0% 100%;
-    --info: 215 80% 44%;
-    --info-foreground: 0 0% 100%;
+    --info: 231 56% 44%;
+    --info-foreground: 0 0% 99%;
 
-    --chart-1: 215 80% 48%;
-    --chart-2: 170 60% 42%;
-    --chart-3: 38 92% 50%;
+    --chart-1: 231 56% 48%;
+    --chart-2: 168 70% 34%;
+    --chart-3: 39 89% 52%;
     --chart-4: 280 60% 55%;
-    --chart-5: 0 72% 55%;
+    --chart-5: 1 76% 50%;
   }
 
   .dark {
     /* Validado en src/test/design/contrast.test.ts (WCAG AA). En oscuro, el texto sobre colores
        de estado es oscuro: un mismo color no puede ser legible como texto sobre fondo oscuro
-       y a la vez llevar texto blanco encima. */
-    --background: 220 25% 8%;
-    --foreground: 220 10% 92%;
-    --card: 220 25% 12%;
-    --card-foreground: 220 10% 92%;
-    --popover: 220 25% 12%;
-    --popover-foreground: 220 10% 92%;
-    --primary: 215 85% 62%;
-    --primary-foreground: 220 30% 8%;
-    --secondary: 220 20% 18%;
-    --secondary-foreground: 220 10% 88%;
-    --muted: 220 15% 16%;
-    --muted-foreground: 220 10% 66%;
-    --accent: 170 60% 45%;
-    --accent-foreground: 220 30% 8%;
-    --destructive: 0 75% 64%;
-    --destructive-foreground: 220 30% 8%;
-    --warning: 35 90% 56%;
-    --warning-foreground: 220 30% 8%;
-    --success: 152 55% 48%;
-    --success-foreground: 220 30% 8%;
-    --info: 205 85% 62%;
-    --info-foreground: 220 30% 8%;
-    --chart-1: 215 80% 62%;
-    --chart-2: 170 55% 50%;
-    --chart-3: 38 90% 58%;
+       y a la vez llevar texto blanco encima. Misma familia de tono (indigo) que el modo claro. */
+    --background: 231 25% 8%;
+    --foreground: 224 20% 92%;
+    --card: 231 25% 12%;
+    --card-foreground: 224 20% 92%;
+    --popover: 231 25% 12%;
+    --popover-foreground: 224 20% 92%;
+    --primary: 229 85% 70%;
+    --primary-foreground: 231 30% 8%;
+    --secondary: 231 20% 18%;
+    --secondary-foreground: 224 20% 88%;
+    --muted: 231 15% 16%;
+    --muted-foreground: 225 10% 66%;
+    --accent: 168 55% 40%;
+    --accent-foreground: 231 30% 8%;
+    --destructive: 1 75% 64%;
+    --destructive-foreground: 231 30% 8%;
+    --warning: 39 90% 58%;
+    --warning-foreground: 231 30% 8%;
+    --success: 168 55% 45%;
+    --success-foreground: 231 30% 8%;
+    --info: 229 85% 70%;
+    --info-foreground: 231 30% 8%;
+    --chart-1: 229 80% 70%;
+    --chart-2: 168 55% 50%;
+    --chart-3: 39 90% 58%;
     --chart-4: 280 65% 70%;
-    --chart-5: 0 75% 64%;
-    --border: 220 15% 20%;
-    --input: 220 15% 22%;
-    --ring: 215 85% 62%;
-    --sidebar-background: 220 30% 6%;
-    --sidebar-foreground: 220 10% 85%;
-    --sidebar-primary: 215 85% 62%;
-    --sidebar-primary-foreground: 220 30% 8%;
-    --sidebar-accent: 220 25% 12%;
-    --sidebar-accent-foreground: 220 10% 90%;
-    --sidebar-border: 220 20% 14%;
-    --sidebar-ring: 215 85% 62%;
+    --chart-5: 1 75% 64%;
+    --border: 231 15% 20%;
+    --input: 231 15% 22%;
+    --ring: 229 85% 70%;
+    --sidebar-background: 231 30% 7%;
+    --sidebar-foreground: 224 10% 85%;
+    --sidebar-primary: 229 85% 70%;
+    --sidebar-primary-foreground: 231 30% 8%;
+    --sidebar-accent: 231 25% 13%;
+    --sidebar-accent-foreground: 224 10% 90%;
+    --sidebar-border: 231 20% 15%;
+    --sidebar-ring: 229 85% 70%;
   }
 }
 
