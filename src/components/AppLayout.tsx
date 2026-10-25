@@ -94,7 +94,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             </div>
             <div>
               <p className="text-sm font-semibold tracking-tight font-display">{APP_NAME}</p>
-              <p className="text-xs text-sidebar-foreground/60">Panel de gestión</p>
+              <p className="text-xs text-sidebar-foreground/75">Panel de gestión</p>
             </div>
           </div>
 
@@ -148,7 +148,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 location.pathname === to
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/85 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
               )}
             >
               <Icon className="h-4 w-4" />
@@ -164,7 +164,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 location.pathname === "/ajustes"
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/85 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
               )}
             >
               <Settings className="h-4 w-4" />
@@ -176,7 +176,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <div className="border-t border-sidebar-border p-4">
           <div className="mb-3 px-1">
             <p className="text-sm font-medium truncate">{profile?.nombre}</p>
-            <p className="text-xs text-sidebar-foreground/70">{roleLabel(highestRole)}</p>
+            <p className="text-xs text-sidebar-foreground/85">{roleLabel(highestRole)}</p>
           </div>
           <div className="mb-2 px-1">
             <ThemeToggle />
@@ -185,7 +185,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             variant="ghost"
             size="sm"
             onClick={signOut}
-            className="w-full justify-start text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+            className="w-full justify-start text-sidebar-foreground/75 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
           >
             <LogOut className="mr-2 h-4 w-4" />
             Cerrar sesión

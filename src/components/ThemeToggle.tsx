@@ -25,7 +25,7 @@ export function ThemeToggle() {
             "flex flex-1 items-center justify-center rounded py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
             theme === valor
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-sidebar-foreground/60 hover:text-sidebar-foreground",
+              : "text-sidebar-foreground/75 hover:text-sidebar-foreground",
           )}
         >
           <Icono className="h-3.5 w-3.5" aria-hidden="true" />
