@@ -20,17 +20,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Check, X, KeyRound, Shield, Copy, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { z } from "zod";
+import { generarContrasenaTemporal, passwordSchema } from "@/lib/password";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/errors";
-
-const passwordSchema = z
-  .string()
-  .min(8, "Mínimo 8 caracteres")
-  .regex(/[A-Z]/, "Debe incluir al menos una mayúscula")
-  .regex(/[a-z]/, "Debe incluir al menos una minúscula")
-  .regex(/[0-9]/, "Debe incluir al menos un número")
-  .regex(/[!@#$%^&*(),.?":{}|<>]/, "Debe incluir al menos un carácter especial");
 
 const ROLE_COLORS: Record<string, string> = {
   admin: "bg-destructive/10 text-destructive border-destructive/20",
@@ -195,7 +187,10 @@ export default function AdminProfiles() {
 
     // 1. Capturar datos del form ANTES de cerrar
     const emailSnap = inviteForm.email;
+    // La contraseña temporal se genera aquí y el servidor no la devuelve
+    const tempPassword = generarContrasenaTemporal();
     const bodySnap = {
+      temp_password: tempPassword,
       email: inviteForm.email,
       nombre: inviteForm.nombre,
       telefono: inviteForm.telefono,
@@ -204,10 +199,10 @@ export default function AdminProfiles() {
     };
 
     try {
-      const result = await inviteUser.mutateAsync(bodySnap);
+      await inviteUser.mutateAsync(bodySnap);
 
       // 2. Guardar credenciales en estado PROPIO (independiente del form)
-      setCredenciales({ email: emailSnap, password: result.temp_password });
+      setCredenciales({ email: emailSnap, password: tempPassword });
 
       // 3. Cerrar formulario y limpiar
       setInviteOpen(false);
@@ -233,7 +228,7 @@ export default function AdminProfiles() {
     e.preventDefault();
     if (!tempPwdUser) return;
     const v = passwordSchema.safeParse(tempPwd);
-    if (!v.success) { toast.error(v.error.errors[0].message); return; }
+    if (!v.success) { toast.error(v.error.issues[0].message); return; }
     if (tempPwd !== tempPwdConfirm) { toast.error("Las contraseñas no coinciden"); return; }
     try {
       await resetPassword.mutateAsync({ user_id: tempPwdUser.user_id, action: "set_temp_password", temp_password: tempPwd });
@@ -406,7 +401,7 @@ export default function AdminProfiles() {
               <Input id="admin-profiles-nueva-contrasena-temporal" type="password" value={tempPwd} onChange={e => setTempPwd(e.target.value)} placeholder="••••••••" required />
               {tempPwd && !tempPwdValid.success && (
                 <div className="space-y-1">
-                  {tempPwdValid.error!.errors.map((err, i) => (
+                  {tempPwdValid.error!.issues.map((err, i) => (
                     <p key={i} className="text-xs text-destructive">{errorMessage(err)}</p>
                   ))}
                 </div>

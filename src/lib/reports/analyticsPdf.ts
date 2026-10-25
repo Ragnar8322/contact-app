@@ -246,6 +246,8 @@ export async function exportAnalyticsPdf(data: AnalyticsData, meta: ReportMeta, 
     imageTimeout: 15000,
     windowWidth: 1200,
     backgroundColor: "#ffffff",
+    // El informe siempre sale en tema claro, aunque la pantalla esté en oscuro
+    onclone: (doc) => doc.documentElement.classList.remove("dark"),
   });
   const imgW = CW;
   const maxImgH = H - 50; // espacio disponible después del header

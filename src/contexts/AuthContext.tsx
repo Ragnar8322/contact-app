@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef, Re
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
+import { reportError, setMonitoringUser } from "@/lib/monitoring";
+import { getHighestRole } from "@/lib/roleUtils";
 
 export type RoleName = "admin" | "agent" | "supervisor" | "gerente";
 
@@ -56,14 +58,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ]);
 
       if (profileResult.error) {
-        console.error("Error loading profile:", profileResult.error.message);
+        reportError(profileResult.error, { operacion: "cargar perfil" });
         setProfile(null);
         setRoles([]);
         return;
       }
 
       if (rolesResult.error) {
-        console.error("Error loading role assignments:", rolesResult.error.message);
+        reportError(rolesResult.error, { operacion: "cargar roles" });
       }
 
       const profileData = profileResult.data;
@@ -105,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRoles([]);
       }
     } catch (err) {
-      console.error("fetchProfile error inside AuthContext:", err);
+      reportError(err, { operacion: "cargar perfil" });
       setProfile(null);
       setRoles([]);
     } finally {
@@ -151,6 +153,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRoles([]);
     window.dispatchEvent(new CustomEvent("auth:signout"));
   };
+
+  // Los reportes de errores llevan el id y el rol del usuario (sin correo ni nombre)
+  const userId = user?.id;
+  const rolPrincipal = roles.length > 0 ? getHighestRole(roles) : null;
+  useEffect(() => {
+    setMonitoringUser(userId && rolPrincipal ? { id: userId, rol: rolPrincipal } : null);
+  }, [userId, rolPrincipal]);
 
   const isAdmin = roles.includes("admin");
   const isAgente = roles.includes("agent");

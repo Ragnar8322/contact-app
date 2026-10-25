@@ -192,15 +192,15 @@ export function formatHoras(horas: number | null | undefined): string {
 
 /** Color de badge según tipo actividad */
 export const ACTIVIDAD_COLORS: Record<TipoActividad, string> = {
-  GAP:          "bg-blue-100 text-blue-800",
-  Tele:         "bg-purple-100 text-purple-800",
-  Calidad:      "bg-green-100 text-green-800",
-  Apoyo:        "bg-yellow-100 text-yellow-800",
-  VIP:          "bg-amber-100 text-amber-800",
-  Descanso:     "bg-gray-100 text-gray-600",
-  Vacaciones:   "bg-teal-100 text-teal-800",
-  Incapacidad:  "bg-red-100 text-red-800",
-  No_aplica:    "bg-slate-100 text-slate-600",
+  GAP:          "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200",
+  Tele:         "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-200",
+  Calidad:      "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200",
+  Apoyo:        "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200",
+  VIP:          "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
+  Descanso:     "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
+  Vacaciones:   "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200",
+  Incapacidad:  "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
+  No_aplica:    "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
 };
 
 /** Texto visible para cada tipo de actividad (el valor guardado puede tener "_") */

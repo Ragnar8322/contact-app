@@ -12,7 +12,7 @@ describe("etiquetas de formulario", () => {
   it("ningún <Label> queda sin asociar", () => {
     expect(Object.keys(sources).length).toBeGreaterThan(30);
     const offenders = Object.entries(sources).flatMap(([path, code]) =>
-      [...code.matchAll(/<Label(?![^>]*\b(?:htmlFor|id)=)[^>]*>([^<]*)/g)].map((m) => `${path}: ${m[1].trim()}`),
+      [...code.matchAll(/<Label\b(?![^>]*\b(?:htmlFor|id)=)[^>]*>([^<]*)/g)].map((m) => `${path}: ${m[1].trim()}`),
     );
     expect(offenders).toEqual([]);
   });

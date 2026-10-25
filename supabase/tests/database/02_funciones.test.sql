@@ -1,7 +1,7 @@
 -- Funciones de negocio: agregados, transferencias, asignación, creación atómica, importación y roles.
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(21);
+SELECT plan(23);
 
 CREATE OR REPLACE FUNCTION pg_temp.como(p_uid uuid) RETURNS void LANGUAGE sql AS $$
   SELECT set_config('request.jwt.claims', json_build_object('sub', p_uid, 'role', 'authenticated')::text, true),
@@ -38,6 +38,12 @@ SELECT is((SELECT n.transferido_desde_caso_id FROM casos o JOIN casos n ON n.id 
           :caso_t::int, 'ambos casos quedan enlazados');
 SELECT is((SELECT count(*) FROM caso_historial h JOIN casos o ON o.id = :caso_t WHERE h.caso_id IN (o.id, o.transferido_a_caso_id)),
           2::bigint, 'se registra historial en los dos casos');
+SELECT pg_temp.como(:agente1);
+SELECT is((SELECT transferido_a_campana_id FROM casos WHERE id = :caso_t), :ASE::uuid,
+          'el agente ve la campaña destino en su caso original');
+SELECT is((SELECT count(*) FROM casos o JOIN casos n ON n.id = o.transferido_a_caso_id WHERE o.id = :caso_t), 0::bigint,
+          'aunque no puede leer el caso nuevo (es del supervisor de otra campaña)');
+RESET role;
 
 -- Sin supervisor en destino: rechazo
 DELETE FROM perfil_campanas WHERE user_id = :supervisor AND campana_id = :ASE;

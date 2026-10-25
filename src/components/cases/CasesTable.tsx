@@ -171,7 +171,7 @@ export function CasesTable({ cases, isLoading, isRefetching, transferView, onOpe
               {transferView ? (
                 <>
                   <TableCell className="text-sm">{campanaName(caso.campana_id)}</TableCell>
-                  <TableCell className="text-sm">{caso.caso_destino?.campanas?.nombre ?? "—"}</TableCell>
+                  <TableCell className="text-sm">{caso.caso_destino?.campanas?.nombre ?? campanaName(caso.transferido_a_campana_id)}</TableCell>
                   <TableCell className="text-sm">{safeFormat(caso.fecha_cierre, "dd/MM/yyyy HH:mm")}</TableCell>
                   <TableCell className="text-sm font-medium">{caso.transferido_a_caso_id ? `#${caso.transferido_a_caso_id}` : "—"}</TableCell>
                   <TableCell className="text-sm">{agenteName(caso.updated_by) ?? "—"}</TableCell>

@@ -1,14 +1,5 @@
 import "@testing-library/jest-dom";
 
-// Silenciar warnings de React Router v6 sobre flags de v7
-// Son deprecaciones esperadas, no errores
-const originalWarn = console.warn;
-console.warn = (...args: unknown[]) => {
-  const msg = typeof args[0] === "string" ? args[0] : "";
-  if (msg.includes("React Router Future Flag Warning")) return;
-  originalWarn(...args);
-};
-
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: (query: string) => ({
@@ -30,3 +21,18 @@ if (!Element.prototype.hasPointerCapture) {
   Element.prototype.setPointerCapture = () => {};
 }
 if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
+
+// Node 22+ define su propio localStorage global (sin almacenamiento si no se pasa --localstorage-file)
+// y tapa el de jsdom: se reemplaza por uno en memoria
+if (typeof globalThis.localStorage?.getItem !== "function") {
+  const datos = new Map<string, string>();
+  const memoria: Storage = {
+    get length() { return datos.size; },
+    clear: () => datos.clear(),
+    getItem: (k) => datos.get(k) ?? null,
+    key: (i) => [...datos.keys()][i] ?? null,
+    removeItem: (k) => { datos.delete(k); },
+    setItem: (k, v) => { datos.set(k, String(v)); },
+  };
+  Object.defineProperty(globalThis, "localStorage", { value: memoria, configurable: true });
+}

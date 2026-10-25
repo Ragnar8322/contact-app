@@ -1,5 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { validarContrasena } from "../_shared/password.ts";
+import { reportarError } from "../_shared/monitoring.ts";
 
 Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
@@ -62,8 +64,9 @@ Deno.serve(async (req) => {
     }
 
     if (action === "set_temp_password") {
-      if (!temp_password) {
-        return new Response(JSON.stringify({ error: "temp_password required" }), {
+      const invalida = validarContrasena(temp_password);
+      if (invalida) {
+        return new Response(JSON.stringify({ error: invalida }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -72,6 +75,7 @@ Deno.serve(async (req) => {
       });
       if (authError) throw authError;
 
+      // Después de fijar la contraseña: el trigger on_auth_password_changed apaga la marca
       const { error } = await adminClient
         .from("profiles")
         .update({ must_change_password: true })
@@ -87,7 +91,8 @@ Deno.serve(async (req) => {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
+    await reportarError(err, "reset-password");
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

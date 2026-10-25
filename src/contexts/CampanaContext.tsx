@@ -49,8 +49,13 @@ export function CampanaProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("auth:signout", handleSignOut);
   }, []);
 
+  // Depende del id y no del objeto user: Supabase crea un objeto nuevo en cada renovación del
+  // token (cada hora y antes de llamar a las edge functions). Si dependiera del objeto, se
+  // recargarían las campañas y ProtectedRoute desmontaría la página, perdiendo lo que el
+  // usuario estaba haciendo (por ejemplo, la contraseña temporal recién creada).
+  const userId = user?.id;
   useEffect(() => {
-    if (authLoading || !user) {
+    if (authLoading || !userId) {
       setLoading(false);
       return;
     }
@@ -66,7 +71,7 @@ export function CampanaProvider({ children }: { children: ReactNode }) {
         const { data: perfilCampanas } = await supabase
           .from("perfil_campanas")
           .select("campana_id")
-          .eq("user_id", user.id);
+          .eq("user_id", userId);
 
         const assignedIds = new Set((perfilCampanas || []).map(pc => pc.campana_id));
         
@@ -105,7 +110,7 @@ export function CampanaProvider({ children }: { children: ReactNode }) {
     };
 
     fetchCampanas();
-  }, [user, isAdmin, authLoading, setCampanaActiva]);
+  }, [userId, isAdmin, authLoading, setCampanaActiva]);
 
   return (
     <CampanaContext.Provider value={{ campanaActiva, campanas, setCampanaActiva, loading, needsSelection, noCampaigns }}>

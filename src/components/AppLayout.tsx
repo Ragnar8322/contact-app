@@ -10,6 +10,7 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getHighestRole, roleLabel } from "@/lib/roleUtils";
 import { APP_MONOGRAM, APP_NAME } from "@/lib/constants";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { profile, roles, isAdmin, hasRole, signOut, profileLoading } = useAuth();
@@ -176,6 +177,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <div className="mb-3 px-1">
             <p className="text-sm font-medium truncate">{profile?.nombre}</p>
             <p className="text-xs text-sidebar-foreground/70">{roleLabel(highestRole)}</p>
+          </div>
+          <div className="mb-2 px-1">
+            <ThemeToggle />
           </div>
           <Button
             variant="ghost"

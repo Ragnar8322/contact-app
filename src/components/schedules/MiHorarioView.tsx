@@ -153,7 +153,7 @@ export default function MiHorarioView() {
               </div>
             );
           }
-          const colorClass = ACTIVIDAD_COLORS[s.tipo_actividad as TipoActividad] ?? "bg-gray-100 text-gray-700";
+          const colorClass = ACTIVIDAD_COLORS[s.tipo_actividad as TipoActividad] ?? "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
           return (
             <div key={dia} aria-current={esHoy ? "date" : undefined} className={cn("flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3", colorClass, hoyRing)}>
               {diaLabel}

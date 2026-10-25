@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { reportError } from "@/lib/monitoring";
 
 interface CaseTransferProps {
   caso: { id: number; campana_id: string | null; cat_estados: { nombre: string; es_final: boolean } | null };
@@ -55,6 +56,7 @@ export default function CaseTransfer({ caso, onTransferred }: CaseTransferProps)
       setConfirmOpen(false);
       onTransferred();
     } catch (err) {
+      reportError(err, { operacion: "transferir caso", caso_id: caso.id });
       toast.error("No se pudo transferir", { description: errorMessage(err) });
     } finally {
       setTransferring(false);

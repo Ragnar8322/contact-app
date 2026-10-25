@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-const SUPABASE_URL = "https://rmpmwpzmxfdkuhcgimdi.supabase.co";
+// Mismo proyecto que el cliente de Supabase (local, staging o producción según el entorno)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 // Helper compartido: obtener token fresco
 async function getFreshToken(): Promise<string> {
@@ -98,11 +99,10 @@ export function useSaveRoleAssignments() {
 export function useInviteUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (values: { email: string; nombre: string; telefono?: string; role_id: number; role_ids?: number[] }) => {
+    mutationFn: async (values: { email: string; nombre: string; telefono?: string; role_id: number; role_ids?: number[]; temp_password: string }) => {
       // fetch directo garantiza que el body se parsea siempre
       const data = await callEdgeFunction("invite-user", values);
-      // data = { success: true, user: { id }, temp_password: "..." }
-      return data as { success: boolean; user: { id: string }; temp_password: string };
+      return data as { success: boolean; user: { id: string } };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-profiles"] }),
   });
@@ -234,17 +234,4 @@ export function useDeleteTipoServicio() {
   });
 }
 
-// ── Update Client ──
-export function useUpdateClient() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, ...values }: { id: number; identificacion?: string; nombre_contacto?: string; tipo_cliente?: string; razon_social?: string; telefono?: string; celular?: string; correo?: string }) => {
-      const { error } = await supabase.from("clientes").update(values).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["clientes"] }),
-  });
-}
-
 export type AdminProfile = NonNullable<ReturnType<typeof useAllProfiles>["data"]>[number];
-export type AdminCase = NonNullable<NonNullable<ReturnType<typeof useAllCases>["data"]>["data"]>[number];

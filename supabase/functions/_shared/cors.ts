@@ -1,8 +1,8 @@
 // supabase/functions/_shared/cors.ts
 // Módulo compartido de CORS — valida el origen dinámicamente
-// Configurar en Supabase Dashboard > Edge Functions > Secrets:
-//   ENVIRONMENT = "production"  (en producción)
-//   ENVIRONMENT = "development" (en local)
+// Secrets de las Edge Functions:
+//   ENVIRONMENT = "production" | "development" (en local lo fija supabase/config.toml)
+//   ALLOWED_ORIGINS = "https://otro-dominio.com,https://…" (opcional: dominios extra sin cambiar código)
 
 const ALLOWED_ORIGINS: Record<string, string[]> = {
   production: [
@@ -15,13 +15,16 @@ const ALLOWED_ORIGINS: Record<string, string[]> = {
   development: [
     "http://localhost:5173",
     "http://localhost:8080",
+    "http://localhost:4173", // vite preview (pruebas de punta a punta)
     "http://localhost:3000",
   ],
 };
 
 function getAllowedOrigins(): string[] {
   const env = Deno.env.get("ENVIRONMENT") || "production";
+  const extra = (Deno.env.get("ALLOWED_ORIGINS") ?? "").split(",").map((o) => o.trim()).filter(Boolean);
   return [
+    ...extra,
     ...(ALLOWED_ORIGINS.production || []),
     ...(env !== "production"
       ? [

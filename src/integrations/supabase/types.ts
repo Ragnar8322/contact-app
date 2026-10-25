@@ -191,6 +191,7 @@ export type Database = {
           id: number
           observacion_cierre: string | null
           tipo_servicio_id: number
+          transferido_a_campana_id: string | null
           transferido_a_caso_id: number | null
           transferido_desde_caso_id: number | null
           updated_at: string | null
@@ -210,6 +211,7 @@ export type Database = {
           id?: number
           observacion_cierre?: string | null
           tipo_servicio_id: number
+          transferido_a_campana_id?: string | null
           transferido_a_caso_id?: number | null
           transferido_desde_caso_id?: number | null
           updated_at?: string | null
@@ -229,6 +231,7 @@ export type Database = {
           id?: number
           observacion_cierre?: string | null
           tipo_servicio_id?: number
+          transferido_a_campana_id?: string | null
           transferido_a_caso_id?: number | null
           transferido_desde_caso_id?: number | null
           updated_at?: string | null
