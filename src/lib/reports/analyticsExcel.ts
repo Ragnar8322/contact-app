@@ -2,6 +2,7 @@ import type { Workbook, Worksheet, Style, Fill } from "exceljs";
 import { format } from "date-fns";
 import type { AnalyticsData } from "@/lib/analytics";
 import { loadExcelJS } from "./excel";
+import { APP_NAME } from "@/lib/constants";
 import type { ReportMeta } from "./types";
 
 // ── Paleta KV Renovación 2026 ──
@@ -138,7 +139,7 @@ function addResumenSheet(wb: Workbook, data: AnalyticsData, meta: ReportMeta) {
 export async function buildAnalyticsWorkbook(data: AnalyticsData, meta: ReportMeta): Promise<Workbook> {
   const ExcelJS = await loadExcelJS();
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Contact Center · Cámara de Comercio de Barranquilla";
+  wb.creator = `${APP_NAME} · Cámara de Comercio de Barranquilla`;
 
   addResumenSheet(wb, data, meta);
 

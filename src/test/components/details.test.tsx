@@ -54,6 +54,33 @@ describe("login", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("el botón del ojo muestra y oculta la contraseña y se anuncia", async () => {
+    render(<Login />);
+    const campo = screen.getByLabelText("Contraseña");
+    expect(campo).toHaveAttribute("type", "password");
+    await userEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+    expect(campo).toHaveAttribute("type", "text");
+    await userEvent.click(screen.getByRole("button", { name: "Ocultar contraseña" }));
+    expect(campo).toHaveAttribute("type", "password");
+  });
+
+  it("inicia sesión con el correo y la contraseña escritos", async () => {
+    signInWithPassword.mockResolvedValue({ error: null });
+    render(<Login />);
+    await userEvent.type(screen.getByLabelText("Correo electrónico"), "ana@camarabaq.org.co");
+    await userEvent.type(screen.getByLabelText("Contraseña"), "Clave#2026");
+    await userEvent.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+    expect(signInWithPassword).toHaveBeenCalledWith({ email: "ana@camarabaq.org.co", password: "Clave#2026" });
+  });
+
+  it("muestra el nombre de la plataforma y deja el panel de ejemplo fuera del lector de pantalla", () => {
+    render(<Login />);
+    expect(screen.getByRole("heading", { level: 1, name: "Inicia sesión" })).toBeInTheDocument();
+    expect(screen.getAllByText("Conecta Renovación").length).toBeGreaterThan(0);
+    // Las tarjetas de ejemplo son decorativas: no deben leerse como datos reales
+    expect(screen.getByText("Comercializadora Ejemplo S.A.S.").closest("[aria-hidden='true']")).not.toBeNull();
+  });
+
   it("permite a los gestores de contraseñas autocompletar", () => {
     render(<Login />);
     expect(screen.getByLabelText("Correo electrónico")).toHaveAttribute("autocomplete", "username");

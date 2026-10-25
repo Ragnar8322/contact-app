@@ -67,7 +67,8 @@ describe.each(["claro", "oscuro"] as const)("contraste del tema %s (WCAG AA ≥ 
   it.each([
     ["sidebar-accent-foreground", "sidebar-accent"],
     ["sidebar-primary-foreground", "sidebar-primary"],
-  ])("menú: %s sobre %s", (fg, bg) => {
+    ["brand-panel-foreground", "brand-panel"],
+  ])("menú y panel de marca: %s sobre %s", (fg, bg) => {
     expect(ratio(rgb(fg), rgb(bg))).toBeGreaterThanOrEqual(4.5);
   });
 
