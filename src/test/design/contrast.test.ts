@@ -58,6 +58,19 @@ describe.each(["claro", "oscuro"] as const)("contraste del tema %s (WCAG AA ≥ 
     expect(ratio(rgb(name), tinted)).toBeGreaterThanOrEqual(4.5);
   });
 
+  // El menú lateral usa sidebar-foreground con opacidad: /85 en enlaces y /75 en texto secundario
+  it.each([1, 0.85, 0.75])("texto del menú al %s sobre su fondo", (alpha) => {
+    const fondo = rgb("sidebar-background");
+    expect(ratio(blend(rgb("sidebar-foreground"), fondo, alpha), fondo)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each([
+    ["sidebar-accent-foreground", "sidebar-accent"],
+    ["sidebar-primary-foreground", "sidebar-primary"],
+  ])("menú: %s sobre %s", (fg, bg) => {
+    expect(ratio(rgb(fg), rgb(bg))).toBeGreaterThanOrEqual(4.5);
+  });
+
   it.each(["warning", "success", "destructive", "primary"])("texto %s sobre las tarjetas", (name) => {
     expect(ratio(rgb(name), rgb("card"))).toBeGreaterThanOrEqual(4.5);
   });
