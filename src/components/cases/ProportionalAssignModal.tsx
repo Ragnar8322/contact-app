@@ -14,6 +14,7 @@ import { Loader2, Users, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/lib/errors";
+import { reportError } from "@/lib/monitoring";
 
 interface Props {
   open: boolean;
@@ -115,6 +116,7 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
       setCasos(items);
       setSelectedCasoIds(new Set(items.map((c) => c.id)));
     } catch (err) {
+      reportError(err, { operacion: "cargar asignación" });
       toast.error("Error al cargar datos", { description: errorMessage(err) });
     } finally {
       setLoading(false);
@@ -189,6 +191,7 @@ export default function ProportionalAssignModal({ open, onOpenChange }: Props) {
       qc.invalidateQueries({ queryKey: ["casos-counts"] });
       onOpenChange(false);
     } catch (err) {
+      reportError(err, { operacion: "asignar casos" });
       toast.error("No se pudo asignar", { description: errorMessage(err) });
     } finally {
       setSubmitting(false);

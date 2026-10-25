@@ -1,4 +1,5 @@
-import { Component, ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
+import { reportError } from "@/lib/monitoring";
 
 interface State {
   hasError: boolean;
@@ -12,8 +13,8 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error) {
-    console.error("App Error:", error);
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    reportError(error, { operacion: "render", componentStack: info.componentStack });
   }
 
   render() {

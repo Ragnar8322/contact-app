@@ -1,6 +1,7 @@
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { reportError } from "@/lib/monitoring";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -19,7 +20,15 @@ const Settings   = lazy(() => import("@/pages/Settings"));
 const Horarios   = lazy(() => import("@/pages/Horarios"));
 const MiHorario  = lazy(() => import("@/pages/MiHorario"));
 
+// Los fallos de guardado (mutaciones) y de consulta se reportan al monitoreo
 const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error, query) => reportError(error, { operacion: "consulta", consulta: String(query.queryKey[0]) }),
+  }),
+  mutationCache: new MutationCache({
+    onError: (error, _vars, _ctx, mutation) =>
+      reportError(error, { operacion: "guardado", mutacion: String(mutation.options.mutationKey?.[0] ?? "sin clave") }),
+  }),
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5,

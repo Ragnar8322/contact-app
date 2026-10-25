@@ -3,7 +3,10 @@ import { useAuth, type RoleName } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
 import AppLayout from "@/components/AppLayout";
 import SelectCampaign from "@/pages/SelectCampaign";
-import ChangePassword from "@/pages/ChangePassword";
+import { lazy } from "react";
+
+// Solo la ven usuarios con contraseña temporal: no viaja en la carga inicial (trae zod)
+const ChangePassword = lazy(() => import("@/pages/ChangePassword"));
 
 export function LoadingScreen() {
   return (

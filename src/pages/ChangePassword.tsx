@@ -8,16 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, Check, X } from "lucide-react";
 import { toast } from "sonner";
-import { z } from "zod";
+import { passwordSchema } from "@/lib/password";
 import { errorMessage } from "@/lib/errors";
-
-const passwordSchema = z
-  .string()
-  .min(8, "Mínimo 8 caracteres")
-  .regex(/[A-Z]/, "Debe incluir al menos una mayúscula")
-  .regex(/[a-z]/, "Debe incluir al menos una minúscula")
-  .regex(/[0-9]/, "Debe incluir al menos un número")
-  .regex(/[^A-Za-z0-9]/, "Debe incluir al menos un carácter especial");
 
 const rules = [
   { label: "Mínimo 8 caracteres", test: (v: string) => v.length >= 8 },
@@ -45,14 +37,9 @@ export default function ChangePassword() {
     if (!canSubmit || !user) return;
     setLoading(true);
     try {
+      // Al cambiar la contraseña, la base apaga must_change_password (trigger on_auth_password_changed)
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
-
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({ must_change_password: false })
-        .eq("user_id", user.id);
-      if (profileError) throw profileError;
 
       await refreshProfile();
       toast.success("Contraseña actualizada exitosamente");

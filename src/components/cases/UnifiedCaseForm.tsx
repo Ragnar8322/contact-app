@@ -18,6 +18,7 @@ import { DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog
 import { CheckCircle2, Info, Loader2, ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { reportError } from "@/lib/monitoring";
 
 const clienteSchema = z.object({
   identificacion: z.string().min(1, "La identificación es obligatoria"),
@@ -156,6 +157,7 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
       });
 
       if (error) {
+        reportError(error, { operacion: "crear caso" });
         toast.error("No se pudo crear el caso", { description: error.message });
         setSaving(false);
         return;
@@ -166,6 +168,7 @@ export default function UnifiedCaseForm({ onSuccess }: Props) {
       queryClient.invalidateQueries({ queryKey: ["clientes"] });
       onSuccess();
     } catch (err) {
+      reportError(err, { operacion: "crear caso" });
       toast.error("Error: " + errorMessage(err));
     } finally {
       setSaving(false);
