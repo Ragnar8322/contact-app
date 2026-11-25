@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EstadoBadge } from "@/components/cases/EstadoBadge";
+import { TablePagination } from "@/components/TablePagination";
 import { useAllProfiles, type AdminProfile } from "@/hooks/useAdmin";
 import { useCampanasList, usePerfilCampanas, useAssignCampana, useUnassignCampana } from "@/hooks/useCampanas";
 import { useAllCases, useAdminUpdateCase } from "@/hooks/useAdmin";
@@ -21,6 +22,8 @@ function hasAnyRole(p: AdminProfile, roleNames: string[]): boolean {
   if (primaryRole && roleNames.includes(primaryRole)) return true;
   return p.role_assignments.some((r) => roleNames.includes(r.role_name));
 }
+
+const PAGE_SIZE = 10;
 
 function getPrimaryRoleLabel(p: AdminProfile): "supervisor" | "agent" {
   if (hasAnyRole(p, ["supervisor"])) return "supervisor";
@@ -46,9 +49,17 @@ export default function AdminCampanas() {
   const updateCase = useAdminUpdateCase();
   const insertHistorial = useInsertHistorial();
 
-  const assignableUsers = (profiles || []).filter((p) =>
-    hasAnyRole(p, ["agent", "supervisor"])
+  // Los usuarios deshabilitados no se pueden asignar a campañas
+  const assignableUsers = useMemo(
+    () => (profiles || []).filter((p) => p.activo && hasAnyRole(p, ["agent", "supervisor"])),
+    [profiles],
   );
+
+  // Paginación de la asignación (en cliente)
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(assignableUsers.length / PAGE_SIZE));
+  const pageUsers = assignableUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
 
   const isAssigned = (userId: string, campanaId: string) =>
     perfilCampanas?.some(pc => pc.user_id === userId && pc.campana_id === campanaId) || false;
@@ -107,7 +118,7 @@ export default function AdminCampanas() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {assignableUsers.map((u) => {
+              {pageUsers.map((u) => {
                 const roleLabel = getPrimaryRoleLabel(u);
                 return (
                   <TableRow key={u.user_id}>
@@ -138,12 +149,20 @@ export default function AdminCampanas() {
               {assignableUsers.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={(campanas?.length || 0) + 2} className="text-center py-8 text-muted-foreground">
-                    No hay agentes ni supervisores registrados
+                    No hay agentes ni supervisores activos
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
+          <TablePagination
+            page={page}
+            totalPages={totalPages}
+            totalCount={assignableUsers.length}
+            pageSize={PAGE_SIZE}
+            itemLabel="usuarios"
+            onPageChange={setPage}
+          />
         </CardContent>
       </Card>
 
@@ -213,6 +232,12 @@ export default function AdminCampanas() {
                     >
                       <SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
                       <SelectContent>
+                        {/* Agente actual deshabilitado: se muestra, pero no se puede elegir de nuevo */}
+                        {caso.agente_id && !agentes?.some(a => a.user_id === caso.agente_id) && (
+                          <SelectItem value={caso.agente_id} disabled>
+                            {caso.cat_agentes?.nombre ?? "Agente"} (inactivo)
+                          </SelectItem>
+                        )}
                         {agentes?.map(a => <SelectItem key={a.user_id} value={a.user_id}>{a.nombre}</SelectItem>)}
                       </SelectContent>
                     </Select>

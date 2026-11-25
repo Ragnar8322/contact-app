@@ -116,6 +116,20 @@ export function useResetPassword() {
   });
 }
 
+/** Habilita o deshabilita un usuario: bloquea su acceso y lo saca de los agentes asignables. */
+export function useSetUserActive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { user_id: string; activo: boolean }) => {
+      return callEdgeFunction("reset-password", { ...body, action: "set_active" });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-profiles"] });
+      qc.invalidateQueries({ queryKey: ["agentes"] });
+    },
+  });
+}
+
 // ── All Roles ──
 export function useRoles() {
   return useQuery({
