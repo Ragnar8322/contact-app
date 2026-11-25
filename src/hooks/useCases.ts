@@ -1,7 +1,9 @@
+import { useCallback } from "react";
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, type RoleName } from "@/contexts/AuthContext";
 import { getHighestRole } from "@/lib/roleUtils";
+import { fetchAllForExport } from "@/lib/fetchForExport";
 
 function sanitizeSearch(text: string): string {
   return text.replace(/[%()]/g, "").trim();
@@ -39,6 +41,53 @@ export interface PaginatedResult<T> {
   hasPrevPage: boolean;
 }
 
+/**
+ * Consulta de la lista de casos con los filtros aplicados, sin rango. La comparten la lista
+ * (que le agrega la página) y la exportación (que la recorre en lotes).
+ * El desempate por id mantiene estable el orden entre páginas y lotes.
+ */
+function buildCasosQuery(filters: CasesFilters | undefined, highestRole: RoleName, userId: string | undefined) {
+  let query = supabase
+    .from("casos")
+    .select("*, clientes!inner(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre), caso_destino:transferido_a_caso_id(id, campanas(nombre))", { count: "exact" })
+    .order("fecha_caso", { ascending: false })
+    .order("id", { ascending: false });
+
+  // Agents only see their own cases; supervisor/admin/gerente see all
+  if (highestRole === "agent" && userId) {
+    query = query.eq("agente_id", userId);
+  }
+
+  if (filters?.estadoIds && filters.estadoIds.length > 0) {
+    query = query.in("estado_id", filters.estadoIds);
+  }
+  if (filters?.tipoServicioId) {
+    query = query.eq("tipo_servicio_id", filters.tipoServicioId);
+  }
+  if (filters?.agenteId) {
+    query = query.eq("agente_id", filters.agenteId);
+  }
+  if (filters?.fechaDesde) {
+    query = query.gte("fecha_caso", filters.fechaDesde);
+  }
+  if (filters?.fechaHasta) {
+    query = query.lte("fecha_caso", filters.fechaHasta + "T23:59:59.999Z");
+  }
+  if (filters?.campanaId) {
+    query = query.eq("campana_id", filters.campanaId);
+  }
+  if (filters?.searchText) {
+    const safe = sanitizeSearch(filters.searchText);
+    if (safe) {
+      query = query.or(
+        `nombre_contacto.ilike.%${safe}%,identificacion.ilike.%${safe}%`,
+        { referencedTable: "clientes" }
+      );
+    }
+  }
+  return query;
+}
+
 export function useCases(filters?: CasesFilters, pagination?: PaginationParams) {
   const { user, roles } = useAuth();
   const highestRole = getHighestRole(roles);
@@ -50,49 +99,9 @@ export function useCases(filters?: CasesFilters, pagination?: PaginationParams) 
     // Mantiene la página anterior visible mientras llega la nueva (búsqueda, filtros, paginación)
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      let query = supabase
-        .from("casos")
-        .select("*, clientes!inner(nombre_contacto, razon_social, identificacion, telefono, celular, correo), cat_estados(nombre, es_final), cat_tipo_servicio(nombre), cat_agentes(nombre), caso_destino:transferido_a_caso_id(id, campanas(nombre))", { count: "exact" })
-        .order("fecha_caso", { ascending: false });
-
-      // Agents only see their own cases; supervisor/admin/gerente see all
-      if (highestRole === "agent" && user?.id) {
-        query = query.eq("agente_id", user.id);
-      }
-
-      if (filters?.estadoIds && filters.estadoIds.length > 0) {
-        query = query.in("estado_id", filters.estadoIds);
-      }
-      if (filters?.tipoServicioId) {
-        query = query.eq("tipo_servicio_id", filters.tipoServicioId);
-      }
-      if (filters?.agenteId) {
-        query = query.eq("agente_id", filters.agenteId);
-      }
-      if (filters?.fechaDesde) {
-        query = query.gte("fecha_caso", filters.fechaDesde);
-      }
-      if (filters?.fechaHasta) {
-        query = query.lte("fecha_caso", filters.fechaHasta + "T23:59:59.999Z");
-      }
-      if (filters?.campanaId) {
-        query = query.eq("campana_id", filters.campanaId);
-      }
-      if (filters?.searchText) {
-        const safe = sanitizeSearch(filters.searchText);
-        if (safe) {
-          query = query.or(
-            `nombre_contacto.ilike.%${safe}%,identificacion.ilike.%${safe}%`,
-            { referencedTable: "clientes" }
-          );
-        }
-      }
-
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
-      query = query.range(from, to);
-
-      const { data, error, count } = await query;
+      const { data, error, count } = await buildCasosQuery(filters, highestRole, user?.id).range(from, to);
       if (error) throw error;
 
       const totalCount = count ?? 0;
@@ -108,6 +117,17 @@ export function useCases(filters?: CasesFilters, pagination?: PaginationParams) 
       return result;
     },
   });
+}
+
+/** Trae todos los casos que cumplen los filtros (no solo la página visible), con el mismo alcance por rol. */
+export function useFetchAllCases() {
+  const { user, roles } = useAuth();
+  const highestRole = getHighestRole(roles);
+  const userId = user?.id;
+  return useCallback(async (filters?: CasesFilters) => {
+    const rows = await fetchAllForExport((from, to) => buildCasosQuery(filters, highestRole, userId).range(from, to));
+    return rows as unknown as ConDestino<(typeof rows)[number]>[];
+  }, [highestRole, userId]);
 }
 
 export function useCaseById(id: number | null) {
