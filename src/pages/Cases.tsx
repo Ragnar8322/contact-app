@@ -6,7 +6,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCampana } from "@/contexts/CampanaContext";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useCases, useCaseById, useEstados, useTiposServicio, useAgentes, type CasesFilters } from "@/hooks/useCases";
+import { format } from "date-fns";
+import { useCases, useFetchAllCases, useCaseById, useEstados, useTiposServicio, useAgentes, type CasesFilters } from "@/hooks/useCases";
+import { ExportExcelDialog } from "@/components/ExportExcelDialog";
+import { CASOS_OPCIONES } from "@/lib/reports/tablesExcel";
 import { useCampanasList } from "@/hooks/useCampanas";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -75,6 +78,7 @@ export default function Cases() {
   }, [filtersWithCampana, quickFilter]);
 
   const { data: paginatedResult, isLoading, isFetching } = useCases(filtersWithCampana, { page, pageSize });
+  const fetchAllCases = useFetchAllCases();
 
   const cases = paginatedResult?.data ?? [];
   const totalCount = paginatedResult?.totalCount ?? 0;
@@ -133,6 +137,18 @@ export default function Cases() {
     return allCampanas.find((c) => c.id === id)?.nombre || "—";
   };
 
+  // Exporta todos los casos del filtro actual (no solo la página visible)
+  const handleExport = async (columnas: string[]) => {
+    const [casos, { buildCasosWorkbook }, { downloadWorkbook }] = await Promise.all([
+      fetchAllCases(filtersWithCampana),
+      import("@/lib/reports/tablesExcel"),
+      import("@/lib/reports/excel"),
+    ]);
+    const wb = await buildCasosWorkbook(casos, campanaName, columnas);
+    await downloadWorkbook(wb, `Casos_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`);
+    return casos.length;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -140,22 +156,33 @@ export default function Cases() {
           <h1 className="text-2xl font-bold tracking-tight">Casos</h1>
           <p className="text-muted-foreground">Gestión y seguimiento de casos</p>
         </div>
-        {!isGerente && (
-          <div className="flex gap-2">
-            {hasRole(["admin", "supervisor"]) && (
-              <Button variant="outline" onClick={() => setAssignModalOpen(true)}>
-                <Users className="mr-2 h-4 w-4" />
-                Asignar Casos
-              </Button>
-            )}
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-              <DialogTrigger asChild>
-                <Button><Plus className="mr-2 h-4 w-4" />Crear Caso</Button>
-              </DialogTrigger>
-              <UnifiedCaseForm onSuccess={() => setCreateOpen(false)} />
-            </Dialog>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <ExportExcelDialog
+            entity="casos"
+            label="casos"
+            columns={CASOS_OPCIONES}
+            totalCount={totalCount}
+            disabled={isLoading || totalCount === 0}
+            details={{ vista: quickFilter, campana: campanaActiva?.nombre, busqueda: debouncedSearch.trim() || undefined }}
+            onExport={handleExport}
+          />
+          {!isGerente && (
+            <>
+              {hasRole(["admin", "supervisor"]) && (
+                <Button variant="outline" onClick={() => setAssignModalOpen(true)}>
+                  <Users className="mr-2 h-4 w-4" />
+                  Asignar Casos
+                </Button>
+              )}
+              <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+                <DialogTrigger asChild>
+                  <Button><Plus className="mr-2 h-4 w-4" />Crear Caso</Button>
+                </DialogTrigger>
+                <UnifiedCaseForm onSuccess={() => setCreateOpen(false)} />
+              </Dialog>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Quick Filter Tabs */}

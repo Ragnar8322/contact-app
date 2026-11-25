@@ -28,6 +28,7 @@ const linkedCase = {
 const useCases = vi.fn();
 vi.mock("@/hooks/useCases", () => ({
   useCases: (...args: unknown[]) => useCases(...args),
+  useFetchAllCases: () => vi.fn().mockResolvedValue([]),
   useCaseById: (id: number | null) => ({ data: id === 7 ? linkedCase : undefined }),
   useEstados: () => ({ data: [{ id: 1, nombre: "En gestión", es_final: false }] }),
   useTiposServicio: () => ({ data: [] }),

@@ -2,7 +2,10 @@ import { useState } from "react";
 import type { Tables } from "@/integrations/supabase/types";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { useClients, useCreateClient, useUpdateClient } from "@/hooks/useClients";
+import { format } from "date-fns";
+import { useClients, useCreateClient, useUpdateClient, fetchAllClients } from "@/hooks/useClients";
+import { ExportExcelDialog } from "@/components/ExportExcelDialog";
+import { CLIENTES_OPCIONES } from "@/lib/reports/tablesExcel";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +48,18 @@ export default function Clients() {
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ ...emptyForm });
+
+  // Exporta todos los clientes que cumplen la búsqueda actual (no solo la página visible)
+  const handleExport = async (columnas: string[]) => {
+    const [clientes, { buildClientesWorkbook }, { downloadWorkbook }] = await Promise.all([
+      fetchAllClients(debouncedSearch),
+      import("@/lib/reports/tablesExcel"),
+      import("@/lib/reports/excel"),
+    ]);
+    const wb = await buildClientesWorkbook(clientes, columnas);
+    await downloadWorkbook(wb, `Clientes_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`);
+    return clientes.length;
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,17 +121,28 @@ export default function Clients() {
           <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
           <p className="text-muted-foreground">Gestión de clientes del contact center</p>
         </div>
-        {canEdit && (
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" />Crear Cliente</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader><DialogTitle>Nuevo Cliente</DialogTitle></DialogHeader>
-              <ClientForm form={form} setForm={setForm} onSubmit={handleCreate} isPending={createClient.isPending} submitLabel="Crear Cliente" pendingLabel="Creando..." />
-            </DialogContent>
-          </Dialog>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <ExportExcelDialog
+            entity="clientes"
+            label="clientes"
+            columns={CLIENTES_OPCIONES}
+            totalCount={result?.totalCount ?? 0}
+            disabled={isLoading || (result?.totalCount ?? 0) === 0}
+            details={{ busqueda: debouncedSearch.trim() || undefined }}
+            onExport={handleExport}
+          />
+          {canEdit && (
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button><Plus className="mr-2 h-4 w-4" />Crear Cliente</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader><DialogTitle>Nuevo Cliente</DialogTitle></DialogHeader>
+                <ClientForm form={form} setForm={setForm} onSubmit={handleCreate} isPending={createClient.isPending} submitLabel="Crear Cliente" pendingLabel="Creando..." />
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
       </div>
 
       <Card className="border-0 shadow-sm">

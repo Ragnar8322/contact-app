@@ -1,8 +1,29 @@
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllForExport } from "@/lib/fetchForExport";
 
 function sanitizeSearch(text: string): string {
   return text.replace(/[%()]/g, "").trim();
+}
+
+/** Consulta de clientes con la búsqueda aplicada, sin rango (la comparten la lista y la exportación). */
+function buildClientsQuery(search: string) {
+  let query = supabase
+    .from("clientes")
+    .select("*", { count: "exact" })
+    .order("id", { ascending: false });
+  if (search) {
+    const safe = sanitizeSearch(search);
+    if (safe) {
+      query = query.or(`identificacion.ilike.%${safe}%,nombre_contacto.ilike.%${safe}%,razon_social.ilike.%${safe}%`);
+    }
+  }
+  return query;
+}
+
+/** Trae todos los clientes que cumplen la búsqueda (no solo la página visible). */
+export function fetchAllClients(search: string) {
+  return fetchAllForExport((from, to) => buildClientsQuery(search).range(from, to));
 }
 
 export function useClients(search: string, pagination: { page: number; pageSize: number }) {
@@ -12,18 +33,7 @@ export function useClients(search: string, pagination: { page: number; pageSize:
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const from = (page - 1) * pageSize;
-      let query = supabase
-        .from("clientes")
-        .select("*", { count: "exact" })
-        .order("id", { ascending: false })
-        .range(from, from + pageSize - 1);
-      if (search) {
-        const safe = sanitizeSearch(search);
-        if (safe) {
-          query = query.or(`identificacion.ilike.%${safe}%,nombre_contacto.ilike.%${safe}%,razon_social.ilike.%${safe}%`);
-        }
-      }
-      const { data, error, count } = await query;
+      const { data, error, count } = await buildClientsQuery(search).range(from, from + pageSize - 1);
       if (error) throw error;
       const totalCount = count ?? 0;
       return { rows: data, totalCount, totalPages: Math.max(1, Math.ceil(totalCount / pageSize)) };
