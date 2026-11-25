@@ -42,10 +42,19 @@ export default function AdminCampanas() {
   const { data: agentes } = useAgentes();
   const [filterCampana, setFilterCampana] = useState<string>("");
   const [filterEstado, setFilterEstado] = useState<string>("");
+  // Paginación de la reasignación (en servidor: los filtros también se aplican allí)
+  const [casePage, setCasePage] = useState(1);
   const { data: allCasesResult } = useAllCases({
     estado_id: filterEstado && filterEstado !== "all" ? Number(filterEstado) : undefined,
+    campana_id: filterCampana && filterCampana !== "all" ? filterCampana : undefined,
+    pageIndex: casePage - 1,
+    pageSize: PAGE_SIZE,
   });
   const allCases = allCasesResult?.data ?? [];
+  const caseCount = allCasesResult?.count ?? 0;
+  const caseTotalPages = Math.max(1, Math.ceil(caseCount / PAGE_SIZE));
+  // Si la lista se reduce (p. ej. al reasignar con un filtro activo), no quedarse en una página vacía
+  useEffect(() => { if (casePage > caseTotalPages) setCasePage(caseTotalPages); }, [casePage, caseTotalPages]);
   const updateCase = useAdminUpdateCase();
   const insertHistorial = useInsertHistorial();
 
@@ -77,11 +86,6 @@ export default function AdminCampanas() {
       toast.error(errorMessage(err));
     }
   };
-
-  const filteredCases = allCases.filter((c) => {
-    if (filterCampana && filterCampana !== "all" && c.campana_id !== filterCampana) return false;
-    return true;
-  });
 
   const handleCaseReassign = async (casoId: number, field: "campana_id" | "agente_id", value: string) => {
     if (!user) return;
@@ -177,7 +181,7 @@ export default function AdminCampanas() {
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div>
               <Label htmlFor="admin-campanas-campana" className="text-xs">Campaña</Label>
-              <Select value={filterCampana} onValueChange={setFilterCampana}>
+              <Select value={filterCampana} onValueChange={(v) => { setFilterCampana(v); setCasePage(1); }}>
                 <SelectTrigger id="admin-campanas-campana" className="h-8"><SelectValue placeholder="Todas" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
@@ -187,7 +191,7 @@ export default function AdminCampanas() {
             </div>
             <div>
               <Label htmlFor="admin-campanas-estado" className="text-xs">Estado</Label>
-              <Select value={filterEstado} onValueChange={setFilterEstado}>
+              <Select value={filterEstado} onValueChange={(v) => { setFilterEstado(v); setCasePage(1); }}>
                 <SelectTrigger id="admin-campanas-estado" className="h-8"><SelectValue placeholder="Todos" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
@@ -208,9 +212,9 @@ export default function AdminCampanas() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCases.length === 0 ? (
+              {allCases.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No hay casos</TableCell></TableRow>
-              ) : filteredCases.slice(0, 50).map((caso) => (
+              ) : allCases.map((caso) => (
                 <TableRow key={caso.id}>
                   <TableCell className="font-medium">#{caso.id}</TableCell>
                   <TableCell>{caso.clientes?.nombre_contacto || "-"}</TableCell>
@@ -251,6 +255,14 @@ export default function AdminCampanas() {
             </TableBody>
           </Table>
         </CardContent>
+        <TablePagination
+          page={casePage}
+          totalPages={caseTotalPages}
+          totalCount={caseCount}
+          pageSize={PAGE_SIZE}
+          itemLabel="casos"
+          onPageChange={setCasePage}
+        />
       </Card>
     </div>
   );

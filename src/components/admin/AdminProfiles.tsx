@@ -157,9 +157,15 @@ export default function AdminProfiles() {
   const [page, setPage] = useState(1);
   const totalCount = profiles?.length ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  // Los inactivos van al final de toda la lista (no de cada página); dentro de cada grupo
+  // se conserva el orden original (más recientes primero).
+  const sortedProfiles = useMemo(
+    () => [...(profiles ?? [])].sort((a, b) => Number(b.activo) - Number(a.activo)),
+    [profiles],
+  );
   const pageProfiles = useMemo(
-    () => profiles?.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) ?? [],
-    [profiles, page],
+    () => sortedProfiles.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [sortedProfiles, page],
   );
   // Si la lista se reduce (p. ej. tras recargar), no quedarse en una página vacía
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
