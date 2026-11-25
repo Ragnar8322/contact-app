@@ -405,6 +405,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          activo: boolean
           created_at: string | null
           must_change_password: boolean
           nombre: string
@@ -414,6 +415,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          activo?: boolean
           created_at?: string | null
           must_change_password?: boolean
           nombre: string
@@ -423,6 +425,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          activo?: boolean
           created_at?: string | null
           must_change_password?: boolean
           nombre?: string

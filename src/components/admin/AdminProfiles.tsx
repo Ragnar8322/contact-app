@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { roleLabel } from "@/lib/roleUtils";
-import { useAllProfiles, useUpdateProfile, useInviteUser, useRoles, useSaveRoleAssignments, useResetPassword, type AdminProfile } from "@/hooks/useAdmin";
+import { useAllProfiles, useUpdateProfile, useInviteUser, useRoles, useSaveRoleAssignments, useResetPassword, useSetUserActive, type AdminProfile } from "@/hooks/useAdmin";
+import { useAuth } from "@/contexts/AuthContext";
+import { TablePagination } from "@/components/TablePagination";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -74,7 +77,9 @@ function RoleCheckboxes({ roles, selected, onChange }: {
   );
 }
 
-const INVITE_FORM_INIT = { email: "", nombre: "", telefono: "", selectedRoleIds: [2] as number[] };
+const PAGE_SIZE = 10;
+
+const INVITE_FORM_INIT ={ email: "", nombre: "", telefono: "", selectedRoleIds: [2] as number[] };
 
 // ─── Componente de credenciales (AlertDialog independiente) ───
 function CredencialesDialog({
@@ -145,6 +150,22 @@ export default function AdminProfiles() {
   const inviteUser = useInviteUser();
   const saveRoleAssignments = useSaveRoleAssignments();
   const resetPassword = useResetPassword();
+  const setUserActive = useSetUserActive();
+  const { user } = useAuth();
+
+  // Paginación (en cliente: la lista de perfiles ya se carga completa)
+  const [page, setPage] = useState(1);
+  const totalCount = profiles?.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const pageProfiles = useMemo(
+    () => profiles?.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) ?? [],
+    [profiles, page],
+  );
+  // Si la lista se reduce (p. ej. tras recargar), no quedarse en una página vacía
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+
+  // Confirmación para habilitar / deshabilitar
+  const [toggleUser, setToggleUser] = useState<{ user_id: string; nombre: string; activo: boolean } | null>(null);
 
   const [editId, setEditId] = useState<string | null>(null);
   const [editData, setEditData] = useState({ nombre: "", telefono: "", selectedRoleIds: [] as number[] });
@@ -240,6 +261,16 @@ export default function AdminProfiles() {
     } catch (err) { toast.error(errorMessage(err)); }
   };
 
+  const handleToggleActive = async () => {
+    if (!toggleUser) return;
+    const { user_id, nombre, activo } = toggleUser;
+    try {
+      await setUserActive.mutateAsync({ user_id, activo });
+      toast.success(activo ? `${nombre} fue habilitado.` : `${nombre} fue deshabilitado y ya no podrá iniciar sesión.`);
+      setToggleUser(null);
+    } catch (err) { toast.error(errorMessage(err)); }
+  };
+
   const tempPwdValid = passwordSchema.safeParse(tempPwd);
   const tempPwdMismatch = tempPwdConfirm.length > 0 && tempPwd !== tempPwdConfirm;
 
@@ -306,14 +337,15 @@ export default function AdminProfiles() {
                 <TableHead>Teléfono</TableHead>
                 <TableHead>Roles</TableHead>
                 <TableHead>User ID</TableHead>
+                <TableHead>Estado</TableHead>
                 <TableHead className="w-40"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-8">Cargando...</TableCell></TableRow>
-              ) : profiles?.map((p) => (
-                <TableRow key={p.user_id}>
+                <TableRow><TableCell colSpan={6} className="text-center py-8">Cargando...</TableCell></TableRow>
+              ) : pageProfiles.map((p) => (
+                <TableRow key={p.user_id} className={cn(!p.activo && "opacity-60")}>
                   <TableCell>
                     {editId === p.user_id
                       ? <Input value={editData.nombre} onChange={e => setEditData(d => ({ ...d, nombre: e.target.value }))} className="h-8" />
@@ -332,6 +364,20 @@ export default function AdminProfiles() {
                     )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground font-mono">{p.user_id.slice(0, 8)}…</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={p.activo}
+                        disabled={p.user_id === user?.id || setUserActive.isPending}
+                        onCheckedChange={(checked) => setToggleUser({ user_id: p.user_id, nombre: p.nombre, activo: checked })}
+                        aria-label={p.activo ? `Deshabilitar a ${p.nombre}` : `Habilitar a ${p.nombre}`}
+                        title={p.user_id === user?.id ? "No puedes deshabilitar tu propio usuario" : undefined}
+                      />
+                      <span className={cn("text-xs", p.activo ? "text-success" : "text-muted-foreground")}>
+                        {p.activo ? "Activo" : "Inactivo"}
+                      </span>
+                    </div>
+                  </TableCell>
                   <TableCell>
                     {editId === p.user_id ? (
                       <div className="flex gap-1">
@@ -377,8 +423,42 @@ export default function AdminProfiles() {
               ))}
             </TableBody>
           </Table>
+          <TablePagination
+            page={page}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            pageSize={PAGE_SIZE}
+            itemLabel="usuarios"
+            onPageChange={setPage}
+          />
         </CardContent>
       </Card>
+
+      {/* Confirmación habilitar / deshabilitar */}
+      <AlertDialog open={!!toggleUser} onOpenChange={(o) => { if (!o && !setUserActive.isPending) setToggleUser(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{toggleUser?.activo ? "Habilitar usuario" : "Deshabilitar usuario"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {toggleUser?.activo ? (
+                <>¿Habilitar a <strong>{toggleUser?.nombre}</strong>? Podrá volver a iniciar sesión.</>
+              ) : (
+                <>¿Deshabilitar a <strong>{toggleUser?.nombre}</strong>? No podrá iniciar sesión y dejará de aparecer como agente asignable. Sus casos actuales no se reasignan.</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={setUserActive.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleToggleActive(); }}
+              disabled={setUserActive.isPending}
+              className={cn(!toggleUser?.activo && "bg-destructive text-destructive-foreground hover:bg-destructive/90")}
+            >
+              {setUserActive.isPending ? "Guardando..." : toggleUser?.activo ? "Habilitar" : "Deshabilitar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Pop-up de credenciales (AlertDialog completamente independiente) ── */}
       <CredencialesDialog

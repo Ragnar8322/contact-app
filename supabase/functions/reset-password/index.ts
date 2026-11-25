@@ -45,10 +45,47 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { user_id, action, temp_password } = await req.json();
+    const { user_id, action, temp_password, activo } = await req.json();
     if (!user_id || !action) {
       return new Response(JSON.stringify({ error: "user_id and action required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Habilitar / deshabilitar: bloquea el inicio de sesión y la renovación del token en auth,
+    // y saca al usuario de la lista de agentes asignables.
+    if (action === "set_active") {
+      if (typeof activo !== "boolean") {
+        return new Response(JSON.stringify({ error: "activo (boolean) required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!activo && user_id === caller.id) {
+        return new Response(JSON.stringify({ error: "No puedes deshabilitar tu propio usuario" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { error: authError } = await adminClient.auth.admin.updateUserById(user_id, {
+        ban_duration: activo ? "none" : "876000h", // ~100 años
+      });
+      if (authError) throw authError;
+
+      const { error } = await adminClient
+        .from("profiles")
+        .update({ activo })
+        .eq("user_id", user_id);
+      if (error) throw error;
+
+      // Solo existe fila en cat_agentes para usuarios que han sido agentes
+      const { error: agenteError } = await adminClient
+        .from("cat_agentes")
+        .update({ activo })
+        .eq("user_id", user_id);
+      if (agenteError) throw agenteError;
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 

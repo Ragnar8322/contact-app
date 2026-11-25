@@ -71,6 +71,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profileData = profileResult.data;
       const assignments = rolesResult.data ?? [];
 
+      // Usuario deshabilitado por un admin: auth ya bloquea nuevos inicios de sesión y la
+      // renovación del token, pero un token vigente sigue sirviendo hasta que expira.
+      if (profileData && profileData.activo === false) {
+        setProfile(null);
+        setRoles([]);
+        await supabase.auth.signOut();
+        return;
+      }
+
       if (profileData) {
         let fallbackRole: RoleName = "agent";
 
