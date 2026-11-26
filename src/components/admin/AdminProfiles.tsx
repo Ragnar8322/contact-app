@@ -21,7 +21,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Check, X, KeyRound, Shield, Copy, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Check, X, KeyRound, Shield, Copy, CheckCircle2, AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { generarContrasenaTemporal, passwordSchema } from "@/lib/password";
 import { cn } from "@/lib/utils";
@@ -153,13 +153,26 @@ export default function AdminProfiles() {
   const setUserActive = useSetUserActive();
   const { user } = useAuth();
 
+  // Los deshabilitados están ocultos hasta que se pida verlos: al deshabilitar a alguien,
+  // su fila desaparece de la lista sola.
+  const [showInactive, setShowInactive] = useState(false);
+  const inactiveCount = useMemo(() => (profiles ?? []).filter((p) => !p.activo).length, [profiles]);
+
   // Paginación (en cliente: la lista de perfiles ya se carga completa)
   const [page, setPage] = useState(1);
-  const totalCount = profiles?.length ?? 0;
+  // Los inactivos (cuando se muestran) van al final de toda la lista, no de cada página;
+  // dentro de cada grupo se conserva el orden original (más recientes primero).
+  const visibleProfiles = useMemo(() => {
+    const all = profiles ?? [];
+    return showInactive
+      ? [...all].sort((a, b) => Number(b.activo) - Number(a.activo))
+      : all.filter((p) => p.activo);
+  }, [profiles, showInactive]);
+  const totalCount = visibleProfiles.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const pageProfiles = useMemo(
-    () => profiles?.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) ?? [],
-    [profiles, page],
+    () => visibleProfiles.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [visibleProfiles, page],
   );
   // Si la lista se reduce (p. ej. tras recargar), no quedarse en una página vacía
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
@@ -266,7 +279,11 @@ export default function AdminProfiles() {
     const { user_id, nombre, activo } = toggleUser;
     try {
       await setUserActive.mutateAsync({ user_id, activo });
-      toast.success(activo ? `${nombre} fue habilitado.` : `${nombre} fue deshabilitado y ya no podrá iniciar sesión.`);
+      toast.success(
+        activo
+          ? `${nombre} fue habilitado.`
+          : `${nombre} fue deshabilitado y ya no podrá iniciar sesión.${showInactive ? "" : " Usa \"Ver inhabilitados\" para verlo."}`,
+      );
       setToggleUser(null);
     } catch (err) { toast.error(errorMessage(err)); }
   };
@@ -280,6 +297,21 @@ export default function AdminProfiles() {
         <CardContent className="p-0">
           <div className="flex items-center justify-between p-4 border-b">
             <h3 className="font-semibold">Perfiles de Usuario</h3>
+
+            <div className="flex items-center gap-2">
+              {/* Mostrar / ocultar los usuarios deshabilitados */}
+              <Button
+                size="sm"
+                variant="outline"
+                aria-pressed={showInactive}
+                disabled={!showInactive && inactiveCount === 0}
+                title={!showInactive && inactiveCount === 0 ? "No hay usuarios deshabilitados" : undefined}
+                onClick={() => { setShowInactive((v) => !v); setPage(1); }}
+              >
+                {showInactive
+                  ? <><EyeOff className="mr-2 h-4 w-4" aria-hidden="true" />Ocultar inhabilitados</>
+                  : <><Eye className="mr-2 h-4 w-4" aria-hidden="true" />Ver inhabilitados ({inactiveCount})</>}
+              </Button>
 
             {/* Diálogo Crear Usuario */}
             <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
@@ -328,6 +360,7 @@ export default function AdminProfiles() {
                 </form>
               </DialogContent>
             </Dialog>
+            </div>
           </div>
 
           <Table>
@@ -344,6 +377,8 @@ export default function AdminProfiles() {
             <TableBody>
               {isLoading ? (
                 <TableRow><TableCell colSpan={6} className="text-center py-8">Cargando...</TableCell></TableRow>
+              ) : pageProfiles.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No hay usuarios activos</TableCell></TableRow>
               ) : pageProfiles.map((p) => (
                 <TableRow key={p.user_id} className={cn(!p.activo && "opacity-60")}>
                   <TableCell>

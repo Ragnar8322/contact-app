@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 // Mismo proyecto que el cliente de Supabase (local, staging o producción según el entorno)
@@ -146,6 +146,7 @@ export function useRoles() {
 export function useAllCases(filters?: {
   estado_id?: number;
   agente_id?: string;
+  campana_id?: string;
   from?: string;
   to?: string;
   pageIndex?: number;
@@ -156,6 +157,7 @@ export function useAllCases(filters?: {
 
   return useQuery({
     queryKey: ["admin-cases", filters],
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const fromRow = pageIndex * pageSize;
       const toRow = fromRow + pageSize - 1;
@@ -171,6 +173,7 @@ export function useAllCases(filters?: {
 
       if (filters?.estado_id) q = q.eq("estado_id", filters.estado_id);
       if (filters?.agente_id) q = q.eq("agente_id", filters.agente_id);
+      if (filters?.campana_id) q = q.eq("campana_id", filters.campana_id);
       if (filters?.from) q = q.gte("fecha_caso", filters.from);
       if (filters?.to) q = q.lte("fecha_caso", filters.to);
 
