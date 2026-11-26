@@ -23,6 +23,9 @@ const HORAS_FIN = [
   "16:00", "16:30", "17:00", "17:30", "18:00",
 ];
 
+const SABADO_HORAS  = 4;   // sábado fijo 08:00–12:00
+const TOPE_SEMANAL  = 42;  // horas netas máximas por semana y persona
+
 const DIAS = [
   { label: "Lunes",     value: "0" },
   { label: "Martes",    value: "1" },
@@ -78,7 +81,7 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
       },
       {
         onSuccess: (count) => {
-          toast.success(`Horario generado`, { description: `${count} turnos creados. Sábado: 08:00–12:00. L-V con breaks y almuerzo flexibles.` });
+          toast.success(`Horario generado`, { description: `${count} turnos creados. Sábado: 08:00–12:00. Tope de 42 h semanales.` });
           onGenerated();
           onClose();
         },
@@ -89,13 +92,21 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
     );
   }
 
-  // Preview horas netas L-V
-  const jornadaHoras = (() => {
+  // Vista previa: replica la regla del generador (sábado 4 h; tope 42 h/semana con recorte
+  // uniforme de L-V en bloques de 15 min, redondeado hacia arriba).
+  const preview = (() => {
     const [ih, im] = horaInicio.split(":").map(Number);
     const [fh, fm] = horaFin.split(":").map(Number);
-    const total = (fh * 60 + fm) - (ih * 60 + im) - parseInt(durAlmuerzo, 10) - 30;
-    return total > 0 ? (total / 60).toFixed(1) : "—";
+    const jornada = ((fh * 60 + fm) - (ih * 60 + im) - parseInt(durAlmuerzo, 10)) / 60;
+    if (jornada <= 0) return null;
+    const planificado = 5 * jornada + SABADO_HORAS;
+    const recorteMin = planificado > TOPE_SEMANAL
+      ? Math.ceil(((planificado - TOPE_SEMANAL) * 60 / 5) / 15) * 15
+      : 0;
+    const horasLV = jornada - recorteMin / 60;
+    return { horasLV, semana: 5 * horasLV + SABADO_HORAS, recortado: recorteMin > 0 };
   })();
+  const fmtHoras = (h: number) => (h % 1 === 0 ? h.toFixed(0) : h.toFixed(2).replace(/0$/, ""));
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -118,9 +129,9 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
           <div className="flex items-start gap-2 rounded-lg bg-muted/60 border px-3 py-2.5">
             <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <div className="text-xs text-muted-foreground space-y-0.5">
-              <p><strong className="text-foreground">L–V:</strong> {horaInicio} – {horaFin} · almuerzo + 2 breaks de 15 min</p>
-              <p><strong className="text-foreground">Sábado:</strong> 08:00 – 12:00 · sin almuerzo ni breaks</p>
-              <p><strong className="text-foreground">Tope:</strong> 42 h netas/semana · novedades aprobadas bloqueadas</p>
+              <p><strong className="text-foreground">L–V:</strong> {horaInicio} – {horaFin} · almuerzo (la salida se acorta si la semana supera 42 h)</p>
+              <p><strong className="text-foreground">Sábado:</strong> 08:00 – 12:00 · sin almuerzo</p>
+              <p><strong className="text-foreground">Tope:</strong> 42 h netas/semana · novedades aprobadas de día completo bloqueadas</p>
             </div>
           </div>
 
@@ -179,15 +190,22 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
           <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 border px-3 py-2.5 text-xs">
             <div>
               <p className="text-muted-foreground">Horas netas / día (L-V)</p>
-              <p className="text-base font-bold">{jornadaHoras}<span className="text-xs font-normal">h</span></p>
+              <p className="text-base font-bold">
+                {preview ? fmtHoras(preview.horasLV) : "—"}<span className="text-xs font-normal">h</span>
+              </p>
+              {preview?.recortado && (
+                <p className="text-[10px] text-muted-foreground">
+                  Salida acortada para respetar el tope
+                </p>
+              )}
             </div>
             <div>
-              <p className="text-muted-foreground">Máximo semanal (tope 42h)</p>
+              <p className="text-muted-foreground">Total semanal (tope {TOPE_SEMANAL}h)</p>
               <p className="text-base font-bold text-green-600">
-                ≤44<span className="text-xs font-normal">h</span>
+                {preview ? fmtHoras(preview.semana) : "—"}<span className="text-xs font-normal">h</span>
               </p>
               <p className="text-[10px] text-muted-foreground">
-                La RPC recorta al llegar a 42h
+                Sábado 4h incluido
               </p>
             </div>
           </div>
