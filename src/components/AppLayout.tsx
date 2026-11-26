@@ -62,7 +62,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       navItems.push({ to: "/horarios", icon: CalendarDays, label: "Horarios" });
     }
 
-    if (hasRole(["agent"])) {
+    if (hasRole(["agent", "supervisor"])) {
       navItems.push({ to: "/mi-horario", icon: Clock, label: "Mi Horario" });
     }
   }

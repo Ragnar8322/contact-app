@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Badge }    from "@/components/ui/badge";
 import { toast } from "sonner";
-import { useCreateNovedad } from "@/hooks/useSchedules";
+import { useCreateNovedad, type AgenteBasico } from "@/hooks/useSchedules";
 import { useAuth }  from "@/contexts/AuthContext";
 import {
   TipoNovedad,
@@ -47,12 +47,23 @@ interface Props {
   scheduleId: string;
   open: boolean;
   onClose: () => void;
+  /**
+   * Registro manual (admin): permite elegir la persona y el estado, y limita la
+   * fecha a la semana del horario. Sin esto, es la solicitud propia (pendiente).
+   */
+  manual?: {
+    personas: AgenteBasico[];
+    semanaInicio: string;
+    semanaFin: string;
+  };
 }
 
-export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Props) {
+export default function SolicitarNovedadModal({ scheduleId, open, onClose, manual }: Props) {
   const { user }   = useAuth();
   const { mutate: crear, isPending } = useCreateNovedad();
 
+  const [agenteId,      setAgenteId]      = useState("");
+  const [estado,        setEstado]        = useState<"aprobado" | "pendiente">("aprobado");
   const [fecha,         setFecha]         = useState("");
   const [tipo,          setTipo]          = useState<TipoNovedad>("permiso_horas");
   const [descripcion,   setDescripcion]   = useState("");
@@ -84,11 +95,21 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
       toast.error("Selecciona una fecha"); return;
     }
     if (!user?.id) return;
+    if (manual && !agenteId) {
+      toast.error("Selecciona la persona"); return;
+    }
+    if (manual && (fecha < manual.semanaInicio || fecha > manual.semanaFin)) {
+      toast.error("Fecha fuera de la semana", {
+        description: `Elige una fecha entre ${manual.semanaInicio} y ${manual.semanaFin}.`,
+      });
+      return;
+    }
 
     crear(
       {
         schedule_id:         scheduleId,
-        agente_id:           user.id,
+        agente_id:           manual ? agenteId : user.id,
+        ...(manual ? { estado } : {}),
         fecha,
         tipo_novedad:        tipo,
         descripcion:         descripcion || undefined,
@@ -98,7 +119,13 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
       },
       {
         onSuccess: () => {
-          toast.success("Novedad enviada", { description: "Tu solicitud quedó en estado pendiente. El supervisor la revisará." });
+          if (manual) {
+            toast.success("Novedad registrada", {
+              description: estado === "aprobado" ? "Quedó aprobada." : "Quedó pendiente de aprobación.",
+            });
+          } else {
+            toast.success("Novedad enviada", { description: "Tu solicitud quedó en estado pendiente. El supervisor la revisará." });
+          }
           onClose();
         },
         onError: (e) => {
@@ -114,14 +141,47 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ClipboardList className="h-5 w-5 text-violet-500" />
-            Solicitar novedad
+            {manual ? "Registrar novedad" : "Solicitar novedad"}
           </DialogTitle>
           <DialogDescription>
-            Tu solicitud quedará en estado <strong>pendiente</strong> hasta que un supervisor la apruebe.
+            {manual ? (
+              <>Registro manual de una novedad para una persona de la campaña.</>
+            ) : (
+              <>Tu solicitud quedará en estado <strong>pendiente</strong> hasta que un supervisor la apruebe.</>
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-1">
+
+          {/* Solo registro manual: persona y estado */}
+          {manual && (
+            <>
+              <div className="space-y-1">
+                <Label htmlFor="solicitar-novedad-modal-persona">Persona</Label>
+                <Select value={agenteId} onValueChange={setAgenteId}>
+                  <SelectTrigger id="solicitar-novedad-modal-persona">
+                    <SelectValue placeholder="Selecciona una persona" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {manual.personas.map((p) => (
+                      <SelectItem key={p.user_id} value={p.user_id}>{p.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="solicitar-novedad-modal-estado">Estado</Label>
+                <Select value={estado} onValueChange={(v) => setEstado(v as "aprobado" | "pendiente")}>
+                  <SelectTrigger id="solicitar-novedad-modal-estado"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="aprobado">Aprobada (se aplica de inmediato)</SelectItem>
+                    <SelectItem value="pendiente">Pendiente de aprobación</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
 
           {/* Tipo de novedad */}
           <div className="space-y-1">
@@ -151,7 +211,8 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
               type="date"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
-              min={toISODate(new Date())}
+              min={manual ? manual.semanaInicio : toISODate(new Date())}
+              max={manual?.semanaFin}
             />
           </div>
 
@@ -232,9 +293,9 @@ export default function SolicitarNovedadModal({ scheduleId, open, onClose }: Pro
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={isPending || !fecha || horasInvalidas}
+            disabled={isPending || !fecha || horasInvalidas || (!!manual && !agenteId)}
           >
-            {isPending ? "Enviando..." : "Enviar solicitud"}
+            {isPending ? "Guardando..." : manual ? "Registrar novedad" : "Enviar solicitud"}
           </Button>
         </DialogFooter>
       </DialogContent>

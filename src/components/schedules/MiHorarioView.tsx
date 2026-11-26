@@ -48,7 +48,7 @@ export default function MiHorarioView() {
   const {
     data: novedades,
     isLoading: loadingNovedades,
-  } = useScheduleNovedades(schedule?.id);
+  } = useScheduleNovedades(schedule?.id, { soloPropias: true });
 
   const isLoading = loadingSched || loadingShifts || loadingNovedades;
 

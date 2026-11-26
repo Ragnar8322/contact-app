@@ -182,12 +182,17 @@ export function useMyShifts(scheduleId: string | null | undefined) {
 // ------------------------------------------------------------
 // 6. Novedades
 // ------------------------------------------------------------
-export function useScheduleNovedades(scheduleId: string | null | undefined) {
+export function useScheduleNovedades(
+  scheduleId: string | null | undefined,
+  opts?: { soloPropias?: boolean },
+) {
   const { user, roles } = useAuth();
   const isManager = canManageSchedules(roles);
+  // Un supervisor en "Mi Horario" solo debe ver sus propias novedades
+  const soloPropias = !isManager || !!opts?.soloPropias;
 
   return useQuery<ScheduleNovedad[]>({
-    queryKey: ["schedule_novedades", scheduleId, isManager],
+    queryKey: ["schedule_novedades", scheduleId, !soloPropias],
     enabled: !!scheduleId && !!user?.id,
     queryFn: async () => {
       let query = supabase
@@ -195,7 +200,7 @@ export function useScheduleNovedades(scheduleId: string | null | undefined) {
         .select("*")
         .eq("schedule_id", scheduleId!)
         .order("fecha");
-      if (!isManager) query = query.eq("agente_id", user!.id);
+      if (soloPropias) query = query.eq("agente_id", user!.id);
       const { data, error } = await query;
       if (error) throw error;
       return data as ScheduleNovedad[];
@@ -392,12 +397,15 @@ export function useCreateNovedad() {
 
   return useMutation({
     mutationFn: async (payload: CreateNovedadPayload): Promise<ScheduleNovedad> => {
+      const estado = payload.estado ?? "pendiente";
       const { data, error } = await supabase
         .from("schedule_novedades")
         .insert({
           ...payload,
           agente_id: payload.agente_id || user!.id,
-          estado: "pendiente",
+          estado,
+          // Registro manual ya resuelto: queda constancia de quién lo registró
+          ...(estado !== "pendiente" ? { revisado_por: user!.id } : {}),
         })
         .select()
         .single();

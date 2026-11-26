@@ -141,6 +141,8 @@ export interface CreateNovedadPayload {
   es_dia_completo: boolean;
   hora_inicio_novedad?: string | null;
   hora_fin_novedad?: string | null;
+  /** Solo admin/supervisor: registro manual con estado definido. Por defecto "pendiente". */
+  estado?: EstadoNovedad;
 }
 
 // ------------------------------------------------------------

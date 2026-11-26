@@ -21,11 +21,12 @@ import SemanaNav           from "@/components/schedules/SemanaNav";
 import SemanaGrid          from "@/components/schedules/SemanaGrid";
 import CoverageBar         from "@/components/schedules/CoverageBar";
 import GenerarHorarioModal from "@/components/schedules/GenerarHorarioModal";
+import SolicitarNovedadModal from "@/components/schedules/SolicitarNovedadModal";
 import AprobacionesPanel   from "@/components/schedules/AprobacionesPanel";
 import { Button }          from "@/components/ui/button";
 import { Skeleton }        from "@/components/ui/skeleton";
 import { Separator }       from "@/components/ui/separator";
-import { CalendarDays, Plus, Send, Copy, Sparkles, Trash2, Unlock } from "lucide-react";
+import { CalendarDays, ClipboardList, Plus, Send, Copy, Sparkles, Trash2, Unlock } from "lucide-react";
 
 const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -45,6 +46,7 @@ export default function Horarios() {
 
   const [coberturaDiaIdx,    setCoberturaDiaIdx   ] = useState(0);
   const [showGenerarModal,   setShowGenerarModal  ] = useState(false);
+  const [showNovedadModal,   setShowNovedadModal  ] = useState(false);
 
   const coberturaFecha = (() => {
     const d = new Date(semanaInicio + "T12:00:00");
@@ -151,6 +153,19 @@ export default function Horarios() {
               <Button size="sm" onClick={handleCrearSemana} disabled={!campanaId || creando}>
                 <Plus className="mr-1 h-4 w-4" />
                 {creando ? "Creando..." : "Crear semana"}
+              </Button>
+            )}
+
+            {/* Registro manual de novedades (solo admin; borrador o publicada) */}
+            {isAdmin && schedule && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowNovedadModal(true)}
+                title="Registra una novedad para cualquier persona de la campaña"
+              >
+                <ClipboardList className="mr-1 h-4 w-4" />
+                Registrar novedad
               </Button>
             )}
 
@@ -285,6 +300,16 @@ export default function Horarios() {
         confirmLabel="Eliminar turnos"
         onConfirm={() => { setConfirmLimpiar(false); handleLimpiar(); }}
       />
+
+      {/* Modal registro manual de novedad (admin) */}
+      {showNovedadModal && schedule && isAdmin && (
+        <SolicitarNovedadModal
+          scheduleId={schedule.id}
+          open={showNovedadModal}
+          onClose={() => setShowNovedadModal(false)}
+          manual={{ personas: agentes ?? [], semanaInicio, semanaFin }}
+        />
+      )}
 
       {/* Modal generación inteligente */}
       {showGenerarModal && schedule && (

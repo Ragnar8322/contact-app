@@ -87,7 +87,7 @@ const App = () => (
                     {/* Mi Horario — agente: solo lectura de su turno */}
                     <Route path="/mi-horario" element={
                       <ProtectedRoute>
-                        <RoleRoute roles={["agent"]}>
+                        <RoleRoute roles={["agent", "supervisor"]}>
                           <MiHorario />
                         </RoleRoute>
                       </ProtectedRoute>
