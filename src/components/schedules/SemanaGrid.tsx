@@ -62,16 +62,22 @@ export default function SemanaGrid({ agentes, shifts, semanaInicio, scheduleId, 
     return m;
   }, [shifts]);
 
-  // Merge agentes activos + agentes con shifts
-  const agentesMerged = useMemo(() => {
-    const base = new Map<string, string>(agentes.map((a) => [a.user_id, a.nombre]));
-    for (const s of shifts) {
-      if (!base.has(s.agente_id)) {
-        base.set(s.agente_id, (s.agente as { nombre: string } | undefined)?.nombre ?? s.agente_id);
-      }
+  // Solo las personas habilitadas de la campaña (los turnos de usuarios deshabilitados no se listan)
+  const agentesMerged = useMemo(
+    () => agentes
+      .map((a): [string, string] => [a.user_id, a.nombre])
+      .sort((a, b) => a[1].localeCompare(b[1])),
+    [agentes],
+  );
+
+  // Novedades aprobadas por agente+fecha (todas, para descontar horas del total)
+  const novedadesPorDia = useMemo(() => {
+    const m: Record<string, ScheduleNovedad[]> = {};
+    for (const n of novedadesAprobadas) {
+      (m[`${n.agente_id}-${n.fecha}`] ??= []).push(n);
     }
-    return Array.from(base.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [agentes, shifts]);
+    return m;
+  }, [novedadesAprobadas]);
 
   // Fechas exactas de la semana
   const fechas = useMemo(() => {
@@ -90,13 +96,27 @@ export default function SemanaGrid({ agentes, shifts, semanaInicio, scheduleId, 
     );
   }
 
+  // Horas netas de un turno: horas del turno menos las novedades aprobadas de ese día.
+  // Día completo (incapacidad, vacaciones, permiso...) => 0; permiso por horas => resta su duración.
+  function horasNetas(s: ScheduleShift | undefined, agenteId: string): number {
+    if (!s) return 0;
+    const base = s.horas_dia ?? 0;
+    if (base <= 0) return 0;
+    const novs = novedadesPorDia[`${agenteId}-${s.fecha}`] ?? [];
+    if (novs.some((n) => n.es_dia_completo && n.tipo_novedad !== "cambio_turno")) return 0;
+    const restar = novs
+      .filter((n) => !n.es_dia_completo && n.tipo_novedad !== "cambio_turno")
+      .reduce((acc, n) => acc + (n.duracion_minutos ?? 0) / 60, 0);
+    return Math.max(0, base - restar);
+  }
+
   // Horas acumuladas por agente en la semana (para validación en TurnoEditModal)
   function getHorasAcumuladas(agenteId: string, excludeFecha?: string): number {
     return DIAS.reduce((acc, _, i) => {
       const s = shiftMap[`${agenteId}-${i}`];
       if (!s) return acc;
       if (excludeFecha && s.fecha === excludeFecha) return acc;
-      return acc + (s.horas_dia ?? 0);
+      return acc + horasNetas(s, agenteId);
     }, 0);
   }
 
@@ -124,7 +144,7 @@ export default function SemanaGrid({ agentes, shifts, semanaInicio, scheduleId, 
             {agentesMerged.map(([agenteId, nombre]) => {
               const totalHoras = DIAS.reduce((acc, _, i) => {
                 const s = shiftMap[`${agenteId}-${i}`];
-                return acc + (s?.horas_dia ?? 0);
+                return acc + horasNetas(s, agenteId);
               }, 0);
 
               // Solo alerta si supera 42h con margen (para tolerar rounding de decimales)
