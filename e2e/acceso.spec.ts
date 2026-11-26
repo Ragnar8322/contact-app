@@ -27,7 +27,7 @@ test.describe("acceso por rol", () => {
 
   const menus = {
     admin: { ve: ["Dashboard", "Clientes", "Casos", "Analítica", "Horarios", "Administración"], noVe: ["Mi Horario"] },
-    supervisor: { ve: ["Dashboard", "Clientes", "Casos", "Analítica", "Horarios"], noVe: ["Administración", "Mi Horario"] },
+    supervisor: { ve: ["Dashboard", "Clientes", "Casos", "Analítica", "Horarios", "Mi Horario"], noVe: ["Administración"] },
     gerente: { ve: ["Dashboard", "Clientes", "Analítica", "Horarios"], noVe: ["Casos", "Administración"] },
     agente: { ve: ["Dashboard", "Clientes", "Casos", "Mi Horario"], noVe: ["Analítica", "Horarios", "Administración"] },
   } as const;
