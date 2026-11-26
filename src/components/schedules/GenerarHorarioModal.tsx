@@ -207,8 +207,8 @@ export default function GenerarHorarioModal({ scheduleId, open, onClose, onGener
 
           {/* Día libre base */}
           <div className="space-y-1.5">
-            <Label htmlFor="generar-horario-modal-dia-libre-del-1er">Día libre del 1er agente</Label>
-            <p className="text-xs text-muted-foreground -mt-1">El resto de agentes rotan desde este día.</p>
+            <Label htmlFor="generar-horario-modal-dia-libre-del-1er">Día libre (todos los agentes)</Label>
+            <p className="text-xs text-muted-foreground -mt-1">Todos descansan este día. Las novedades aprobadas de día completo se respetan.</p>
             <Select value={diaLibreBase} onValueChange={setDiaLibreBase}>
               <SelectTrigger id="generar-horario-modal-dia-libre-del-1er"><SelectValue /></SelectTrigger>
               <SelectContent>

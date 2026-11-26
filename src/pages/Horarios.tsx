@@ -202,7 +202,7 @@ export default function Horarios() {
                   size="sm"
                   variant="outline"
                   onClick={() => setShowGenerarModal(true)}
-                  title="Genera turnos automáticamente con día libre rotativo y almuerzo escalonado"
+                  title="Genera turnos automáticamente con el mismo día libre para todos y respetando las novedades aprobadas"
                 >
                   <Sparkles className="mr-1 h-4 w-4" />
                   Generar horario
